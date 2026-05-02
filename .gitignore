@@ -1,0 +1,39 @@
+node_modules
+.env
+.env.local
+.env.production
+.env.development
+.env.test
+.env.example
+
+# Logs
+logs
+*.log
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Directory for placing compiled output
+dist/
+build/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# entornos virtuales
+.venv
+venv
+
+# bases de datos
+.db
+*.db
+
+#archivos de miguel
+paso_a_paso.md
+plan_de_trabajo.md
+
+

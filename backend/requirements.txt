@@ -1,0 +1,7 @@
+fastapi==0.115.*
+uvicorn[standard]==0.34.*
+supabase==2.* #que sea == 2 significa cualquier version que empiece con 2
+openai==1.* #cualquier version que empiece con 1
+python-dotenv==1.*
+pydantic==2.*
+httpx==0.28.*
