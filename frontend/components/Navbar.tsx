@@ -10,7 +10,7 @@ const MENU_OPTIONS = ['Op 1', 'Op 2', 'Op 3'];
 
 const TAB_CONFIG: Record<string, { label: string; icon: keyof typeof MaterialCommunityIcons.glyphMap }> = {
   index: { label: 'Inicio', icon: 'home-outline' },
-  two: { label: 'Refri', icon: 'fridge-outline' },
+  fridge: { label: 'Refri', icon: 'fridge-outline' },
   recipe: { label: 'Receta', icon: 'chef-hat' },
   progreso: { label: 'Progreso', icon: 'food-apple-outline' },
 };
