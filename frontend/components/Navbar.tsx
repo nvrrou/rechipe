@@ -1,5 +1,6 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import { BlurView } from 'expo-blur';
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Modal, Pressable, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,6 +8,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, View } from '@/components/Themed';
 
 const MENU_OPTIONS = ['Op 1', 'Op 2', 'Op 3'];
+const NAVBAR_HORIZONTAL_PADDING = 10;
+const ACTIVE_INDICATOR_SIZE = 46;
 
 const TAB_CONFIG: Record<string, { label: string; icon: keyof typeof MaterialCommunityIcons.glyphMap }> = {
   index: { label: 'Inicio', icon: 'home-outline' },
@@ -30,17 +33,17 @@ export function Navbar({ state, descriptors, navigation }: BottomTabBarProps) {
     visibleRoutes.findIndex((route) => route.key === activeRouteKey),
     0
   );
-  const menuIndex = visibleRoutes.length;
   const itemCount = visibleRoutes.length + 1;
-  const itemWidth = navbarWidth > 0 ? navbarWidth / itemCount : 0;
-  const indicatorWidth = itemWidth > 0 ? Math.min(Math.max(itemWidth - 18, 48), 58) : 52;
+  const contentWidth = navbarWidth > 0 ? navbarWidth - NAVBAR_HORIZONTAL_PADDING * 2 : 0;
+  const itemWidth = contentWidth > 0 ? contentWidth / itemCount : 0;
+  const indicatorWidth = ACTIVE_INDICATOR_SIZE;
 
   function getIndicatorX(index: number) {
     if (itemWidth <= 0) {
       return 0;
     }
 
-    return index * itemWidth + (itemWidth - indicatorWidth) / 2;
+    return NAVBAR_HORIZONTAL_PADDING + index * itemWidth + (itemWidth - indicatorWidth) / 2;
   }
 
   function moveIndicator(index: number) {
@@ -99,15 +102,6 @@ export function Navbar({ state, descriptors, navigation }: BottomTabBarProps) {
     moveIndicator(activeVisibleIndex);
   }, [activeVisibleIndex, itemWidth]);
 
-  function moveIndicatorFromTouch(locationX: number) {
-    if (itemWidth <= 0) {
-      return;
-    }
-
-    const nextIndex = Math.min(Math.max(Math.floor(locationX / itemWidth), 0), itemCount - 1);
-    moveIndicator(nextIndex);
-  }
-
   function openMenu() {
     setMenuOpen(true);
   }
@@ -149,11 +143,13 @@ export function Navbar({ state, descriptors, navigation }: BottomTabBarProps) {
       </Modal>
 
       <View style={[styles.wrapper, { paddingBottom: Math.max(insets.bottom + 10, 22) }]}>
-        <View
+        <BlurView
+          experimentalBlurMethod="dimezisBlurView"
+          intensity={38}
+          tint="dark"
           style={styles.navbar}
-          onLayout={(event) => setNavbarWidth(event.nativeEvent.layout.width)}
-          onTouchMove={(event) => moveIndicatorFromTouch(event.nativeEvent.locationX)}
-          onTouchStart={(event) => moveIndicatorFromTouch(event.nativeEvent.locationX)}>
+          onLayout={(event) => setNavbarWidth(event.nativeEvent.layout.width)}>
+          <View pointerEvents="none" style={styles.navbarTint} />
           {navbarWidth > 0 && (
             <Animated.View
               pointerEvents="none"
@@ -176,8 +172,6 @@ export function Navbar({ state, descriptors, navigation }: BottomTabBarProps) {
             }
 
             const onPress = () => {
-              moveIndicator(index);
-
               const event = navigation.emit({
                 type: 'tabPress',
                 target: route.key,
@@ -196,8 +190,7 @@ export function Navbar({ state, descriptors, navigation }: BottomTabBarProps) {
               });
             };
 
-            const isRecipeTab = route.name === 'recipe';
-            const tabColor = isFocused ? '#0F172A' : '#475569';
+            const tabColor = isFocused ? '#FFFFFF' : 'rgba(255, 255, 255, 0.68)';
 
             return (
               <Pressable
@@ -207,24 +200,19 @@ export function Navbar({ state, descriptors, navigation }: BottomTabBarProps) {
                 accessibilityLabel={descriptors[route.key].options.tabBarAccessibilityLabel}
                 onLongPress={onLongPress}
                 onPress={onPress}
-                onPressIn={() => moveIndicator(index)}
-                style={[styles.iconButton, isRecipeTab && styles.centerButton]}>
-                <MaterialCommunityIcons name={config.icon} size={isRecipeTab ? 32 : 26} color={tabColor} />
+                style={styles.iconButton}>
+                <MaterialCommunityIcons name={config.icon} size={26} color={tabColor} />
               </Pressable>
             );
           })}
 
           <Pressable
             accessibilityRole="button"
-            onPress={() => {
-              moveIndicator(menuIndex);
-              openMenu();
-            }}
-            onPressIn={() => moveIndicator(menuIndex)}
+            onPress={openMenu}
             style={styles.iconButton}>
-            <MaterialCommunityIcons name="menu" size={28} color="#475569" />
+            <MaterialCommunityIcons name="menu" size={26} color="#FFFFFF" />
           </Pressable>
-        </View>
+        </BlurView>
       </View>
     </>
   );
@@ -235,15 +223,15 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     top: 8,
-    bottom: 8,
-    borderRadius: 20,
+    height: 46,
+    borderRadius: 23,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.88)',
-    backgroundColor: 'rgba(255, 255, 255, 0.72)',
-    shadowColor: '#CBD5E1',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
+    borderColor: 'rgba(255, 255, 255, 0.62)',
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+    shadowColor: '#FFFFFF',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.22,
+    shadowRadius: 18,
     elevation: 8,
   },
   backdrop: {
@@ -260,9 +248,6 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: '#E2E8F0',
   },
-  centerButton: {
-    transform: [{ translateY: -7 }],
-  },
   iconButton: {
     flex: 1,
     alignItems: 'center',
@@ -278,16 +263,21 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 10,
     paddingVertical: 8,
-    borderRadius: 24,
+    borderRadius: 999,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.72)',
-    backgroundColor: 'rgba(255, 255, 255, 0.7)',
-    shadowColor: '#94A3B8',
+    borderColor: 'rgba(255, 255, 255, 0.22)',
+    backgroundColor: 'rgba(0, 0, 0, 0.18)',
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.28,
-    shadowRadius: 24,
+    shadowOpacity: 0.32,
+    shadowRadius: 28,
     elevation: 10,
     overflow: 'hidden',
+  },
+  navbarTint: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.24)',
+    borderRadius: 999,
   },
   optionButton: {
     paddingVertical: 14,
@@ -335,7 +325,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    paddingHorizontal: 30,
+    paddingHorizontal: 24,
     paddingTop: 10,
     backgroundColor: 'transparent',
   },

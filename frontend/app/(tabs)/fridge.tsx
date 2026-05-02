@@ -24,7 +24,7 @@ function createIngredient(name: string): IngredientItem {
   return {
     id: `${name}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
     name,
-    imageUri: `https://placehold.co/96x96/f4f4f2/111111/png?text=${label}`,
+    imageUri: `https://placehold.co/96x96/2a2a2a/ffffff/png?text=${label}`,
   };
 }
 
@@ -131,18 +131,20 @@ export default function FridgeScreen() {
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}>
-          <View style={styles.hero}>
-          {activeView !== 'categories' && (
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => setActiveView('categories')}
-              style={styles.backButton}>
-              <MaterialCommunityIcons name="chevron-left" size={24} color="#111111" />
-            </Pressable>
-          )}
-          <Text style={styles.title}>
-            {activeView === 'category' ? selectedCategory.name : activeView === 'add' ? 'Agregar' : 'Tu refri'}
-          </Text>
+        <View style={styles.hero}>
+          <View style={styles.titleRow}>
+            {activeView !== 'categories' && (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setActiveView('categories')}
+                style={styles.inlineBackButton}>
+                <MaterialCommunityIcons name="chevron-left" size={24} color="#FFFFFF" />
+              </Pressable>
+            )}
+            <Text style={styles.title}>
+              {activeView === 'category' ? selectedCategory.name : activeView === 'add' ? 'Agregar' : 'Tu refri'}
+            </Text>
+          </View>
           <Text style={styles.subtitle}>
             {activeView === 'category'
               ? 'Ingredientes categorizados en esta seccion.'
@@ -155,29 +157,29 @@ export default function FridgeScreen() {
         {activeView === 'categories' ? (
           <View style={styles.addBar}>
             <Pressable accessibilityRole="button" onPress={() => setActiveView('add')} style={styles.addButton}>
-              <MaterialCommunityIcons name="plus" size={22} color="#111111" />
+              <MaterialCommunityIcons name="plus" size={22} color="#FFFFFF" />
             </Pressable>
             <Text style={styles.addBarText}>Agregar ingrediente</Text>
             <Pressable accessibilityRole="button" style={styles.searchButton}>
-              <MaterialCommunityIcons name="magnify" size={22} color="#111111" />
+              <MaterialCommunityIcons name="magnify" size={22} color="#FFFFFF" />
             </Pressable>
           </View>
         ) : (
           <View style={styles.addBar}>
             <Pressable accessibilityRole="button" onPress={() => addIngredient()} style={styles.addButton}>
-              <MaterialCommunityIcons name="plus" size={22} color="#111111" />
+              <MaterialCommunityIcons name="plus" size={22} color="#FFFFFF" />
             </Pressable>
             <TextInput
               onChangeText={setIngredient}
               onSubmitEditing={() => addIngredient()}
               placeholder={`Agregar a ${selectedCategory.name.toLowerCase()}`}
-              placeholderTextColor="#8A8A8A"
+              placeholderTextColor="#9CA3AF"
               returnKeyType="done"
               style={styles.input}
               value={ingredient}
             />
             <Pressable accessibilityRole="button" style={styles.searchButton}>
-              <MaterialCommunityIcons name="magnify" size={22} color="#111111" />
+              <MaterialCommunityIcons name="magnify" size={22} color="#FFFFFF" />
             </Pressable>
           </View>
         )}
@@ -197,13 +199,15 @@ export default function FridgeScreen() {
                   onPress={() => openCategory(category.id)}
                   style={styles.categoryCard}>
                   <View style={styles.categoryIcon}>
-                    <MaterialCommunityIcons name={category.icon} size={24} color="#111111" />
+                    <MaterialCommunityIcons name={category.icon} size={24} color="#FFFFFF" />
                   </View>
-                  <View style={styles.categoryCopy}>
-                    <Text style={styles.categoryName}>{category.name}</Text>
-                    <Text style={styles.categoryCount}>{category.ingredients.length} ingredientes</Text>
+                  <View style={styles.categoryInfoRow}>
+                    <View style={styles.categoryCopy}>
+                      <Text style={styles.categoryName}>{category.name}</Text>
+                      <Text style={styles.categoryCount}>{category.ingredients.length} ingredientes</Text>
+                    </View>
+                    <MaterialCommunityIcons name="chevron-right" size={22} color="#9CA3AF" />
                   </View>
-                  <MaterialCommunityIcons name="chevron-right" size={22} color="#8A8A8A" />
                 </Pressable>
               ))}
             </View>
@@ -229,7 +233,7 @@ export default function FridgeScreen() {
                       <MaterialCommunityIcons
                         name={category.icon}
                         size={24}
-                        color={isSelected ? '#FFFFFF' : '#111111'}
+                        color="#FFFFFF"
                       />
                     </View>
                     <View style={styles.categoryCopy}>
@@ -245,7 +249,7 @@ export default function FridgeScreen() {
           <View style={styles.detailPanel}>
             <View style={styles.detailHeader}>
               <View style={styles.detailIcon}>
-                <MaterialCommunityIcons name={selectedCategory.icon} size={26} color="#111111" />
+                <MaterialCommunityIcons name={selectedCategory.icon} size={26} color="#FFFFFF" />
               </View>
               <View style={styles.detailCopy}>
                 <Text style={styles.detailTitle}>{selectedCategory.name}</Text>
@@ -283,11 +287,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#E7E5E0',
-    backgroundColor: '#FAFAF8',
+    borderColor: '#2A2A2A',
+    backgroundColor: '#171717',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.06,
+    shadowOpacity: 0.28,
     shadowRadius: 22,
     elevation: 2,
   },
@@ -297,47 +301,40 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 14,
-    backgroundColor: '#EFEDE8',
+    backgroundColor: '#2A2A2A',
   },
   addBarText: {
     flex: 1,
-    color: '#111111',
+    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '800',
-  },
-  backButton: {
-    width: 42,
-    height: 42,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 14,
-    backgroundColor: '#FFFFFF',
   },
   categoryCard: {
     width: '48%',
     minHeight: 118,
     padding: 14,
+    gap: 12,
     justifyContent: 'space-between',
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#E7E5E0',
-    backgroundColor: '#FAFAF8',
+    borderColor: '#2A2A2A',
+    backgroundColor: '#171717',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.04,
+    shadowOpacity: 0.24,
     shadowRadius: 18,
     elevation: 1,
   },
   categoryCardSelected: {
-    borderColor: '#111111',
-    backgroundColor: '#FFFFFF',
+    borderColor: '#FFFFFF',
+    backgroundColor: '#232323',
   },
   categoryCopy: {
     gap: 3,
     backgroundColor: 'transparent',
   },
   categoryCount: {
-    color: '#77736B',
+    color: '#B8B8B8',
     fontSize: 13,
     fontWeight: '600',
   },
@@ -354,19 +351,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 14,
-    backgroundColor: '#F4F4F2',
+    backgroundColor: '#2A2A2A',
   },
   categoryIconSelected: {
-    backgroundColor: '#111111',
+    backgroundColor: '#3A3A3A',
+  },
+  categoryInfoRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    backgroundColor: 'transparent',
   },
   categoryName: {
-    color: '#111111',
+    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '900',
   },
   container: {
     flex: 1,
-    backgroundColor: '#F7F6F2',
+    backgroundColor: '#0B0B0B',
   },
   content: {
     gap: 18,
@@ -391,28 +396,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 16,
-    backgroundColor: '#EFEDE8',
+    backgroundColor: '#2A2A2A',
   },
   detailPanel: {
     gap: 16,
     padding: 16,
     borderRadius: 22,
     borderWidth: 1,
-    borderColor: '#E7E5E0',
-    backgroundColor: '#FAFAF8',
+    borderColor: '#2A2A2A',
+    backgroundColor: '#171717',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.3,
     shadowRadius: 24,
     elevation: 2,
   },
   detailSubtitle: {
-    color: '#77736B',
+    color: '#B8B8B8',
     fontSize: 14,
     fontWeight: '600',
   },
   detailTitle: {
-    color: '#111111',
+    color: '#FFFFFF',
     fontSize: 20,
     fontWeight: '900',
   },
@@ -420,12 +425,12 @@ const styles = StyleSheet.create({
     gap: 14,
     padding: 22,
     borderRadius: 26,
-    backgroundColor: '#FAFAF8',
+    backgroundColor: '#171717',
     borderWidth: 1,
-    borderColor: '#E7E5E0',
+    borderColor: '#2A2A2A',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.28,
     shadowRadius: 28,
     elevation: 2,
   },
@@ -436,14 +441,14 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#E7E5E0',
-    backgroundColor: '#FFFFFF',
+    borderColor: '#2A2A2A',
+    backgroundColor: '#171717',
   },
   ingredientImage: {
     width: '100%',
     aspectRatio: 1,
     borderRadius: 12,
-    backgroundColor: '#F4F4F2',
+    backgroundColor: '#2A2A2A',
   },
   ingredientLabel: {
     minHeight: 34,
@@ -452,7 +457,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   ingredientText: {
-    color: '#111111',
+    color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '800',
     textAlign: 'center',
@@ -466,10 +471,18 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     minWidth: 0,
-    color: '#111111',
+    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '800',
     paddingVertical: 12,
+  },
+  inlineBackButton: {
+    width: 42,
+    height: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    backgroundColor: '#2A2A2A',
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -478,7 +491,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   sectionMeta: {
-    color: '#57534E',
+    color: '#B8B8B8',
     fontSize: 13,
     fontWeight: '800',
   },
@@ -488,23 +501,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 14,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#2A2A2A',
   },
   sectionTitle: {
-    color: '#111111',
+    color: '#FFFFFF',
     fontSize: 18,
     fontWeight: '900',
   },
   subtitle: {
-    color: '#77736B',
+    color: '#B8B8B8',
     fontSize: 15,
     fontWeight: '700',
     lineHeight: 21,
   },
   title: {
-    color: '#111111',
+    flexShrink: 1,
+    color: '#FFFFFF',
     fontSize: 34,
     fontWeight: '900',
     lineHeight: 38,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: 'transparent',
   },
 });
