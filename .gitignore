@@ -35,5 +35,9 @@ venv
 #archivos de miguel
 paso_a_paso.md
 plan_de_trabajo.md
+implementation_plan.md
+
+
+__pycache__/*
 
 
