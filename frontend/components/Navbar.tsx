@@ -145,7 +145,7 @@ export function Navbar({ state, descriptors, navigation }: BottomTabBarProps) {
       <View style={[styles.wrapper, { paddingBottom: Math.max(insets.bottom + 10, 22) }]}>
         <BlurView
           experimentalBlurMethod="dimezisBlurView"
-          intensity={38}
+          intensity={30}
           tint="dark"
           style={styles.navbar}
           onLayout={(event) => setNavbarWidth(event.nativeEvent.layout.width)}>
