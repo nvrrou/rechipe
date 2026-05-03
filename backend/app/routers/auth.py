@@ -97,14 +97,14 @@ async def login(user_data: UserLogin):
                 "user": {
                     "id": user_id,
                     "email": user_data_AUTH["user"]["email"],
-                    "nombre": perfil.get("nombre", ""),
-                    "edad": perfil.get("edad", 0),
-                    "peso": perfil.get("peso_kg", 0.0),
-                    "altura": perfil.get("altura_cm", 0.0),
-                    "genero": perfil.get("genero", ""),
-                    "objetivos": perfil.get("objetivos", []),
-                    "restricciones": perfil.get("restricciones", []),
-                    "ingredientes_favoritos": perfil.get("ingredientes_favoritos", [])
+                    "nombre": perfil.get("nombre") or "",
+                    "edad": perfil.get("edad") or 0,
+                    "peso": perfil.get("peso_kg") or 0.0,
+                    "altura": int(perfil.get("altura_cm") or 0),
+                    "genero": perfil.get("genero") or "",
+                    "objetivos": perfil.get("objetivos") or [],
+                    "restricciones": perfil.get("restricciones") or [],
+                    "ingredientes_favoritos": perfil.get("ingredientes_favoritos") or []
                 }
             }
     except Exception as e:
