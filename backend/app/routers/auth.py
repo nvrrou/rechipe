@@ -13,7 +13,7 @@ router = APIRouter(
 # Aquí irán los endpoints como /auth/register, /auth/login
 
 
-@router.post("/register", response_model=UserResponse)
+@router.post("/register")
 async def register(user_data: UserCreate):
     try: 
         async with get_supabase_client() as client:
@@ -21,7 +21,9 @@ async def register(user_data: UserCreate):
             response = await client.post(f"{SUPABASE_URL}/auth/v1/signup", json={"email": user_data.email, "password": user_data.password})
             
             if response.status_code != 200:
-                return {"error": response.json()["error_description"]}
+                error_data = response.json()
+                mensaje = error_data.get("error_description", error_data.get("msg", "Error al crear usuario"))
+                return {"error": mensaje}
             
             user_data_AUTH = response.json()
             new_user_id = user_data_AUTH["user"]["id"]
@@ -32,8 +34,8 @@ async def register(user_data: UserCreate):
                 "nombre": user_data.nombre,
                 "email": user_data.email,
                 "edad": user_data.edad,
-                "peso": user_data.peso,
-                "altura": user_data.altura,
+                "peso_kg": user_data.peso,
+                "altura_cm": int(user_data.altura),
                 "genero": user_data.genero,
                 "objetivos": user_data.objetivos,
                 "restricciones": user_data.restricciones,
@@ -43,12 +45,19 @@ async def register(user_data: UserCreate):
             # esto hara que se cree el perfil en supabase con los datos que se enviaron en el body de la peticion
             response = await client.post("/profiles", json=profile)
             if response.status_code != 201:
-                return {"error": "Perfil no creado"}
+                return {"error": f"Perfil no creado. Detalle: {response.text}"}
             
             return {
                 "id": new_user_id,
-                "email": user_data["user"]["email"],
+                "email": user_data_AUTH["user"]["email"],
                 "nombre": user_data.nombre,
+                "edad": user_data.edad,
+                "peso_kg": user_data.peso,
+                "altura_cm": int(user_data.altura),
+                "genero": user_data.genero,
+                "objetivos": user_data.objetivos,
+                "restricciones": user_data.restricciones,
+                "ingredientes_favoritos": user_data.ingredientes_favoritos,
             }
     except Exception as e:
         return {"error": str(e)}
@@ -90,8 +99,8 @@ async def login(user_data: UserLogin):
                     "email": user_data_AUTH["user"]["email"],
                     "nombre": perfil.get("nombre", ""),
                     "edad": perfil.get("edad", 0),
-                    "peso": perfil.get("peso", 0.0),
-                    "altura": perfil.get("altura", 0.0),
+                    "peso": perfil.get("peso_kg", 0.0),
+                    "altura": perfil.get("altura_cm", 0.0),
                     "genero": perfil.get("genero", ""),
                     "objetivos": perfil.get("objetivos", []),
                     "restricciones": perfil.get("restricciones", []),
