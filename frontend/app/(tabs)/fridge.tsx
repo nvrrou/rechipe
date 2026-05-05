@@ -4,6 +4,7 @@ import { Image, Pressable, ScrollView, StyleSheet, TextInput } from 'react-nativ
 
 import { Text, View } from '@/components/Themed';
 
+//Tipo de categoria de ingredientes, con su respectiva lista de ingredientes
 type IngredientCategory = {
   id: string;
   name: string;
@@ -12,29 +13,35 @@ type IngredientCategory = {
   ingredients: IngredientItem[];
 };
 
+//Ingrediente individual (id, nombre, foto)
 type IngredientItem = {
   id: string;
   name: string;
+  addDate: string;
   imageUri: string;
 };
 
+// Función para crear ingredientes
+// Si no hay foto los ingredientes tienen las primeras 2 letras como placeholder
 function createIngredient(name: string): IngredientItem {
   const label = encodeURIComponent(name.trim().slice(0, 2).toUpperCase());
 
   return {
     id: `${name}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
     name,
+    addDate: `${Date.now()}`,
     imageUri: `https://placehold.co/96x96/2a2a2a/ffffff/png?text=${label}`,
   };
 }
 
+// Categorias iniciales
 const INITIAL_CATEGORIES: IngredientCategory[] = [
   {
-    id: 'aderezos',
-    name: 'Aderezos',
-    icon: 'bottle-tonic-outline',
-    color: '#F97316',
-    ingredients: ['Mayonesa', 'Mostaza', 'Salsa de soya'].map(createIngredient),
+    id: 'carnes',
+    name: 'Carnes',
+    icon: 'food-steak',
+    color: '#BE123C',
+    ingredients: ['Pollo', 'Carne molida', 'Jamon'].map(createIngredient),
   },
   {
     id: 'vegetales',
@@ -58,13 +65,6 @@ const INITIAL_CATEGORIES: IngredientCategory[] = [
     ingredients: ['Garbanzos', 'Lentejas', 'Porotos'].map(createIngredient),
   },
   {
-    id: 'carnes',
-    name: 'Carnes',
-    icon: 'food-steak',
-    color: '#BE123C',
-    ingredients: ['Pollo', 'Carne molida', 'Jamon'].map(createIngredient),
-  },
-  {
     id: 'mariscos',
     name: 'Mariscos',
     icon: 'waves',
@@ -79,6 +79,13 @@ const INITIAL_CATEGORIES: IngredientCategory[] = [
     ingredients: ['Reineta', 'Salmon', 'Atun'].map(createIngredient),
   },
   {
+    id: 'aderezos',
+    name: 'Aderezos',
+    icon: 'bottle-tonic-outline',
+    color: '#F97316',
+    ingredients: ['Mayonesa', 'Mostaza', 'Salsa de soya'].map(createIngredient),
+  },
+  {
     id: 'cereales',
     name: 'Cereales',
     icon: 'barley',
@@ -88,16 +95,18 @@ const INITIAL_CATEGORIES: IngredientCategory[] = [
 ];
 
 export default function FridgeScreen() {
-  const [categories, setCategories] = useState(INITIAL_CATEGORIES);
-  const [ingredient, setIngredient] = useState('');
-  const [selectedCategoryId, setSelectedCategoryId] = useState(INITIAL_CATEGORIES[0].id);
-  const [activeView, setActiveView] = useState<'categories' | 'category' | 'add'>('categories');
+  const [categories, setCategories] = useState(INITIAL_CATEGORIES); //Setea el estado inicial para que sea I_C y hace que pueda ser variable en el tiempo (State)
+  const [ingredient, setIngredient] = useState(''); //Variable para insertar ingredientes
+  const [selectedCategoryId, setSelectedCategoryId] = useState(INITIAL_CATEGORIES[0].id); //Variable para almacenar la categoria que se selecciona (default [0])
+  const [activeView, setActiveView] = useState<'categories' | 'category' | 'add'>('categories'); //Solo funciona en alguno de esos 3 estados (añadir ingredientes o las categorias de estos)
 
+  //Funcion que busca en las categorias la categoria seleccionada, si no ta, pone la primera
   const selectedCategory = useMemo(
-    () => categories.find((category) => category.id === selectedCategoryId) ?? categories[0],
+    () => categories.find((category) => category.id === selectedCategoryId) ?? categories[0], 
     [categories, selectedCategoryId]
   );
 
+  // Funcion que copia el estado anterior de la categoría (...category) y añade el ingrediente al final
   function addIngredient(categoryId = selectedCategory.id) {
     const nextIngredient = ingredient.trim();
 
@@ -120,6 +129,7 @@ export default function FridgeScreen() {
     setIngredient('');
   }
 
+  // Funcion que abre una categoria cambiando el estado a "category" y seteando la categoria seleccionada
   function openCategory(categoryId: string) {
     setSelectedCategoryId(categoryId);
     setActiveView('category');
