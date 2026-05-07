@@ -34,7 +34,7 @@ function createIngredient(name: string): IngredientItem {
   };
 }
 
-// Categorias iniciales
+// Categorias iniciales (!!!!Meteré BDD despues, por ahora es para mostrar la funcionalidad)
 const INITIAL_CATEGORIES: IngredientCategory[] = [
   {
     id: 'carnes',
@@ -137,12 +137,13 @@ export default function FridgeScreen() {
 
   return (
     <View style={styles.container}>
-      <ScrollView
+      <ScrollView //Vista scroleable para mostrar las categorias o los ingredientes dependiendo del estado
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}>
         <View style={styles.hero}>
           <View style={styles.titleRow}>
+            {/* if para mostrar el boton de volver a categorias solo si no estas en esa vista */}
             {activeView !== 'categories' && (
               <Pressable
                 accessibilityRole="button"
@@ -156,6 +157,8 @@ export default function FridgeScreen() {
             </Text>
           </View>
           <Text style={styles.subtitle}>
+            {/* if para mostrar el texto dependiendo de la vista, si es categoria muestra el texto con los ingredientes, 
+            si es agregar muestra el texto para agregar, sino el texto general */}
             {activeView === 'category'
               ? 'Ingredientes categorizados en esta seccion.'
               : activeView === 'add'
@@ -163,7 +166,9 @@ export default function FridgeScreen() {
               : 'Elige una categoria para revisar y agregar ingredientes.'}
           </Text>
         </View>
-
+        {/* if para mostrar la barra de agregar dependiendo de la vista, 
+        si es categorias muestra el texto para agregar categorias, 
+        sino muestra el input para agregar ingredientes */} 
         {activeView === 'categories' ? (
           <View style={styles.addBar}>
             <Pressable accessibilityRole="button" onPress={() => setActiveView('add')} style={styles.addButton}>
@@ -193,7 +198,7 @@ export default function FridgeScreen() {
             </Pressable>
           </View>
         )}
-
+        {/* if para mostrar las categorias o los ingredientes dependiendo de la vista */}
         {activeView === 'categories' ? (
           <>
             <View style={styles.sectionHeader}>
@@ -222,8 +227,9 @@ export default function FridgeScreen() {
               ))}
             </View>
           </>
+        
         ) : activeView === 'add' ? (
-          <>
+          <> {/* vista para agregar ingredientes */}
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Agregar en</Text>
               <Text style={styles.sectionMeta}>{selectedCategory.name}</Text>
@@ -268,7 +274,7 @@ export default function FridgeScreen() {
                 </Text>
               </View>
             </View>
-
+          {/* lista de ingredientes */}
             <View style={styles.ingredientsList}>
               {selectedCategory.ingredients.map((item) => (
                 <View key={item.id} style={styles.ingredientCard}>
