@@ -35,7 +35,7 @@ export default function LoginScreen() {
     setLoginMsg('');
     setSignupMsg('');
   };
-
+ // campos y requisitos
   const handleLogin = () => {
     const email = loginEmail.trim();
     const pwd = loginPassword.trim();
