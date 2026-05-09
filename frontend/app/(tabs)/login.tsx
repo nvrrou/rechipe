@@ -201,7 +201,7 @@ export default function LoginScreen() {
     </SafeAreaView>
   );
 }
-
+//cosas de diseño detalles
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
