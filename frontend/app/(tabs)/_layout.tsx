@@ -33,6 +33,12 @@ export default function TabLayout() {
           title: 'Progreso',
         }}
       />
+      <Tabs.Screen
+        name="login"
+        options={{
+          title: 'Login',
+        }}
+      />
     </Tabs>
   );
 }
