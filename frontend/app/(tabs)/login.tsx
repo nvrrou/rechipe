@@ -9,19 +9,24 @@ import {
   Platform,
   ScrollView,
   SafeAreaView,
+  ActivityIndicator,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { login, register, isAuthenticated } = useAuth();
   const [activeTab, setActiveTab] = useState('login');
 
   // Estados de Login
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [loginMsg, setLoginMsg] = useState('');
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginError, setLoginError] = useState(false);
 
   // Estados de Registro
   const [signupName, setSignupName] = useState('');
@@ -29,50 +34,104 @@ export default function LoginScreen() {
   const [signupPassword, setSignupPassword] = useState('');
   const [signupConfirm, setSignupConfirm] = useState('');
   const [signupMsg, setSignupMsg] = useState('');
+  const [signupLoading, setSignupLoading] = useState(false);
+  const [signupError, setSignupError] = useState(false);
 
   const switchTab = (tab: string) => {
     setActiveTab(tab);
     setLoginMsg('');
     setSignupMsg('');
+    setLoginError(false);
+    setSignupError(false);
   };
- // campos y requisitos
-  const handleLogin = () => {
+
+  // ---------- Login real con backend ----------
+  const handleLogin = async () => {
     const email = loginEmail.trim();
     const pwd = loginPassword.trim();
 
     if (!email || !pwd) {
       setLoginMsg('Campos obligatorios faltantes');
+      setLoginError(true);
       return;
     }
 
     if (!email.includes('@')) {
       setLoginMsg('Formato de correo invalido');
+      setLoginError(true);
       return;
     }
 
-    // Simulacion de inicio de sesion exitoso
+    setLoginLoading(true);
     setLoginMsg('Accediendo...');
-    setTimeout(() => {
-      // Navega a la carpeta (tabs) que mostraste en tu imagen
-      router.replace('/(tabs)');
-    }, 1000);
+    setLoginError(false);
+
+    const result = await login(email, pwd);
+
+    if (result.success) {
+      setLoginMsg('¡Bienvenido!');
+      setLoginError(false);
+      setTimeout(() => {
+        router.replace('/(tabs)');
+      }, 500);
+    } else {
+      setLoginMsg(result.error || 'Error al iniciar sesion');
+      setLoginError(true);
+    }
+
+    setLoginLoading(false);
   };
 
-  const handleSignup = () => {
+  // ---------- Registro real con backend ----------
+  const handleSignup = async () => {
     if (!signupName || !signupEmail || !signupPassword || !signupConfirm) {
       setSignupMsg('Complete todos los campos');
+      setSignupError(true);
+      return;
+    }
+
+    if (!signupEmail.includes('@')) {
+      setSignupMsg('Formato de correo invalido');
+      setSignupError(true);
+      return;
+    }
+
+    if (signupPassword.length < 6) {
+      setSignupMsg('La contraseña debe tener al menos 6 caracteres');
+      setSignupError(true);
       return;
     }
 
     if (signupPassword !== signupConfirm) {
       setSignupMsg('Las contraseñas no coinciden');
+      setSignupError(true);
       return;
     }
 
-    setSignupMsg('Cuenta creada exitosamente');
-    setTimeout(() => {
-      switchTab('login');
-    }, 1500);
+    setSignupLoading(true);
+    setSignupMsg('Creando cuenta...');
+    setSignupError(false);
+
+    const result = await register({
+      email: signupEmail.trim(),
+      password: signupPassword,
+      nombre: signupName.trim(),
+    });
+
+    if (result.success) {
+      setSignupMsg('¡Cuenta creada! Ya puedes iniciar sesion');
+      setSignupError(false);
+      setTimeout(() => {
+        switchTab('login');
+        // Pre-llenar el email en login para que sea mas facil
+        setLoginEmail(signupEmail.trim());
+      }, 1500);
+    } else {
+      setSignupMsg(result.error || 'Error al crear la cuenta');
+      setSignupError(true);
+    }
+
+    setSignupLoading(false);
   };
 
   return (
@@ -121,6 +180,7 @@ export default function LoginScreen() {
                     onChangeText={setLoginEmail}
                     autoCapitalize="none"
                     keyboardType="email-address"
+                    editable={!loginLoading}
                   />
                 </View>
                 <View style={styles.inputGroup}>
@@ -132,14 +192,25 @@ export default function LoginScreen() {
                     secureTextEntry
                     value={loginPassword}
                     onChangeText={setLoginPassword}
+                    editable={!loginLoading}
                   />
                 </View>
-                <TouchableOpacity style={styles.button} onPress={handleLogin}>
-                  <Text style={styles.buttonText}>Continuar</Text>
+                <TouchableOpacity 
+                  style={[styles.button, loginLoading && styles.buttonDisabled]} 
+                  onPress={handleLogin}
+                  disabled={loginLoading}
+                >
+                  {loginLoading ? (
+                    <ActivityIndicator color="#000" />
+                  ) : (
+                    <Text style={styles.buttonText}>Continuar</Text>
+                  )}
                 </TouchableOpacity>
                 
                 {loginMsg !== '' && (
-                  <Text style={styles.statusText}>{loginMsg}</Text>
+                  <Text style={[styles.statusText, loginError && styles.errorText]}>
+                    {loginMsg}
+                  </Text>
                 )}
               </View>
             )}
@@ -154,6 +225,7 @@ export default function LoginScreen() {
                     placeholderTextColor="#555"
                     value={signupName}
                     onChangeText={setSignupName}
+                    editable={!signupLoading}
                   />
                 </View>
                 <View style={styles.inputGroup}>
@@ -164,6 +236,7 @@ export default function LoginScreen() {
                     value={signupEmail}
                     onChangeText={setSignupEmail}
                     autoCapitalize="none"
+                    editable={!signupLoading}
                   />
                 </View>
                 <View style={styles.inputGroup}>
@@ -174,6 +247,7 @@ export default function LoginScreen() {
                     secureTextEntry
                     value={signupPassword}
                     onChangeText={setSignupPassword}
+                    editable={!signupLoading}
                   />
                 </View>
                 <View style={styles.inputGroup}>
@@ -184,14 +258,25 @@ export default function LoginScreen() {
                     secureTextEntry
                     value={signupConfirm}
                     onChangeText={setSignupConfirm}
+                    editable={!signupLoading}
                   />
                 </View>
-                <TouchableOpacity style={styles.button} onPress={handleSignup}>
-                  <Text style={styles.buttonText}>Crear cuenta</Text>
+                <TouchableOpacity 
+                  style={[styles.button, signupLoading && styles.buttonDisabled]} 
+                  onPress={handleSignup}
+                  disabled={signupLoading}
+                >
+                  {signupLoading ? (
+                    <ActivityIndicator color="#000" />
+                  ) : (
+                    <Text style={styles.buttonText}>Crear cuenta</Text>
+                  )}
                 </TouchableOpacity>
 
                 {signupMsg !== '' && (
-                  <Text style={styles.statusText}>{signupMsg}</Text>
+                  <Text style={[styles.statusText, signupError && styles.errorText]}>
+                    {signupMsg}
+                  </Text>
                 )}
               </View>
             )}
@@ -274,15 +359,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 8,
   },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
   buttonText: {
     color: '#000',
     fontSize: 16,
     fontWeight: '600',
   },
   statusText: {
-    color: '#888',
+    color: '#4ade80',
     fontSize: 13,
     textAlign: 'center',
     marginTop: 8,
+  },
+  errorText: {
+    color: '#f87171',
   },
 });

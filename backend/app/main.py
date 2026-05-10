@@ -1,8 +1,18 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from app.routers import auth, users, rechipes, supermarkets
 from app.dependencias import get_supabase_client
 
 app = FastAPI(title="Rechipe API", version="1.0.0")
+
+# CORS — permite que el frontend se conecte al backend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # en produccion cambiar por la URL del frontend
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Registrar los routers
 app.include_router(auth.router)

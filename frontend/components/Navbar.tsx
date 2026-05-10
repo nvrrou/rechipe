@@ -16,6 +16,8 @@ const TAB_CONFIG: Record<string, { label: string; icon: keyof typeof MaterialCom
   fridge: { label: 'Refri', icon: 'fridge-outline' },
   recipe: { label: 'Receta', icon: 'chef-hat' },
   progreso: { label: 'Progreso', icon: 'food-apple-outline' },
+  login: { label: 'Login', icon: 'account-circle-outline' },
+  registro: { label: 'Registro', icon: 'account-plus-outline' },
 };
 
 export function Navbar({ state, descriptors, navigation }: BottomTabBarProps) {
@@ -30,9 +32,9 @@ export function Navbar({ state, descriptors, navigation }: BottomTabBarProps) {
 
 
   // IF PARA OCULTAR LA NAVBAR EN VISTAS EN LAS QUE SEA NECESARIO.
-  if (activeRouteName === 'login') {
-    return null;
-  }
+  // if (activeRouteName === 'login') {
+  //   return null;
+  // }
 
   const visibleRoutes = state.routes.filter((route) => TAB_CONFIG[route.name]);
   const activeRouteKey = state.routes[state.index]?.key;
