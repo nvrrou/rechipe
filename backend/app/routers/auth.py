@@ -85,7 +85,7 @@ async def login(user_data: UserLogin):
             # Hacemos un GET a la tabla profiles donde el id sea igual al del usuario
             perfil_response = await client.get(f"/profiles?id=eq.{user_id}")
             
-            # Obtenemos los datos (PostgREST devuelve una lista, tomamos el primer elemento)
+            # Obtenemos los datos
             perfil_data = perfil_response.json()
             
             # Si no hay perfil por alguna razón, usamos un dict vacío o manejamos el error

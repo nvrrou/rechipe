@@ -31,10 +31,10 @@ export function Navbar({ state, descriptors, navigation }: BottomTabBarProps) {
   const activeRouteName = state.routes[state.index]?.name; // Ruta activa actual
 
 
-  // IF PARA OCULTAR LA NAVBAR EN VISTAS EN LAS QUE SEA NECESARIO.
-  // if (activeRouteName === 'login') {
-  //   return null;
-  // }
+  //IF PARA OCULTAR LA NAVBAR EN VISTAS EN LAS QUE SEA NECESARIO.
+  if (activeRouteName === 'login') {
+    return null;
+  }
 
   const visibleRoutes = state.routes.filter((route) => TAB_CONFIG[route.name]);
   const activeRouteKey = state.routes[state.index]?.key;
