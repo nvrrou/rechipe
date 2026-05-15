@@ -1,4 +1,6 @@
 import pydantic
+from pydantic import BaseModel
+from typing import List, Optional
 
 class UserCreate(pydantic.BaseModel):
     email: str
@@ -44,3 +46,7 @@ class TokenResponse(pydantic.BaseModel):
 class UserLogin(pydantic.BaseModel):
     email: str
     password: str
+
+class RecipeRequest(BaseModel):
+    ingredientes: List[str]
+    objetivo_nutricional: Optional[str] = ""
