@@ -22,6 +22,16 @@ class UserUpdate(pydantic.BaseModel):
     restricciones: list[str]
     ingredientes_favoritos: list[str]
 
+class ProfileUpdate(pydantic.BaseModel):
+    user_id: str
+    edad: int
+    peso: float
+    altura: float
+    genero: str
+    objetivos: list[str]
+    restricciones: list[str]
+    ingredientes_favoritos: list[str]
+
 class UserResponse(pydantic.BaseModel):
     id: str
     email: str
@@ -44,3 +54,22 @@ class TokenResponse(pydantic.BaseModel):
 class UserLogin(pydantic.BaseModel):
     email: str
     password: str
+
+
+# DESPENSA
+
+class DespensaAdd(pydantic.BaseModel):
+    user_id: str
+    nombre_producto: str
+    categoria: str
+    cantidad: float | None = None
+    unidad: str | None = None
+
+class DespensaItem(pydantic.BaseModel):
+    id: str
+    producto_id: str
+    nombre_producto: str
+    categoria: str
+    cantidad: float | None = None
+    unidad: str | None = None
+    created_at: str | None = None

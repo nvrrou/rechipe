@@ -121,10 +121,12 @@ export default function LoginScreen() {
         setSignupMsg('Creando cuenta...');
         setSignupError(false);
 
+        //registrar en el backend
         const result = await register({
-            email: signupEmail.trim(),
+            email: signupEmail.trim(), //borra los espacios en blanco al inicio y al final y envia al backend
             password: signupPassword,
-            nombre: signupName.trim(),
+            nombre: signupName.trim(), //borra los espacios en blanco al inicio y al final y envia al backend
+
         });
 
         if (result.success) {

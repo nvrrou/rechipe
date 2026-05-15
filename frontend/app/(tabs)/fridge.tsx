@@ -1,244 +1,325 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useMemo, useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, TextInput } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, TextInput } from 'react-native';
 
 import { Text, View } from '@/components/Themed';
+import { useAuth } from '@/contexts/AuthContext';
+import {
+  DespensaItemData,
+  agregarIngrediente,
+  buscarIngredientes,
+  eliminarIngrediente,
+  fetchDespensa,
+} from '@/services/despensa';
 
-//Tipo de categoria de ingredientes, con su respectiva lista de ingredientes
-type IngredientCategory = {
+// Tipos de categoría 
+
+type CategoryDef = {
   id: string;
   name: string;
   icon: keyof typeof MaterialCommunityIcons.glyphMap;
   color: string;
-  ingredients: IngredientItem[];
 };
 
-//Ingrediente individual (id, nombre, foto)
-type IngredientItem = {
-  id: string;
-  name: string;
-  addDate: string;
-  imageUri: string;
-};
-
-// Función para crear ingredientes
-// Si no hay foto los ingredientes tienen las primeras 2 letras como placeholder
-function createIngredient(name: string): IngredientItem {
-  const label = encodeURIComponent(name.trim().slice(0, 2).toUpperCase());
-
-  return {
-    id: `${name}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-    name,
-    addDate: `${Date.now()}`,
-    imageUri: `https://placehold.co/96x96/2a2a2a/ffffff/png?text=${label}`,
-  };
-}
-
-// Categorias iniciales (!!!!Meteré BDD despues, por ahora es para mostrar la funcionalidad)
-const INITIAL_CATEGORIES: IngredientCategory[] = [
-  {
-    id: 'carnes',
-    name: 'Carnes',
-    icon: 'food-steak',
-    color: '#BE123C',
-    ingredients: ['Pollo', 'Carne molida', 'Jamon'].map(createIngredient),
-  },
-  {
-    id: 'vegetales',
-    name: 'Vegetales',
-    icon: 'carrot',
-    color: '#16A34A',
-    ingredients: ['Tomate', 'Cebolla', 'Zanahoria'].map(createIngredient),
-  },
-  {
-    id: 'frutas',
-    name: 'Frutas',
-    icon: 'fruit-cherries',
-    color: '#DC2626',
-    ingredients: ['Manzana', 'Platano', 'Limon'].map(createIngredient),
-  },
-  {
-    id: 'legumbres',
-    name: 'Legumbres',
-    icon: 'seed-outline',
-    color: '#A16207',
-    ingredients: ['Garbanzos', 'Lentejas', 'Porotos'].map(createIngredient),
-  },
-  {
-    id: 'mariscos',
-    name: 'Mariscos',
-    icon: 'waves',
-    color: '#0891B2',
-    ingredients: ['Camarones', 'Choritos', 'Ostiones'].map(createIngredient),
-  },
-  {
-    id: 'pescado',
-    name: 'Pescado',
-    icon: 'fish',
-    color: '#2563EB',
-    ingredients: ['Reineta', 'Salmon', 'Atun'].map(createIngredient),
-  },
-  {
-    id: 'aderezos',
-    name: 'Aderezos',
-    icon: 'bottle-tonic-outline',
-    color: '#F97316',
-    ingredients: ['Mayonesa', 'Mostaza', 'Salsa de soya'].map(createIngredient),
-  },
-  {
-    id: 'cereales',
-    name: 'Cereales',
-    icon: 'barley',
-    color: '#CA8A04',
-    ingredients: ['Arroz', 'Avena', 'Quinoa'].map(createIngredient),
-  },
+const CATEGORIES: CategoryDef[] = [
+  { id: 'carnes', name: 'Carnes', icon: 'food-steak', color: '#BE123C' },
+  { id: 'vegetales', name: 'Vegetales', icon: 'carrot', color: '#16A34A' },
+  { id: 'frutas', name: 'Frutas', icon: 'fruit-cherries', color: '#DC2626' },
+  { id: 'legumbres', name: 'Legumbres', icon: 'seed-outline', color: '#A16207' },
+  { id: 'mariscos', name: 'Mariscos', icon: 'waves', color: '#0891B2' },
+  { id: 'pescado', name: 'Pescado', icon: 'fish', color: '#2563EB' },
+  { id: 'aderezos', name: 'Aderezos', icon: 'bottle-tonic-outline', color: '#F97316' },
+  { id: 'cereales', name: 'Cereales', icon: 'barley', color: '#CA8A04' },
+  { id: 'lacteos', name: 'Lácteos', icon: 'cup', color: '#7C3AED' },
+  { id: 'otros', name: 'Otros', icon: 'dots-horizontal', color: '#6B7280' },
 ];
 
-export default function FridgeScreen() {
-  const [categories, setCategories] = useState(INITIAL_CATEGORIES); //Setea el estado inicial para que sea I_C y hace que pueda ser variable en el tiempo (State)
-  const [ingredient, setIngredient] = useState(''); //Variable para insertar ingredientes
-  const [selectedCategoryId, setSelectedCategoryId] = useState(INITIAL_CATEGORIES[0].id); //Variable para almacenar la categoria que se selecciona (default [0])
-  const [activeView, setActiveView] = useState<'categories' | 'category' | 'add'>('categories'); //Solo funciona en alguno de esos 3 estados (añadir ingredientes o las categorias de estos)
+// Genera un placeholder de imagen con las primeras 2 letras
+function getPlaceholderUri(name: string) {
+  const label = encodeURIComponent(name.trim().slice(0, 2).toUpperCase());
+  return `https://placehold.co/96x96/2a2a2a/ffffff/png?text=${label}`;
+}
 
-  //Funcion que busca en las categorias la categoria seleccionada, si no ta, pone la primera
+export default function FridgeScreen() {
+  const { user } = useAuth();
+
+  // Estado principal
+  const [items, setItems] = useState<DespensaItemData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [addingLoading, setAddingLoading] = useState(false);
+
+  // Input y navegación
+  const [ingredient, setIngredient] = useState('');
+  const [selectedCategoryId, setSelectedCategoryId] = useState(CATEGORIES[0].id);
+  const [activeView, setActiveView] = useState<'categories' | 'category' | 'add' | 'search'>('categories');
+
+  // Busqueda
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<DespensaItemData[]>([]);
+  const [searching, setSearching] = useState(false);
+
+  // La categoria seleccionada actual
   const selectedCategory = useMemo(
-    () => categories.find((category) => category.id === selectedCategoryId) ?? categories[0], 
-    [categories, selectedCategoryId]
+    () => CATEGORIES.find((c) => c.id === selectedCategoryId) ?? CATEGORIES[0],
+    [selectedCategoryId]
   );
 
-  // Funcion que copia el estado anterior de la categoría (...category) y añade el ingrediente al final
-  function addIngredient(categoryId = selectedCategory.id) {
-    const nextIngredient = ingredient.trim();
+  // Ingredientes agrupados por categoria
+  const itemsByCategory = useMemo(() => {
+    const grouped: Record<string, DespensaItemData[]> = {};
+    for (const cat of CATEGORIES) {
+      grouped[cat.id] = [];
+    }
+    for (const item of items) {
+      const catId = item.categoria?.toLowerCase() || 'otros';
+      if (grouped[catId]) {
+        grouped[catId].push(item);
+      } else {
+        grouped['otros'].push(item);
+      }
+    }
+    return grouped;
+  }, [items]);
 
-    if (!nextIngredient) {
+  // Cargar datos al montar
+  const loadDespensa = useCallback(async () => {
+    if (!user?.id) return;
+    setLoading(true);
+    const result = await fetchDespensa(user.id);
+    if (result.items) {
+      setItems(result.items);
+    }
+    setLoading(false);
+  }, [user?.id]);
+
+  useEffect(() => {
+    loadDespensa();
+  }, [loadDespensa]);
+
+  // ---------- Agregar ingrediente ----------
+  async function handleAddIngredient(categoryId = selectedCategory.id) {
+    const nombre = ingredient.trim();
+    if (!nombre || !user?.id) return;
+
+    setAddingLoading(true);
+    const result = await agregarIngrediente({
+      user_id: user.id,
+      nombre_producto: nombre,
+      categoria: categoryId,
+    });
+
+    if (result.error) {
+      Alert.alert('Error', result.error);
+    } else {
+      // agregamos al estado local para ver el cambio inmediatamente
+      setItems((prev) => [result, ...prev]);
+      setIngredient('');
+    }
+    setAddingLoading(false);
+  }
+
+  // ---------- Eliminar ingrediente ----------
+  async function handleDeleteIngredient(itemId: string) {
+    Alert.alert(
+      'Eliminar ingrediente',
+      '¿Estás seguro de que quieres eliminar este ingrediente de tu despensa?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            const result = await eliminarIngrediente(itemId);
+            if (result.error) {
+              Alert.alert('Error', result.error);
+            } else {
+              setItems((prev) => prev.filter((i) => i.id !== itemId));
+            }
+          },
+        },
+      ]
+    );
+  }
+
+  // Busqueda
+  async function handleSearch(query: string) {
+    setSearchQuery(query);
+    if (!query.trim() || !user?.id) {
+      setSearchResults([]);
       return;
     }
 
-    setCategories((currentCategories) =>
-      currentCategories.map((category) => {
-        if (category.id !== categoryId) {
-          return category;
-        }
-
-        return {
-          ...category,
-          ingredients: [createIngredient(nextIngredient), ...category.ingredients],
-        };
-      })
-    );
-    setIngredient('');
+    setSearching(true);
+    const result = await buscarIngredientes(user.id, query.trim());
+    if (result.items) {
+      setSearchResults(result.items);
+    }
+    setSearching(false);
   }
 
-  // Funcion que abre una categoria cambiando el estado a "category" y seteando la categoria seleccionada
+  // Abrir categoria
   function openCategory(categoryId: string) {
     setSelectedCategoryId(categoryId);
     setActiveView('category');
   }
 
+  // Render
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#FFFFFF" />
+          <Text style={styles.loadingText}>Cargando tu despensa...</Text>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
-      <ScrollView //Vista scroleable para mostrar las categorias o los ingredientes dependiendo del estado
+      <ScrollView
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}>
         <View style={styles.hero}>
           <View style={styles.titleRow}>
-            {/* if para mostrar el boton de volver a categorias solo si no estas en esa vista */}
+            {/* Botón de volver si no estamos en la vista principal */}
             {activeView !== 'categories' && (
               <Pressable
                 accessibilityRole="button"
-                onPress={() => setActiveView('categories')}
+                onPress={() => {
+                  setActiveView('categories');
+                  setSearchQuery('');
+                  setSearchResults([]);
+                }}
                 style={styles.inlineBackButton}>
                 <MaterialCommunityIcons name="chevron-left" size={24} color="#FFFFFF" />
               </Pressable>
             )}
             <Text style={styles.title}>
-              {activeView === 'category' ? selectedCategory.name : activeView === 'add' ? 'Agregar' : 'Tu refri'}
+              {activeView === 'category'
+                ? selectedCategory.name
+                : activeView === 'add'
+                  ? 'Agregar'
+                  : activeView === 'search'
+                    ? 'Buscar'
+                    : 'Tu refri'}
             </Text>
           </View>
           <Text style={styles.subtitle}>
-            {/* if para mostrar el texto dependiendo de la vista, si es categoria muestra el texto con los ingredientes, 
-            si es agregar muestra el texto para agregar, sino el texto general */}
             {activeView === 'category'
               ? 'Ingredientes categorizados en esta seccion.'
               : activeView === 'add'
                 ? 'Elige una categoria y guarda el ingrediente donde corresponde.'
-              : 'Elige una categoria para revisar y agregar ingredientes.'}
+                : activeView === 'search'
+                  ? 'Busca ingredientes en tu despensa por nombre.'
+                  : 'Elige una categoria para revisar y agregar ingredientes.'}
           </Text>
         </View>
-        {/* if para mostrar la barra de agregar dependiendo de la vista, 
-        si es categorias muestra el texto para agregar categorias, 
-        sino muestra el input para agregar ingredientes */} 
+
+        {/* Barra de accion */}
         {activeView === 'categories' ? (
           <View style={styles.addBar}>
             <Pressable accessibilityRole="button" onPress={() => setActiveView('add')} style={styles.addButton}>
               <MaterialCommunityIcons name="plus" size={22} color="#FFFFFF" />
             </Pressable>
             <Text style={styles.addBarText}>Agregar ingrediente</Text>
-            <Pressable accessibilityRole="button" style={styles.searchButton}>
+            <Pressable accessibilityRole="button" onPress={() => setActiveView('search')} style={styles.searchButton}>
               <MaterialCommunityIcons name="magnify" size={22} color="#FFFFFF" />
             </Pressable>
           </View>
+        ) : activeView === 'search' ? (
+          <View style={styles.addBar}>
+            <View style={styles.searchIconStatic}>
+              <MaterialCommunityIcons name="magnify" size={22} color="#9CA3AF" />
+            </View>
+            <TextInput
+              onChangeText={handleSearch}
+              placeholder="Buscar en tu despensa..."
+              placeholderTextColor="#9CA3AF"
+              returnKeyType="search"
+              style={styles.input}
+              value={searchQuery}
+              autoFocus
+            />
+            {searching && <ActivityIndicator size="small" color="#FFFFFF" />}
+          </View>
         ) : (
           <View style={styles.addBar}>
-            <Pressable accessibilityRole="button" onPress={() => addIngredient()} style={styles.addButton}>
-              <MaterialCommunityIcons name="plus" size={22} color="#FFFFFF" />
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => handleAddIngredient()}
+              style={styles.addButton}
+              disabled={addingLoading}>
+              {addingLoading ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <MaterialCommunityIcons name="plus" size={22} color="#FFFFFF" />
+              )}
             </Pressable>
             <TextInput
               onChangeText={setIngredient}
-              onSubmitEditing={() => addIngredient()}
+              onSubmitEditing={() => handleAddIngredient()}
               placeholder={`Agregar a ${selectedCategory.name.toLowerCase()}`}
               placeholderTextColor="#9CA3AF"
               returnKeyType="done"
               style={styles.input}
               value={ingredient}
             />
-            <Pressable accessibilityRole="button" style={styles.searchButton}>
+            <Pressable accessibilityRole="button" onPress={() => setActiveView('search')} style={styles.searchButton}>
               <MaterialCommunityIcons name="magnify" size={22} color="#FFFFFF" />
             </Pressable>
           </View>
         )}
-        {/* if para mostrar las categorias o los ingredientes dependiendo de la vista */}
-        {activeView === 'categories' ? (
+
+        {/* Contenido según vista */}
+
+        {/* VISTA: Categorias */}
+        {activeView === 'categories' && (
           <>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Categorias</Text>
-              <Text style={styles.sectionMeta}>{categories.length} grupos</Text>
+              <Text style={styles.sectionMeta}>{items.length} ingredientes total</Text>
             </View>
 
             <View style={styles.categoryGrid}>
-              {categories.map((category) => (
-                <Pressable
-                  accessibilityRole="button"
-                  key={category.id}
-                  onPress={() => openCategory(category.id)}
-                  style={styles.categoryCard}>
-                  <View style={styles.categoryIcon}>
-                    <MaterialCommunityIcons name={category.icon} size={24} color="#FFFFFF" />
-                  </View>
-                  <View style={styles.categoryInfoRow}>
-                    <View style={styles.categoryCopy}>
-                      <Text style={styles.categoryName}>{category.name}</Text>
-                      <Text style={styles.categoryCount}>{category.ingredients.length} ingredientes</Text>
+              {CATEGORIES.map((category) => {
+                const count = itemsByCategory[category.id]?.length || 0;
+                return (
+                  <Pressable
+                    accessibilityRole="button"
+                    key={category.id}
+                    onPress={() => openCategory(category.id)}
+                    style={styles.categoryCard}>
+                    <View style={[styles.categoryIcon, { backgroundColor: category.color + '33' }]}>
+                      <MaterialCommunityIcons name={category.icon} size={24} color={category.color} />
                     </View>
-                    <MaterialCommunityIcons name="chevron-right" size={22} color="#9CA3AF" />
-                  </View>
-                </Pressable>
-              ))}
+                    <View style={styles.categoryInfoRow}>
+                      <View style={styles.categoryCopy}>
+                        <Text style={styles.categoryName}>{category.name}</Text>
+                        <Text style={styles.categoryCount}>{count} ingredientes</Text>
+                      </View>
+                      <MaterialCommunityIcons name="chevron-right" size={22} color="#9CA3AF" />
+                    </View>
+                  </Pressable>
+                );
+              })}
             </View>
           </>
-        
-        ) : activeView === 'add' ? (
-          <> {/* vista para agregar ingredientes */}
+        )}
+
+        {/* VISTA: Agregar ingrediente */}
+        {activeView === 'add' && (
+          <>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Agregar en</Text>
               <Text style={styles.sectionMeta}>{selectedCategory.name}</Text>
             </View>
 
             <View style={styles.categoryGrid}>
-              {categories.map((category) => {
+              {CATEGORIES.map((category) => {
                 const isSelected = category.id === selectedCategory.id;
-
                 return (
                   <Pressable
                     accessibilityRole="button"
@@ -246,47 +327,112 @@ export default function FridgeScreen() {
                     onPress={() => setSelectedCategoryId(category.id)}
                     style={[styles.categoryCard, isSelected && styles.categoryCardSelected]}>
                     <View style={[styles.categoryIcon, isSelected && styles.categoryIconSelected]}>
-                      <MaterialCommunityIcons
-                        name={category.icon}
-                        size={24}
-                        color="#FFFFFF"
-                      />
+                      <MaterialCommunityIcons name={category.icon} size={24} color="#FFFFFF" />
                     </View>
                     <View style={styles.categoryCopy}>
                       <Text style={styles.categoryName}>{category.name}</Text>
-                      <Text style={styles.categoryCount}>{category.ingredients.length} ingredientes</Text>
                     </View>
                   </Pressable>
                 );
               })}
             </View>
           </>
-        ) : (
+        )}
+
+        {/* VISTA: Detalle de categoría */}
+        {activeView === 'category' && (
           <View style={styles.detailPanel}>
             <View style={styles.detailHeader}>
-              <View style={styles.detailIcon}>
-                <MaterialCommunityIcons name={selectedCategory.icon} size={26} color="#FFFFFF" />
+              <View style={[styles.detailIcon, { backgroundColor: selectedCategory.color + '33' }]}>
+                <MaterialCommunityIcons name={selectedCategory.icon} size={26} color={selectedCategory.color} />
               </View>
               <View style={styles.detailCopy}>
                 <Text style={styles.detailTitle}>{selectedCategory.name}</Text>
                 <Text style={styles.detailSubtitle}>
-                  {selectedCategory.ingredients.length} ingredientes en esta categoria.
+                  {itemsByCategory[selectedCategory.id]?.length || 0} ingredientes en esta categoria.
                 </Text>
               </View>
             </View>
-          {/* lista de ingredientes */}
+
+            {/* Lista de ingredientes */}
             <View style={styles.ingredientsList}>
-              {selectedCategory.ingredients.map((item) => (
-                <View key={item.id} style={styles.ingredientCard}>
-                  <Image source={{ uri: item.imageUri }} style={styles.ingredientImage} />
-                  <View style={styles.ingredientLabel}>
-                    <Text style={styles.ingredientText} numberOfLines={2}>
-                      {item.name}
-                    </Text>
-                  </View>
+              {(itemsByCategory[selectedCategory.id] || []).length === 0 ? (
+                <View style={styles.emptyState}>
+                  <MaterialCommunityIcons name="food-off" size={40} color="#555" />
+                  <Text style={styles.emptyText}>No hay ingredientes en esta categoría</Text>
+                  <Pressable
+                    style={styles.emptyButton}
+                    onPress={() => {
+                      setActiveView('add');
+                      setSelectedCategoryId(selectedCategory.id);
+                    }}>
+                    <Text style={styles.emptyButtonText}>Agregar uno</Text>
+                  </Pressable>
                 </View>
-              ))}
+              ) : (
+                (itemsByCategory[selectedCategory.id] || []).map((item) => (
+                  <Pressable
+                    key={item.id}
+                    style={styles.ingredientCard}
+                    onLongPress={() => handleDeleteIngredient(item.id)}>
+                    <Image source={{ uri: getPlaceholderUri(item.nombre_producto) }} style={styles.ingredientImage} />
+                    <View style={styles.ingredientLabel}>
+                      <Text style={styles.ingredientText} numberOfLines={2}>
+                        {item.nombre_producto}
+                      </Text>
+                    </View>
+                    <Pressable
+                      style={styles.deleteButton}
+                      onPress={() => handleDeleteIngredient(item.id)}>
+                      <MaterialCommunityIcons name="close-circle" size={18} color="#f87171" />
+                    </Pressable>
+                  </Pressable>
+                ))
+              )}
             </View>
+          </View>
+        )}
+
+        {/* VISTA: Busqueda */}
+        {activeView === 'search' && (
+          <View style={styles.detailPanel}>
+            {searchQuery.trim() === '' ? (
+              <View style={styles.emptyState}>
+                <MaterialCommunityIcons name="magnify" size={40} color="#555" />
+                <Text style={styles.emptyText}>Escribe para buscar ingredientes en tu despensa</Text>
+              </View>
+            ) : searching ? (
+              <View style={styles.emptyState}>
+                <ActivityIndicator size="large" color="#FFFFFF" />
+              </View>
+            ) : searchResults.length === 0 ? (
+              <View style={styles.emptyState}>
+                <MaterialCommunityIcons name="emoticon-sad-outline" size={40} color="#555" />
+                <Text style={styles.emptyText}>No se encontraron ingredientes con "{searchQuery}"</Text>
+              </View>
+            ) : (
+              <>
+                <Text style={styles.searchResultsTitle}>
+                  {searchResults.length} resultado{searchResults.length !== 1 ? 's' : ''}
+                </Text>
+                <View style={styles.ingredientsList}>
+                  {searchResults.map((item) => (
+                    <Pressable
+                      key={item.id}
+                      style={styles.ingredientCard}
+                      onLongPress={() => handleDeleteIngredient(item.id)}>
+                      <Image source={{ uri: getPlaceholderUri(item.nombre_producto) }} style={styles.ingredientImage} />
+                      <View style={styles.ingredientLabel}>
+                        <Text style={styles.ingredientText} numberOfLines={2}>
+                          {item.nombre_producto}
+                        </Text>
+                        <Text style={styles.ingredientCategory}>{item.categoria}</Text>
+                      </View>
+                    </Pressable>
+                  ))}
+                </View>
+              </>
+            )}
           </View>
         )}
       </ScrollView>
@@ -395,6 +541,12 @@ const styles = StyleSheet.create({
     paddingTop: 54,
     paddingBottom: 130,
   },
+  deleteButton: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    padding: 2,
+  },
   detailCopy: {
     flex: 1,
     gap: 3,
@@ -437,6 +589,30 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '900',
   },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 32,
+    gap: 12,
+    backgroundColor: 'transparent',
+  },
+  emptyText: {
+    color: '#888',
+    fontSize: 15,
+    textAlign: 'center',
+  },
+  emptyButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: '#2A2A2A',
+    marginTop: 4,
+  },
+  emptyButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
   hero: {
     gap: 14,
     padding: 22,
@@ -459,6 +635,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#2A2A2A',
     backgroundColor: '#171717',
+    position: 'relative',
+  },
+  ingredientCategory: {
+    color: '#9CA3AF',
+    fontSize: 11,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   ingredientImage: {
     width: '100%',
@@ -500,6 +683,37 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     backgroundColor: '#2A2A2A',
   },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+    backgroundColor: 'transparent',
+  },
+  loadingText: {
+    color: '#B8B8B8',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  searchButton: {
+    width: 38,
+    height: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    backgroundColor: '#2A2A2A',
+  },
+  searchIconStatic: {
+    width: 38,
+    height: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchResultsTitle: {
+    color: '#B8B8B8',
+    fontSize: 14,
+    fontWeight: '700',
+  },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -510,14 +724,6 @@ const styles = StyleSheet.create({
     color: '#B8B8B8',
     fontSize: 13,
     fontWeight: '800',
-  },
-  searchButton: {
-    width: 38,
-    height: 38,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 14,
-    backgroundColor: '#2A2A2A',
   },
   sectionTitle: {
     color: '#FFFFFF',

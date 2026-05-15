@@ -10,43 +10,179 @@ import {
     ScrollView,
     SafeAreaView,
     ActivityIndicator,
+    Pressable,
 } from 'react-native';
 
-import { StatusBar } from 'expo-status-bar';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
+import { StatusBar } from 'expo-status-bar';
+
+// Opciones predefinidas
+
+const OBJETIVOS_OPTIONS = [
+    'Perder peso',
+    'Ganar músculo',
+    'Mantener peso',
+    'Comer más saludable',
+    'Reducir azúcar',
+    'Aumentar proteínas',
+    'Dieta equilibrada',
+    'Control de porciones',
+];
+
+const RESTRICCIONES_OPTIONS = [
+    'Vegetariano',
+    'Vegano',
+    'Sin gluten',
+    'Sin lactosa',
+    'Sin mariscos',
+    'Sin frutos secos',
+    'Bajo en sodio',
+    'Diabético',
+];
+
+// Componente Chip
+
+function ChipSelector({
+    options,
+    selected,
+    onToggle,
+    accentColor = '#4ade80',
+}: {
+    options: string[];
+    selected: string[];
+    onToggle: (option: string) => void;
+    accentColor?: string;
+}) {
+    return (
+        <View style={chipStyles.container}>
+            {options.map((option) => {
+                const isSelected = selected.includes(option);
+                return (
+                    <Pressable
+                        key={option}
+                        onPress={() => onToggle(option)}
+                        style={[
+                            chipStyles.chip,
+                            isSelected && { backgroundColor: accentColor + '22', borderColor: accentColor },
+                        ]}>
+                        <Text
+                            style={[
+                                chipStyles.chipText,
+                                isSelected && { color: accentColor },
+                            ]}>
+                            {option}
+                        </Text>
+                        {isSelected && (
+                            <Text style={[chipStyles.checkmark, { color: accentColor }]}>✓</Text>
+                        )}
+                    </Pressable>
+                );
+            })}
+        </View>
+    );
+}
+
+const chipStyles = StyleSheet.create({
+    container: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+    },
+    chip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: '#333',
+        backgroundColor: '#0f0f0f',
+    },
+    chipText: {
+        color: '#999',
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    checkmark: {
+        fontSize: 13,
+        fontWeight: '700',
+    },
+});
+
+// Pantalla principal
 
 export default function CompleteProfileScreen() {
     const router = useRouter();
-    const { user } = useAuth();
+    const { user, updateProfile } = useAuth();
 
     // Estados del perfil
     const [edad, setEdad] = useState('');
     const [peso, setPeso] = useState('');
     const [altura, setAltura] = useState('');
     const [genero, setGenero] = useState('');
-    const [objetivos, setObjetivos] = useState('');
-    const [restricciones, setRestricciones] = useState('');
+    const [objetivos, setObjetivos] = useState<string[]>([]);
+    const [restricciones, setRestricciones] = useState<string[]>([]);
     const [ingredientesFavoritos, setIngredientesFavoritos] = useState('');
 
     const [loading, setLoading] = useState(false);
     const [msg, setMsg] = useState('');
     const [error, setError] = useState(false);
 
+    // Toggle para chips
+    const toggleObjetivo = (option: string) => {
+        setObjetivos((prev) =>
+            prev.includes(option) ? prev.filter((o) => o !== option) : [...prev, option]
+        );
+    };
+
+    const toggleRestriccion = (option: string) => {
+        setRestricciones((prev) =>
+            prev.includes(option) ? prev.filter((r) => r !== option) : [...prev, option]
+        );
+    };
+
+    // Selector de genero
+    const generos = ['Masculino', 'Femenino', 'Otro'];
+
     const handleSaveProfile = async () => {
         setLoading(true);
-        // Aqui se deberan enviar estos datos al backend (se creara un endpoint como updateProfile)
-        // ya que el registro principal ocurrió en login.tsx
-
-        setMsg('Perfil guardado exitosamente');
         setError(false);
+        setMsg('');
 
-        // Simular guardado
-        setTimeout(() => {
-            router.replace('/(tabs)');
-        }, 1500);
+        // Transformamos ingredientes favoritos de string a array
+        const formatStringToArray = (str: string) =>
+            str.split(',')
+                .map(item => item.trim())
+                .filter(item => item.length > 0);
+
+        const data = {
+            edad: parseInt(edad) || 0,
+            peso: parseFloat(peso) || 0,
+            altura: parseFloat(altura) || 0,
+            genero: genero.trim().toLowerCase(),
+            objetivos: objetivos,
+            restricciones: restricciones,
+            ingredientes_favoritos: formatStringToArray(ingredientesFavoritos),
+        };
+
+        const result = await updateProfile(data);
+
+        if (result.success) {
+            setMsg('Perfil guardado exitosamente');
+            setError(false);
+            setTimeout(() => {
+                router.replace('/(tabs)');
+            }, 1500);
+        } else {
+            setMsg(result.error || 'Error al guardar el perfil');
+            setError(true);
+        }
+
         setLoading(false);
     };
+
 
     return (
         <SafeAreaView style={styles.safeArea}>
@@ -62,11 +198,18 @@ export default function CompleteProfileScreen() {
                     <View style={styles.card}>
                         <View style={styles.formContainer}>
                             <Text style={styles.formTitle}>Complete su perfil</Text>
+                            <Text style={styles.formSubtitle}>
+                                Esta información nos ayuda a personalizar tu experiencia
+                            </Text>
+
                             {msg !== '' && (
                                 <Text style={[styles.statusText, error && styles.errorText]}>
                                     {msg}
                                 </Text>
                             )}
+
+                            {/* Datos básicos */}
+                            <Text style={styles.sectionLabel}>Datos personales</Text>
 
                             {/* Edad */}
                             <View style={styles.inputGroup}>
@@ -104,47 +247,62 @@ export default function CompleteProfileScreen() {
                                 />
                             </View>
 
-                            {/* Género */}
-                            <View style={styles.inputGroup}>
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="Género (Ej: masculino)"
-                                    placeholderTextColor="#888"
-                                    value={genero}
-                                    onChangeText={setGenero}
-                                    autoCapitalize="none"
-                                />
+                            {/* Género con chips */}
+                            <Text style={styles.sectionLabel}>Género</Text>
+                            <View style={styles.genderRow}>
+                                {generos.map((g) => (
+                                    <Pressable
+                                        key={g}
+                                        onPress={() => setGenero(g)}
+                                        style={[
+                                            styles.genderChip,
+                                            genero === g && styles.genderChipSelected,
+                                        ]}>
+                                        <Text
+                                            style={[
+                                                styles.genderChipText,
+                                                genero === g && styles.genderChipTextSelected,
+                                            ]}>
+                                            {g}
+                                        </Text>
+                                    </Pressable>
+                                ))}
                             </View>
 
-                            {/* Objetivos */}
-                            <View style={styles.inputGroup}>
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="Objetivos (Ej: perder peso, ganar musculo)"
-                                    placeholderTextColor="#888"
-                                    value={objetivos}
-                                    onChangeText={setObjetivos}
-                                    autoCapitalize="none"
-                                />
-                            </View>
+                            {/* Objetivos con chips */}
+                            <Text style={styles.sectionLabel}>
+                                Objetivos nutricionales
+                                {objetivos.length > 0 && (
+                                    <Text style={styles.selectedCount}> ({objetivos.length})</Text>
+                                )}
+                            </Text>
+                            <ChipSelector
+                                options={OBJETIVOS_OPTIONS}
+                                selected={objetivos}
+                                onToggle={toggleObjetivo}
+                                accentColor="#4ade80"
+                            />
 
-                            {/* Restricciones */}
-                            <View style={styles.inputGroup}>
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="Restricciones (Ej: alergia a la lactosa)"
-                                    placeholderTextColor="#888"
-                                    value={restricciones}
-                                    onChangeText={setRestricciones}
-                                    autoCapitalize="none"
-                                />
-                            </View>
+                            {/* Restricciones con chips */}
+                            <Text style={styles.sectionLabel}>
+                                Restricciones alimentarias
+                                {restricciones.length > 0 && (
+                                    <Text style={styles.selectedCount}> ({restricciones.length})</Text>
+                                )}
+                            </Text>
+                            <ChipSelector
+                                options={RESTRICCIONES_OPTIONS}
+                                selected={restricciones}
+                                onToggle={toggleRestriccion}
+                                accentColor="#60a5fa"
+                            />
 
                             {/* Ingredientes Favoritos */}
+                            <Text style={styles.sectionLabel}>Ingredientes favoritos</Text>
                             <View style={styles.inputGroup}>
                                 <TextInput
                                     style={styles.input}
-                                    placeholder="Ingredientes Favoritos (Ej: pollo, arroz)"
+                                    placeholder="Ej: pollo, arroz, tomate (separar con comas)"
                                     placeholderTextColor="#888"
                                     value={ingredientesFavoritos}
                                     onChangeText={setIngredientesFavoritos}
@@ -193,14 +351,29 @@ const styles = StyleSheet.create({
         borderColor: '#1a1a1a',
     },
     formContainer: {
-        gap: 16,
+        gap: 12,
     },
     formTitle: {
         fontSize: 24,
         fontWeight: 'bold',
         color: '#fff',
-        marginBottom: 16,
         textAlign: 'center',
+    },
+    formSubtitle: {
+        fontSize: 14,
+        color: '#888',
+        textAlign: 'center',
+        marginBottom: 8,
+    },
+    sectionLabel: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: '#ccc',
+        marginTop: 8,
+    },
+    selectedCount: {
+        color: '#4ade80',
+        fontWeight: '600',
     },
     inputGroup: {
         flexDirection: 'row',
@@ -210,13 +383,37 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
         borderWidth: 1,
         borderColor: '#222',
-        marginBottom: 8,
     },
     input: {
         flex: 1,
         color: '#fff',
         fontSize: 15,
         paddingVertical: 16,
+    },
+    genderRow: {
+        flexDirection: 'row',
+        gap: 8,
+    },
+    genderChip: {
+        flex: 1,
+        paddingVertical: 12,
+        alignItems: 'center',
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#333',
+        backgroundColor: '#0f0f0f',
+    },
+    genderChipSelected: {
+        borderColor: '#a78bfa',
+        backgroundColor: '#a78bfa22',
+    },
+    genderChipText: {
+        color: '#999',
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    genderChipTextSelected: {
+        color: '#a78bfa',
     },
     button: {
         backgroundColor: '#fff',

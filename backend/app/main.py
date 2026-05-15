@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import auth, users, rechipes, supermarkets
+from app.routers import auth, users, rechipes, supermarkets, despensa
 from app.dependencias import get_supabase_client
 
 app = FastAPI(title="Rechipe API", version="1.0.0")
@@ -19,6 +19,7 @@ app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(rechipes.router)
 app.include_router(supermarkets.router)
+app.include_router(despensa.router)
 
 @app.get("/")
 async def root():
