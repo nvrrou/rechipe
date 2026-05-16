@@ -1,7 +1,19 @@
+import Constants from 'expo-constants';
+import { Platform } from 'react-native';
+
+function getApiUrl() {
+  const hostUri = Constants.expoConfig?.hostUri || Constants.manifest2?.extra?.expoClient?.hostUri;
+  const host = typeof hostUri === 'string' ? hostUri.split(':')[0] : undefined;
+
+  if (__DEV__ && Platform.OS !== 'web' && host) {
+    return `http://${host}:8000`;
+  }
+
+  return 'http://localhost:8000';
+}
+
 // URL base del backend FastAPI
-// Para probar desde el celular: cambiar a http://192.168.100.135:8000
-// y correr uvicorn con --host 0.0.0.0
-export const API_URL = 'http://localhost:8000';
+export const API_URL = getApiUrl();
 
 // ---------- Tipos ----------
 

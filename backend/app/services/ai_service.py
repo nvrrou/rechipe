@@ -1,14 +1,19 @@
 import os
-from openai import AsyncOpenAI
 from dotenv import load_dotenv
 import json
 
 # 1. Cargar las variables secretas del archivo .env
 load_dotenv()
 
-# 2. Inicializar el cliente de OpenAI
-# Automáticamente buscará la variable OPENAI_API_KEY en tu entorno
-client = AsyncOpenAI()
+def get_openai_client():
+    """Crea el cliente solo cuando se necesita generar una receta."""
+    from openai import AsyncOpenAI
+
+    api_key = os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI_KEY")
+    if not api_key:
+        raise RuntimeError("Falta OPENAI_API_KEY en el .env")
+
+    return AsyncOpenAI(api_key=api_key)
 
 async def generar_receta_con_ia(ingredientes: list[str], objetivo_nutricional: str = "") -> str:
     """
@@ -70,6 +75,7 @@ async def generar_receta_con_ia(ingredientes: list[str], objetivo_nutricional: s
 
         # 4. Hacer la llamada a la API
         # Usamos gpt-4o-mini porque es rápido, muy inteligente y económico para la fase de pruebas
+        client = get_openai_client()
         respuesta = await client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
