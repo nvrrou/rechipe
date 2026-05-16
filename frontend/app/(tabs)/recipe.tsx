@@ -1,30 +1,775 @@
-import { StyleSheet } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, TextInput } from 'react-native';
 
 import { Text, View } from '@/components/Themed';
+import { useAuth } from '@/contexts/AuthContext';
+import { DespensaItemData, fetchDespensa } from '@/services/despensa';
+import { GeneratedRecipe, generateRecipes } from '@/services/recipes';
+
+type MealType = {
+  id: string;
+  label: string;
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+  color: string;
+};
+
+const MEAL_TYPES: MealType[] = [
+  { id: 'Desayuno', label: 'Desayuno', icon: 'coffee-outline', color: '#F97316' },
+  { id: 'Almuerzo', label: 'Almuerzo', icon: 'silverware-fork-knife', color: '#16A34A' },
+  { id: 'Cena', label: 'Cena', icon: 'food-turkey', color: '#2563EB' },
+  { id: 'Snack', label: 'Snack', icon: 'food-apple-outline', color: '#DC2626' },
+  { id: 'Postre', label: 'Postre', icon: 'cupcake', color: '#C026D3' },
+  { id: 'Meal prep', label: 'Meal prep', icon: 'calendar-clock', color: '#0891B2' },
+];
+
+const QUICK_OBJECTIVES = ['Alto en proteínas', 'Bajo en calorías', 'Barato', 'Rápido', 'Sin azúcar', 'Equilibrado'];
+
+function itemSubtitle(item: DespensaItemData) {
+  return [item.categoria, item.cantidad ? `${item.cantidad} ${item.unidad || ''}`.trim() : undefined]
+    .filter(Boolean)
+    .join(' · ');
+}
 
 export default function RecipeScreen() {
+  const { user } = useAuth();
+  const [items, setItems] = useState<DespensaItemData[]>([]);
+  const [loadingItems, setLoadingItems] = useState(true);
+  const [selectedMeal, setSelectedMeal] = useState(MEAL_TYPES[0].id);
+  const [mealDropdownOpen, setMealDropdownOpen] = useState(false);
+  const [selectedIngredientIds, setSelectedIngredientIds] = useState<string[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [objective, setObjective] = useState('');
+  const [generating, setGenerating] = useState(false);
+  const [recipes, setRecipes] = useState<GeneratedRecipe[]>([]);
+  const [error, setError] = useState('');
+
+  const loadDespensa = useCallback(async () => {
+    if (!user?.id) return;
+    setLoadingItems(true);
+    const result = await fetchDespensa(user.id);
+    if (result.items) {
+      setItems(result.items);
+    } else if (result.error) {
+      setError(result.error);
+    }
+    setLoadingItems(false);
+  }, [user?.id]);
+
+  useEffect(() => {
+    loadDespensa();
+  }, [loadDespensa]);
+
+  const filteredItems = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return items;
+    return items.filter((item) =>
+      [item.nombre_producto, item.categoria, item.marca].filter(Boolean).join(' ').toLowerCase().includes(query)
+    );
+  }, [items, searchQuery]);
+
+  const selectedIngredients = useMemo(
+    () => items.filter((item) => selectedIngredientIds.includes(item.id)),
+    [items, selectedIngredientIds]
+  );
+
+  const selectedMealType = useMemo(
+    () => MEAL_TYPES.find((meal) => meal.id === selectedMeal) ?? MEAL_TYPES[0],
+    [selectedMeal]
+  );
+
+  function toggleIngredient(itemId: string) {
+    setError('');
+    setSelectedIngredientIds((prev) =>
+      prev.includes(itemId) ? prev.filter((id) => id !== itemId) : [...prev, itemId]
+    );
+  }
+
+  function toggleObjective(value: string) {
+    setObjective((prev) => (prev === value ? '' : value));
+  }
+
+  async function handleGenerate() {
+    if (selectedIngredients.length === 0) {
+      setError('Selecciona al menos un ingrediente obligatorio.');
+      return;
+    }
+
+    setGenerating(true);
+    setError('');
+    setRecipes([]);
+
+    const result = await generateRecipes({
+      ingredientes: selectedIngredients.map((item) => item.nombre_producto),
+      objetivo_nutricional: objective.trim(),
+      tipo_comida: selectedMeal,
+    });
+
+    if (result.error) {
+      setError(result.error);
+    } else if (result.recetas?.length) {
+      setRecipes(result.recetas);
+    } else {
+      setError('No llegaron recetas desde el backend.');
+    }
+
+    setGenerating(false);
+  }
+
+  function clearSelection() {
+    setSelectedIngredientIds([]);
+    setRecipes([]);
+    setError('');
+  }
+
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Generar receta</Text>
-      <Text style={styles.description}>Aqui despues podemos poner la magia para crear recetas.</Text>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        <View style={styles.hero}>
+          <View style={styles.titleRow}>
+            <View style={styles.heroIcon}>
+              <MaterialCommunityIcons name="chef-hat" size={28} color="#FFFFFF" />
+            </View>
+            <View style={styles.titleCopy}>
+              <Text style={styles.title}>Generar receta</Text>
+              <Text style={styles.subtitle}>Elige el tipo de comida y los ingredientes que deben aparecer sí o sí.</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.detailPanel}>
+          <View style={styles.panelHeader}>
+            <View style={styles.panelIcon}>
+              <MaterialCommunityIcons name="silverware" size={22} color="#FFFFFF" />
+            </View>
+            <View style={styles.panelCopy}>
+              <Text style={styles.panelTitle}>Tipo de comida</Text>
+              <Text style={styles.panelSubtitle}>{selectedMeal}</Text>
+            </View>
+          </View>
+
+          <View style={styles.dropdownWrap}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setMealDropdownOpen((prev) => !prev)}
+              style={styles.mealDropdownButton}>
+              <View style={styles.mealDropdownLeft}>
+                <View style={[styles.mealIcon, { backgroundColor: selectedMealType.color + '33' }]}>
+                  <MaterialCommunityIcons name={selectedMealType.icon} size={22} color={selectedMealType.color} />
+                </View>
+                <Text style={styles.mealDropdownText}>{selectedMealType.label}</Text>
+              </View>
+              <MaterialCommunityIcons name={mealDropdownOpen ? 'chevron-up' : 'chevron-down'} size={22} color="#FFFFFF" />
+            </Pressable>
+
+            {mealDropdownOpen && (
+              <View style={styles.mealDropdownMenu}>
+                {MEAL_TYPES.map((meal) => {
+                  const isSelected = selectedMeal === meal.id;
+                  return (
+                    <Pressable
+                      accessibilityRole="button"
+                      key={meal.id}
+                      onPress={() => {
+                        setSelectedMeal(meal.id);
+                        setMealDropdownOpen(false);
+                      }}
+                      style={[styles.mealDropdownOption, isSelected && styles.mealDropdownOptionSelected]}>
+                      <View style={[styles.mealOptionIcon, { backgroundColor: meal.color + '33' }]}>
+                        <MaterialCommunityIcons name={meal.icon} size={19} color={meal.color} />
+                      </View>
+                      <Text style={styles.mealDropdownOptionText}>{meal.label}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+          </View>
+        </View>
+
+        <View style={styles.detailPanel}>
+          <View style={styles.panelHeader}>
+            <View style={styles.panelIcon}>
+              <MaterialCommunityIcons name="target" size={22} color="#FFFFFF" />
+            </View>
+            <View style={styles.panelCopy}>
+              <Text style={styles.panelTitle}>Objetivo</Text>
+              <Text style={styles.panelSubtitle}>Opcional para guiar la receta.</Text>
+            </View>
+          </View>
+
+          <View style={styles.objectiveRow}>
+            {QUICK_OBJECTIVES.map((item) => (
+              <Pressable
+                accessibilityRole="button"
+                key={item}
+                onPress={() => toggleObjective(item)}
+                style={[styles.objectiveChip, objective === item && styles.objectiveChipSelected]}>
+                <Text style={[styles.objectiveChipText, objective === item && styles.objectiveChipTextSelected]}>{item}</Text>
+              </Pressable>
+            ))}
+          </View>
+
+          <TextInput
+            onChangeText={setObjective}
+            placeholder="O escribe algo más específico..."
+            placeholderTextColor="#6B7280"
+            style={styles.textInput}
+            value={objective}
+          />
+        </View>
+
+        <View style={styles.detailPanel}>
+          <View style={styles.panelHeader}>
+            <View style={styles.panelIcon}>
+              <MaterialCommunityIcons name="fridge-outline" size={22} color="#FFFFFF" />
+            </View>
+            <View style={styles.panelCopy}>
+              <Text style={styles.panelTitle}>Ingredientes obligatorios</Text>
+              <Text style={styles.panelSubtitle}>{selectedIngredients.length} seleccionado{selectedIngredients.length === 1 ? '' : 's'}</Text>
+            </View>
+            {selectedIngredients.length > 0 && (
+              <Pressable accessibilityRole="button" onPress={clearSelection} style={styles.clearButton}>
+                <MaterialCommunityIcons name="close" size={20} color="#FFFFFF" />
+              </Pressable>
+            )}
+          </View>
+
+          <View style={styles.searchBar}>
+            <MaterialCommunityIcons name="magnify" size={22} color="#9CA3AF" />
+            <TextInput
+              onChangeText={setSearchQuery}
+              placeholder="Buscar ingredientes de tu refri..."
+              placeholderTextColor="#9CA3AF"
+              style={styles.searchInput}
+              value={searchQuery}
+            />
+          </View>
+
+          {loadingItems ? (
+            <View style={styles.emptyState}>
+              <ActivityIndicator size="large" color="#FFFFFF" />
+            </View>
+          ) : filteredItems.length === 0 ? (
+            <View style={styles.emptyState}>
+              <MaterialCommunityIcons name="food-off" size={40} color="#555" />
+              <Text style={styles.emptyText}>No hay ingredientes para seleccionar</Text>
+            </View>
+          ) : (
+            <View style={styles.ingredientList}>
+              {filteredItems.map((item) => {
+                const isSelected = selectedIngredientIds.includes(item.id);
+                return (
+                  <Pressable
+                    accessibilityRole="button"
+                    key={item.id}
+                    onPress={() => toggleIngredient(item.id)}
+                    style={[styles.ingredientRow, isSelected && styles.ingredientRowSelected]}>
+                    <View style={[styles.checkBox, isSelected && styles.checkBoxSelected]}>
+                      {isSelected && <MaterialCommunityIcons name="check" size={17} color="#0B0B0B" />}
+                    </View>
+                    <View style={styles.ingredientCopy}>
+                      <Text style={styles.ingredientTitle}>{item.nombre_producto}</Text>
+                      <Text style={styles.ingredientSubtitle}>{itemSubtitle(item) || 'Sin detalle'}</Text>
+                    </View>
+                    <Text style={styles.macroPill}>{item.energia_kcal ?? 0} kcal</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
+        </View>
+
+        {error !== '' && (
+          <View style={styles.errorPanel}>
+            <MaterialCommunityIcons name="alert-circle-outline" size={20} color="#f87171" />
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        )}
+
+        <Pressable accessibilityRole="button" disabled={generating} onPress={handleGenerate} style={styles.generateButton}>
+          {generating ? (
+            <ActivityIndicator size="small" color="#0B0B0B" />
+          ) : (
+            <>
+              <MaterialCommunityIcons name="creation" size={22} color="#0B0B0B" />
+              <Text style={styles.generateButtonText}>Generar recetas</Text>
+            </>
+          )}
+        </Pressable>
+
+        {recipes.length > 0 && (
+          <View style={styles.resultsWrap}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Resultados</Text>
+              <Text style={styles.sectionMeta}>{recipes.length} receta{recipes.length === 1 ? '' : 's'}</Text>
+            </View>
+
+            {recipes.map((recipe, index) => (
+              <View key={`${recipe.titulo}-${index}`} style={styles.recipeCard}>
+                <View style={styles.recipeHeader}>
+                  <View style={styles.recipeNumber}>
+                    <Text style={styles.recipeNumberText}>{index + 1}</Text>
+                  </View>
+                  <View style={styles.recipeHeaderCopy}>
+                    <Text style={styles.recipeTitle}>{recipe.titulo}</Text>
+                    <Text style={styles.recipeMeta}>
+                      {[recipe.tiempo_preparacion, recipe.dificultad].filter(Boolean).join(' · ') || selectedMeal}
+                    </Text>
+                  </View>
+                </View>
+
+                {!!recipe.por_que_funciona && (
+                  <View style={styles.whyBox}>
+                    <Text style={styles.whyText}>{recipe.por_que_funciona}</Text>
+                  </View>
+                )}
+
+                {!!recipe.ingredientes?.length && (
+                  <View style={styles.recipeSection}>
+                    <Text style={styles.recipeSectionTitle}>Ingredientes</Text>
+                    {recipe.ingredientes.map((ingredient, ingredientIndex) => (
+                      <Text key={`${ingredient}-${ingredientIndex}`} style={styles.recipeLine}>
+                        {ingredient}
+                      </Text>
+                    ))}
+                  </View>
+                )}
+
+                {!!recipe.pasos?.length && (
+                  <View style={styles.recipeSection}>
+                    <Text style={styles.recipeSectionTitle}>Pasos</Text>
+                    {recipe.pasos.map((step, stepIndex) => (
+                      <Text key={`${step}-${stepIndex}`} style={styles.recipeLine}>
+                        {step}
+                      </Text>
+                    ))}
+                  </View>
+                )}
+              </View>
+            ))}
+          </View>
+        )}
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+  checkBox: {
+    width: 28,
+    height: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 24,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#3A3A3A',
+    backgroundColor: '#101010',
   },
-  description: {
-    marginTop: 12,
-    fontSize: 16,
+  checkBoxSelected: {
+    borderColor: '#FFFFFF',
+    backgroundColor: '#FFFFFF',
+  },
+  clearButton: {
+    width: 38,
+    height: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    backgroundColor: '#2A2A2A',
+  },
+  container: {
+    flex: 1,
+    backgroundColor: '#0B0B0B',
+  },
+  content: {
+    gap: 18,
+    paddingHorizontal: 20,
+    paddingTop: 54,
+    paddingBottom: 130,
+  },
+  detailPanel: {
+    gap: 16,
+    padding: 16,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    backgroundColor: '#171717',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 24,
+    elevation: 2,
+  },
+  dropdownWrap: {
+    gap: 8,
+    backgroundColor: 'transparent',
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 30,
+    gap: 12,
+    backgroundColor: 'transparent',
+  },
+  emptyText: {
+    color: '#888',
+    fontSize: 15,
     textAlign: 'center',
   },
-  title: {
-    fontSize: 24,
+  errorPanel: {
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#7F1D1D',
+    backgroundColor: '#241313',
+  },
+  errorText: {
+    flex: 1,
+    color: '#f87171',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  generateButton: {
+    minHeight: 58,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 9,
+    borderRadius: 18,
+    backgroundColor: '#FFFFFF',
+  },
+  generateButtonText: {
+    color: '#0B0B0B',
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  hero: {
+    gap: 14,
+    padding: 22,
+    borderRadius: 26,
+    backgroundColor: '#171717',
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.28,
+    shadowRadius: 28,
+    elevation: 2,
+  },
+  heroIcon: {
+    width: 54,
+    height: 54,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 18,
+    backgroundColor: '#2A2A2A',
+  },
+  ingredientCopy: {
+    flex: 1,
+    gap: 3,
+    backgroundColor: 'transparent',
+  },
+  ingredientList: {
+    gap: 10,
+    backgroundColor: 'transparent',
+  },
+  ingredientRow: {
+    minHeight: 68,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 11,
+    padding: 10,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    backgroundColor: '#101010',
+  },
+  ingredientRowSelected: {
+    borderColor: '#FFFFFF',
+    backgroundColor: '#232323',
+  },
+  ingredientSubtitle: {
+    color: '#B8B8B8',
+    fontSize: 13,
     fontWeight: '700',
+  },
+  ingredientTitle: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  macroPill: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '800',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: '#2A2A2A',
+    overflow: 'hidden',
+  },
+  mealDropdownButton: {
+    minHeight: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    backgroundColor: '#101010',
+  },
+  mealDropdownLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: 'transparent',
+  },
+  mealDropdownMenu: {
+    gap: 8,
+    padding: 8,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    backgroundColor: '#101010',
+  },
+  mealDropdownOption: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 10,
+    borderRadius: 13,
+    backgroundColor: 'transparent',
+  },
+  mealDropdownOptionSelected: {
+    backgroundColor: '#2A2A2A',
+  },
+  mealDropdownOptionText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  mealDropdownText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  mealIcon: {
+    width: 38,
+    height: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+  },
+  mealOptionIcon: {
+    width: 34,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+  },
+  objectiveChip: {
+    minHeight: 40,
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    backgroundColor: '#101010',
+  },
+  objectiveChipSelected: {
+    borderColor: '#FFFFFF',
+    backgroundColor: '#2A2A2A',
+  },
+  objectiveChipText: {
+    color: '#B8B8B8',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  objectiveChipTextSelected: {
+    color: '#FFFFFF',
+  },
+  objectiveRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    backgroundColor: 'transparent',
+  },
+  panelCopy: {
+    flex: 1,
+    gap: 3,
+    backgroundColor: 'transparent',
+  },
+  panelHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: 'transparent',
+  },
+  panelIcon: {
+    width: 46,
+    height: 46,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 16,
+    backgroundColor: '#2A2A2A',
+  },
+  panelSubtitle: {
+    color: '#B8B8B8',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  panelTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  recipeCard: {
+    gap: 14,
+    padding: 16,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    backgroundColor: '#171717',
+  },
+  recipeHeader: {
+    flexDirection: 'row',
+    gap: 12,
+    backgroundColor: 'transparent',
+  },
+  recipeHeaderCopy: {
+    flex: 1,
+    gap: 4,
+    backgroundColor: 'transparent',
+  },
+  recipeLine: {
+    color: '#D1D5DB',
+    fontSize: 14,
+    fontWeight: '600',
+    lineHeight: 20,
+  },
+  recipeMeta: {
+    color: '#B8B8B8',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  recipeNumber: {
+    width: 38,
+    height: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    backgroundColor: '#2A2A2A',
+  },
+  recipeNumberText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  recipeSection: {
+    gap: 6,
+    backgroundColor: 'transparent',
+  },
+  recipeSectionTitle: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  recipeTitle: {
+    color: '#FFFFFF',
+    fontSize: 19,
+    fontWeight: '900',
+  },
+  resultsWrap: {
+    gap: 12,
+    backgroundColor: 'transparent',
+  },
+  searchBar: {
+    minHeight: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    backgroundColor: '#101010',
+  },
+  searchInput: {
+    flex: 1,
+    minWidth: 0,
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+    paddingVertical: 12,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'transparent',
+  },
+  sectionMeta: {
+    color: '#B8B8B8',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  sectionTitle: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  subtitle: {
+    color: '#B8B8B8',
+    fontSize: 15,
+    fontWeight: '700',
+    lineHeight: 21,
+  },
+  textInput: {
+    minHeight: 54,
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    backgroundColor: '#101010',
+  },
+  title: {
+    color: '#FFFFFF',
+    fontSize: 34,
+    fontWeight: '900',
+    lineHeight: 38,
+  },
+  titleCopy: {
+    flex: 1,
+    gap: 5,
+    backgroundColor: 'transparent',
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: 'transparent',
+  },
+  whyBox: {
+    padding: 12,
+    borderRadius: 16,
+    backgroundColor: '#102017',
+    borderWidth: 1,
+    borderColor: '#235D38',
+  },
+  whyText: {
+    color: '#BBF7D0',
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 19,
   },
 });

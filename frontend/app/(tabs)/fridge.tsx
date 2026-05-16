@@ -129,6 +129,11 @@ function parseInputNumber(value: string) {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+function formatPrice(value?: number | null) {
+  if (value === undefined || value === null) return '-';
+  return `CLP ${Math.round(value).toLocaleString('es-CL')}`;
+}
+
 function cleanText(value: string) {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
@@ -456,9 +461,12 @@ export default function FridgeScreen() {
       <Pressable accessibilityRole="button" key={item.id} onPress={() => openEditView(item)} style={styles.ingredientRow}>
         <Image source={{ uri: imageUri }} style={styles.ingredientImage} />
         <View style={styles.ingredientInfo}>
-          <Text style={styles.ingredientTitle} numberOfLines={1}>
-            {item.nombre_producto}
-          </Text>
+          <View style={styles.ingredientTitleRow}>
+            <Text style={styles.ingredientTitle} numberOfLines={1}>
+              {item.nombre_producto}
+            </Text>
+            <Text style={styles.pricePill}>{formatPrice(item.precio_aprox)}</Text>
+          </View>
           <Text style={styles.ingredientMeta} numberOfLines={1}>
             {[item.marca, item.cantidad ? `${item.cantidad} ${item.unidad || ''}`.trim() : undefined]
               .filter(Boolean)
@@ -1139,9 +1147,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#101010',
   },
   ingredientTitle: {
+    flexShrink: 1,
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '900',
+  },
+  ingredientTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    gap: 8,
+    backgroundColor: 'transparent',
   },
   ingredientsList: {
     gap: 10,
@@ -1194,6 +1210,16 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 5,
     backgroundColor: 'transparent',
+  },
+  pricePill: {
+    color: '#DCFCE7',
+    fontSize: 11,
+    fontWeight: '900',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: '#166534',
+    overflow: 'hidden',
   },
   primaryAction: {
     minHeight: 52,
