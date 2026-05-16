@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { loginUser, registerUser, LoginResponse, RegisterData } from '@/services/api';
+import { loginUser, registerUser, updateUserProfile, LoginResponse, RegisterData, UpdateProfileData } from '@/services/api';
 
 // ---------- Tipos ----------
 
@@ -22,8 +22,10 @@ interface AuthContextType {
   accessToken: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  pendingCredentials: { email: string; password: string } | null;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   register: (data: RegisterData) => Promise<{ success: boolean; error?: string }>;
+  updateProfile: (data: Omit<UpdateProfileData, 'user_id'>) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
 }
 
@@ -41,6 +43,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [pendingCredentials, setPendingCredentials] = useState<{ email: string; password: string } | null>(null);
 
   // Al montar, intentamos cargar la sesion guardada
   useEffect(() => {
@@ -107,6 +110,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // ---------- Register ----------
   const register = async (data: RegisterData): Promise<{ success: boolean; error?: string }> => {
     try {
+      // 1. Limpiamos cualquier sesión anterior
+      setUser(null);
+      setAccessToken(null);
+      await clearSession();
+
+      // 2. Registramos al usuario en el backend
       const response = await registerUser(data);
 
       if (response.error) {
@@ -114,6 +123,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (response.id) {
+        // 3. Guardamos el user con el ID del recién creado (sin token aún)
+        const newUser: User = {
+          id: response.id,
+          email: data.email,
+          nombre: data.nombre,
+          edad: 0,
+          peso: 0,
+          altura: 0,
+          genero: '',
+          objetivos: [],
+          restricciones: [],
+          ingredientes_favoritos: [],
+        };
+        setUser(newUser);
+
+        // 4. Guardamos las credenciales para hacer login después de completar el perfil
+        setPendingCredentials({ email: data.email, password: data.password });
+
         return { success: true };
       }
 
@@ -124,10 +151,61 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // ---------- Logout ----------
+  // ---------- Update Profile ----------
+  const updateProfile = async (data: Omit<UpdateProfileData, 'user_id'>): Promise<{ success: boolean; error?: string }> => {
+    if (!user) {
+      return { success: false, error: 'no hay usuario autenticado' };
+    }
+
+    try {
+      const response = await updateUserProfile({
+        ...data,
+        user_id: user.id,
+      });
+
+      if (response.error) {
+        return { success: false, error: response.error };
+      }
+
+      // Si hay credenciales pendientes (viene del registro), hacemos login para establecer la sesión completa
+      if (pendingCredentials) {
+        const loginResult = await login(pendingCredentials.email, pendingCredentials.password);
+        setPendingCredentials(null);
+        if (!loginResult.success) {
+          return { success: false, error: 'Perfil actualizado pero falló el inicio de sesión' };
+        }
+        return { success: true };
+      }
+
+      // Si ya tenía sesión (edición normal de perfil), actualizamos localmente
+      const updatedUser: User = {
+        ...user,
+        edad: data.edad,
+        peso: data.peso,
+        altura: data.altura,
+        genero: data.genero,
+        objetivos: data.objetivos,
+        restricciones: data.restricciones,
+        ingredientes_favoritos: data.ingredientes_favoritos,
+      };
+
+      setUser(updatedUser);
+      if (accessToken) {
+        await saveSession(accessToken, '', updatedUser);
+      }
+
+      return { success: true };
+    } catch (e: any) {
+      console.error('Error al actualizar el perfil:', e);
+      return { success: false, error: `Error de conexion: ${e.message}` };
+    }
+  };
+
+  // LOGOUT
   const logout = async () => {
     setUser(null);
     setAccessToken(null);
+    setPendingCredentials(null);
     await clearSession();
   };
 
@@ -138,8 +216,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         accessToken,
         isAuthenticated: !!accessToken,
         isLoading,
+        pendingCredentials,
         login,
         register,
+        updateProfile,
         logout,
       }}
     >
@@ -148,7 +228,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-// ---------- Hook ----------
+// HOOK
 
 export function useAuth() {
   const context = useContext(AuthContext);

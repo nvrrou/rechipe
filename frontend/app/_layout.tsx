@@ -10,17 +10,17 @@ import { useColorScheme } from '@/components/useColorScheme';
 import { AuthProvider } from '@/contexts/AuthContext';
 
 export {
-  // Catch any errors thrown by the Layout component.
   ErrorBoundary,
 } from 'expo-router';
 
 export const unstable_settings = {
-  // Ensure that reloading on `/modal` keeps a back button present.
-  initialRouteName: '(tabs)',
+  initialRouteName: '(auth)',
 };
 
-// Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
+
+import { useAuth } from '@/contexts/AuthContext';
+import { useRouter, useSegments } from 'expo-router';
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({
@@ -28,7 +28,6 @@ export default function RootLayout() {
     ...FontAwesome.font,
   });
 
-  // Expo Router uses Error Boundaries to catch errors in the navigation tree.
   useEffect(() => {
     if (error) throw error;
   }, [error]);
@@ -51,12 +50,56 @@ function RootLayoutNav() {
 
   return (
     <AuthProvider>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <Stack>
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-        </Stack>
-      </ThemeProvider>
+      <ProtectedLayout>
+        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+          <Stack>
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+            <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+          </Stack>
+        </ThemeProvider>
+      </ProtectedLayout>
     </AuthProvider>
   );
+}
+
+function ProtectedLayout({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isLoading, user, pendingCredentials } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (isLoading) return;
+
+    const inAuthGroup = segments[0] === '(auth)';
+    const isLogin = segments[1] === 'login';
+    const isCompletingProfile = segments[1] === 'completar_perfil';
+
+    const hasPendingRegistration = !!user && !isAuthenticated && !!pendingCredentials;
+    const hasIncompleteProfile =
+      !!user &&
+      isAuthenticated &&
+      (!user.edad || !user.peso || !user.altura || !user.genero || user.objetivos.length === 0);
+
+    if (hasPendingRegistration && !isCompletingProfile) {
+      router.replace('/(auth)/completar_perfil');
+      return;
+    }
+
+    if (hasIncompleteProfile && !isCompletingProfile) {
+      router.replace('/(auth)/completar_perfil');
+      return;
+    }
+
+    if (!isAuthenticated && !hasPendingRegistration && !isLogin) {
+      router.replace('/(auth)/login');
+      return;
+    }
+
+    if (isAuthenticated && inAuthGroup && !hasIncompleteProfile) {
+      router.replace('/(tabs)');
+    }
+  }, [isAuthenticated, isLoading, pendingCredentials, router, segments, user]);
+
+  return <>{children}</>;
 }

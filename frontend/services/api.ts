@@ -80,3 +80,25 @@ export async function registerUser(data: RegisterData): Promise<RegisterResponse
   const responseData = await res.json();
   return responseData;
 }
+
+export interface UpdateProfileData {
+  user_id: string;
+  edad: number;
+  peso: number;
+  altura: number;
+  genero: string;
+  objetivos: string[];
+  restricciones: string[];
+  ingredientes_favoritos: string[];
+}
+
+export async function updateUserProfile(data: UpdateProfileData): Promise<{ msg?: string; error?: string }> {
+  const res = await fetch(`${API_URL}/auth/update_profile`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+
+  const responseData = await res.json();
+  return responseData;
+}

@@ -7,16 +7,16 @@ si se loguea correctamente, se debe redirigir a la pantalla de inicio.
 
 import React, { useState } from 'react';
 import {
-    StyleSheet,
-    Text,
-    View,
-    TextInput,
-    TouchableOpacity,
+    ActivityIndicator,
     KeyboardAvoidingView,
     Platform,
-    ScrollView,
     SafeAreaView,
-    ActivityIndicator,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 
 
@@ -27,7 +27,7 @@ import { useAuth } from '@/contexts/AuthContext';
 
 export default function LoginScreen() {
     const router = useRouter();
-    const { login, register, isAuthenticated } = useAuth();
+    const { login, register } = useAuth();
     const [activeTab, setActiveTab] = useState('login');
 
     // Estados de Login
@@ -121,17 +121,19 @@ export default function LoginScreen() {
         setSignupMsg('Creando cuenta...');
         setSignupError(false);
 
+        //registrar en el backend
         const result = await register({
-            email: signupEmail.trim(),
+            email: signupEmail.trim(), //borra los espacios en blanco al inicio y al final y envia al backend
             password: signupPassword,
-            nombre: signupName.trim(),
+            nombre: signupName.trim(), //borra los espacios en blanco al inicio y al final y envia al backend
+
         });
 
         if (result.success) {
             setSignupMsg('¡Cuenta creada! a continuacion complete el resto de su perfil');
             setSignupError(false);
             setTimeout(() => {
-                router.replace('/completar_perfil');
+                router.replace('/(auth)/completar_perfil');
             }, 1500);
         } else {
             setSignupMsg(result.error || 'Error al crear la cuenta');
@@ -152,6 +154,17 @@ export default function LoginScreen() {
                     contentContainerStyle={styles.scrollView}
                     showsVerticalScrollIndicator={false}
                 >
+                    <View style={styles.hero}>
+                        <View style={styles.heroHeader}>
+                            <View style={styles.logoMark}>
+                                <Ionicons name="restaurant-outline" size={30} color="#FFFFFF" />
+                            </View>
+                            <View style={styles.heroCopy}>
+                                <Text style={styles.title}>rechipe</Text>
+                            </View>
+                        </View>
+                    </View>
+
                     <View style={styles.card}>
                         {/* Selector de Pestañas */}
                         <View style={styles.tabsContainer}>
@@ -178,11 +191,11 @@ export default function LoginScreen() {
                         {activeTab === 'login' && (
                             <View style={styles.form}>
                                 <View style={styles.inputGroup}>
-                                    <Ionicons name="mail-outline" size={20} color="#666" style={styles.icon} />
+                                    <Ionicons name="mail-outline" size={20} color="#9CA3AF" style={styles.icon} />
                                     <TextInput
                                         style={styles.input}
                                         placeholder="Correo electronico"
-                                        placeholderTextColor="#555"
+                                        placeholderTextColor="#9CA3AF"
                                         value={loginEmail}
                                         onChangeText={setLoginEmail}
                                         autoCapitalize="none"
@@ -191,11 +204,11 @@ export default function LoginScreen() {
                                     />
                                 </View>
                                 <View style={styles.inputGroup}>
-                                    <Ionicons name="lock-closed-outline" size={20} color="#666" style={styles.icon} />
+                                    <Ionicons name="lock-closed-outline" size={20} color="#9CA3AF" style={styles.icon} />
                                     <TextInput
                                         style={styles.input}
                                         placeholder="Contraseña"
-                                        placeholderTextColor="#555"
+                                        placeholderTextColor="#9CA3AF"
                                         secureTextEntry
                                         value={loginPassword}
                                         onChangeText={setLoginPassword}
@@ -226,20 +239,22 @@ export default function LoginScreen() {
                         {activeTab === 'signup' && (
                             <View style={styles.form}>
                                 <View style={styles.inputGroup}>
+                                    <Ionicons name="person-outline" size={20} color="#9CA3AF" style={styles.icon} />
                                     <TextInput
                                         style={styles.input}
                                         placeholder="Nombre completo"
-                                        placeholderTextColor="#555"
+                                        placeholderTextColor="#9CA3AF"
                                         value={signupName}
                                         onChangeText={setSignupName}
                                         editable={!signupLoading}
                                     />
                                 </View>
                                 <View style={styles.inputGroup}>
+                                    <Ionicons name="mail-outline" size={20} color="#9CA3AF" style={styles.icon} />
                                     <TextInput
                                         style={styles.input}
                                         placeholder="Correo electronico"
-                                        placeholderTextColor="#555"
+                                        placeholderTextColor="#9CA3AF"
                                         value={signupEmail}
                                         onChangeText={setSignupEmail}
                                         autoCapitalize="none"
@@ -247,10 +262,11 @@ export default function LoginScreen() {
                                     />
                                 </View>
                                 <View style={styles.inputGroup}>
+                                    <Ionicons name="lock-closed-outline" size={20} color="#9CA3AF" style={styles.icon} />
                                     <TextInput
                                         style={styles.input}
                                         placeholder="Contraseña"
-                                        placeholderTextColor="#555"
+                                        placeholderTextColor="#9CA3AF"
                                         secureTextEntry
                                         value={signupPassword}
                                         onChangeText={setSignupPassword}
@@ -258,10 +274,11 @@ export default function LoginScreen() {
                                     />
                                 </View>
                                 <View style={styles.inputGroup}>
+                                    <Ionicons name="shield-checkmark-outline" size={20} color="#9CA3AF" style={styles.icon} />
                                     <TextInput
                                         style={styles.input}
                                         placeholder="Confirmar contraseña"
-                                        placeholderTextColor="#555"
+                                        placeholderTextColor="#9CA3AF"
                                         secureTextEntry
                                         value={signupConfirm}
                                         onChangeText={setSignupConfirm}
@@ -297,86 +314,145 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
     safeArea: {
         flex: 1,
-        backgroundColor: '#000000',
+        backgroundColor: '#0B0B0B',
     },
     container: {
         flex: 1,
+        backgroundColor: '#0B0B0B',
     },
     scrollView: {
         flexGrow: 1,
         justifyContent: 'center',
-        padding: 24,
+        gap: 18,
+        paddingHorizontal: 20,
+        paddingTop: 54,
+        paddingBottom: 48,
+    },
+    hero: {
+        gap: 16,
+        padding: 22,
+        borderRadius: 26,
+        backgroundColor: '#171717',
+        borderWidth: 1,
+        borderColor: '#2A2A2A',
+        shadowColor: '#000000',
+        shadowOffset: { width: 0, height: 14 },
+        shadowOpacity: 0.28,
+        shadowRadius: 28,
+        elevation: 2,
+    },
+    heroHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    logoMark: {
+        width: 54,
+        height: 54,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: 18,
+        backgroundColor: '#2A2A2A',
+    },
+    heroCopy: {
+        gap: 10,
+    },
+    title: {
+        color: '#FFFFFF',
+        fontSize: 36,
+        fontWeight: '900',
+        lineHeight: 40,
+    },
+    subtitle: {
+        color: '#B8B8B8',
+        fontSize: 15,
+        fontWeight: '700',
+        lineHeight: 21,
     },
     card: {
-        backgroundColor: '#0a0a0a',
-        borderRadius: 16,
-        padding: 24,
+        gap: 22,
+        backgroundColor: '#171717',
+        borderRadius: 22,
+        padding: 16,
         borderWidth: 1,
-        borderColor: '#1a1a1a',
+        borderColor: '#2A2A2A',
+        shadowColor: '#000000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.3,
+        shadowRadius: 24,
+        elevation: 2,
     },
     tabsContainer: {
         flexDirection: 'row',
-        backgroundColor: '#111',
-        borderRadius: 12,
-        padding: 4,
-        marginBottom: 32,
+        gap: 8,
+        backgroundColor: 'transparent',
     },
     tab: {
         flex: 1,
-        paddingVertical: 12,
+        minHeight: 46,
         alignItems: 'center',
-        borderRadius: 8,
+        justifyContent: 'center',
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: '#2A2A2A',
+        backgroundColor: '#101010',
     },
     activeTab: {
-        backgroundColor: '#1a1a1a',
+        backgroundColor: '#2A2A2A',
+        borderColor: '#3A3A3A',
     },
     tabText: {
         fontSize: 14,
-        fontWeight: '500',
-        color: '#666',
+        fontWeight: '800',
+        color: '#9CA3AF',
     },
     activeTabText: {
-        color: '#fff',
+        color: '#FFFFFF',
     },
     form: {
         gap: 16,
     },
     inputGroup: {
+        minHeight: 56,
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#0f0f0f',
-        borderRadius: 12,
-        paddingHorizontal: 16,
+        backgroundColor: '#101010',
+        borderRadius: 18,
+        paddingHorizontal: 14,
         borderWidth: 1,
-        borderColor: '#222',
+        borderColor: '#2A2A2A',
     },
     icon: {
-        marginRight: 12,
+        marginRight: 10,
     },
     input: {
         flex: 1,
-        color: '#fff',
-        fontSize: 15,
-        paddingVertical: 16,
+        minWidth: 0,
+        color: '#FFFFFF',
+        fontSize: 16,
+        fontWeight: '800',
+        paddingVertical: 12,
     },
     button: {
-        backgroundColor: '#fff',
-        paddingVertical: 16,
-        borderRadius: 12,
+        minHeight: 56,
+        backgroundColor: '#FFFFFF',
+        borderRadius: 18,
         alignItems: 'center',
+        justifyContent: 'center',
         marginTop: 8,
     },
     buttonDisabled: {
         opacity: 0.6,
     },
     buttonText: {
-        color: '#000',
+        color: '#0B0B0B',
         fontSize: 16,
-        fontWeight: '600',
+        fontWeight: '900',
     },
     statusText: {
         color: '#4ade80',
-        fontSize: 13,
+        fontSize: 14,
+        fontWeight: '700',
         textAlign: 'center',
         marginTop: 8,
     },

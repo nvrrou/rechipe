@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import auth, users, rechipes, supermarkets
+from app.routers import auth, users, rechipes, supermarkets, despensa
 from app.dependencias import get_supabase_client
 
 app = FastAPI(title="Rechipe API", version="1.0.0")
@@ -19,6 +19,7 @@ app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(rechipes.router)
 app.include_router(supermarkets.router)
+app.include_router(despensa.router)
 
 @app.get("/")
 async def root():
@@ -27,11 +28,11 @@ async def root():
 
 @app.get("/health")
 async def health():
-    """ verifica que el servidor y la coneccion asupabase funcionen correctamente """
+    """ verifica que el servidor y la conexion a supabase funcionen correctamente """
     #el "try:" es para atrapar errores, 
     try: # esto sirve para atrapar errores y poder mandar un mensaje mas claro al usuario
         async with get_supabase_client() as client: # el async with es para que el cliente se conecte de forma segura y se desconecte automaticamente
-           response = await client.get("/health") # esto es para probar la coneccion a supabase
+           response = await client.get("/productos_catalogo?select=id&limit=1") # esto es para probar la conexion a supabase
            if response.status_code == 200: # el igual a 200 significa que todo esta bien 
             return {"status":"healthy", "database": "connected"}
            else:

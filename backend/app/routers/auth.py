@@ -1,6 +1,6 @@
 from app.config import SUPABASE_URL
 from fastapi import APIRouter
-from app.models.schemas import UserCreate, UserResponse
+from app.models.schemas import UserCreate, UserResponse, ProfileUpdate
 from app.dependencias import get_supabase_client
 from app.models.schemas import UserLogin
 
@@ -17,7 +17,7 @@ router = APIRouter(
 async def register(user_data: UserCreate):
     try: 
         async with get_supabase_client() as client:
-            # 1 ------ Crea un suario en Supabase Auth
+            # Crea un suario en Supabase Auth
             response = await client.post(f"{SUPABASE_URL}/auth/v1/signup", json={"email": user_data.email, "password": user_data.password})
             
             if response.status_code != 200:
@@ -28,7 +28,7 @@ async def register(user_data: UserCreate):
             user_data_AUTH = response.json()
             new_user_id = user_data_AUTH["user"]["id"]
             
-            # 2 ------ Inserta el perfil extendido
+            # Inserta el perfil extendido
             profile = {
                 "id": new_user_id,
                 "nombre": user_data.nombre,
@@ -67,7 +67,7 @@ async def register(user_data: UserCreate):
 async def login(user_data: UserLogin):
     try: 
         async with get_supabase_client() as client:
-            # 1 ------ Inicia sesion en Supabase Auth
+            # Inicia sesion en Supabase Auth
             # Para el login de Supabase se necesita el query param ?grant_type=password
             response = await client.post(
                 f"{SUPABASE_URL}/auth/v1/token?grant_type=password", 
@@ -81,7 +81,6 @@ async def login(user_data: UserLogin):
             user_data_AUTH = response.json()
             user_id = user_data_AUTH["user"]["id"]
             
-            # 2 ------ Obtiene el perfil extendido desde la base de datos
             # Hacemos un GET a la tabla profiles donde el id sea igual al del usuario
             perfil_response = await client.get(f"/profiles?id=eq.{user_id}")
             
@@ -107,5 +106,31 @@ async def login(user_data: UserLogin):
                     "ingredientes_favoritos": perfil.get("ingredientes_favoritos") or []
                 }
             }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@router.post("/update_profile")
+async def update_profile(profile_data: ProfileUpdate):
+    try:
+        async with get_supabase_client() as client:
+            # Actualiza el perfil extendido
+            profile_update_data = {
+                "edad": profile_data.edad,
+                "peso_kg": profile_data.peso,
+                "altura_cm": int(profile_data.altura),
+                "genero": profile_data.genero,
+                "objetivos": profile_data.objetivos,
+                "restricciones": profile_data.restricciones,
+                "ingredientes_favoritos": profile_data.ingredientes_favoritos,
+            }
+            
+            # Actualiza el perfil extendido
+            response = await client.patch(f"/profiles?id=eq.{profile_data.user_id}", json=profile_update_data)
+            
+            if response.status_code not in (200, 204):
+                return {"error": f"Error al actualizar el perfil. Detalle: {response.text}"}
+            
+            return {"msg": "Perfil actualizado exitosamente"}
     except Exception as e:
         return {"error": str(e)}
