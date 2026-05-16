@@ -57,9 +57,14 @@ class UserLogin(pydantic.BaseModel):
     email: str
     password: str
 
+
+#IA
 class RecipeRequest(BaseModel):
     ingredientes: List[str]
     objetivo_nutricional: Optional[str] = ""
+
+class EsquemaAlimento(BaseModel):
+    nombre: str
 
 # DESPENSA
 

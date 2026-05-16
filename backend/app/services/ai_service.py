@@ -1,19 +1,58 @@
 import os
+from openai import AsyncOpenAI
 from dotenv import load_dotenv
 import json
 
 # 1. Cargar las variables secretas del archivo .env
 load_dotenv()
 
-def get_openai_client():
-    """Crea el cliente solo cuando se necesita generar una receta."""
-    from openai import AsyncOpenAI
+# 2. Inicializar el cliente de OpenAI
+# Automáticamente buscará la variable OPENAI_API_KEY en tu entorno
+client = AsyncOpenAI()
 
-    api_key = os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI_KEY")
-    if not api_key:
-        raise RuntimeError("Falta OPENAI_API_KEY en el .env")
 
-    return AsyncOpenAI(api_key=api_key)
+async def obtener_info_nutricional(nombre_producto: str):
+    """
+    Toma el nombre de un producto y devuelve su perfil nutricional estándar por 100g en JSON.
+    """
+    instrucciones = f"""
+    Eres un experto en nutrición y bases de datos de alimentos (estilo USDA).
+    Tu tarea es proporcionar los valores nutricionales ESTÁNDAR para el siguiente alimento: "{nombre_producto}".
+    
+    REGLAS CRÍTICAS:
+    1. BASE DE CÁLCULO: Todos los valores deben ser calculados estrictamente en base a 100 gramos (o 100 ml) de la porción comestible del alimento en su estado más común (generalmente crudo, a menos que sea un procesado).
+    2. TIPOS DE DATOS: Usa únicamente valores numéricos (float o int) para los nutrientes. Si el alimento carece de un nutriente, usa 0. NO agregues símbolos como "g" o "kcal" en los valores, solo el número.
+    3. FORMATO DE SALIDA ESTRICTO: Responde ÚNICA Y EXCLUSIVAMENTE con un objeto JSON válido. NO incluyas saludos, ni texto antes o después. NO uses bloques de código markdown (```json).
+    
+    Estructura requerida:
+    {{
+        "energia_kcal": número,
+        "proteinas_g": número,
+        "carbohidratos_g": número,
+        "grasas_totales_g": número,
+        "sodio_mg": número
+    }}
+    """
+
+    try:
+        response = await client.chat.completions.create(
+            model="gpt-4o-mini", # Excelente y barato para extraer datos fijos
+            messages=[
+                {"role": "system", "content": instrucciones}
+            ],
+            temperature=0.1 # Muy baja para que sea preciso y no "invente" variaciones
+        )
+        
+        contenido = response.choices[0].message.content
+        
+        # Convertimos el texto (String) a un diccionario real de Python (JSON)
+        datos_nutricionales = json.loads(contenido)
+        return datos_nutricionales
+        
+    except json.JSONDecodeError:
+        return {"error": "La IA no devolvió un JSON válido", "texto_crudo": contenido}
+    except Exception as e:
+        return {"error": str(e)}
 
 async def generar_receta_con_ia(ingredientes: list[str], objetivo_nutricional: str = "") -> str:
     """
@@ -75,7 +114,6 @@ async def generar_receta_con_ia(ingredientes: list[str], objetivo_nutricional: s
 
         # 4. Hacer la llamada a la API
         # Usamos gpt-4o-mini porque es rápido, muy inteligente y económico para la fase de pruebas
-        client = get_openai_client()
         respuesta = await client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
