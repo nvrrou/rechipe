@@ -62,14 +62,57 @@ class DespensaAdd(pydantic.BaseModel):
     user_id: str
     nombre_producto: str
     categoria: str
+    codigo_barra: str | None = None
+    marca: str | None = None
+    imagen_url: str | None = None
+    energia_kcal: float | None = None
+    proteinas_g: float | None = None
+    carbohidratos_g: float | None = None
+    grasas_g: float | None = None
+    fibra_g: float | None = None
+    sodio_mg: float | None = None
+    azucar_g: float | None = None
     cantidad: float | None = None
     unidad: str | None = None
+    precio_aprox: float | None = None
+    fecha_vencimiento: str | None = None
+
+
+class DespensaUpdate(pydantic.BaseModel):
+    nombre_producto: str | None = None
+    categoria: str | None = None
+    codigo_barra: str | None = None
+    marca: str | None = None
+    imagen_url: str | None = None
+    energia_kcal: float | None = None
+    proteinas_g: float | None = None
+    carbohidratos_g: float | None = None
+    grasas_g: float | None = None
+    fibra_g: float | None = None
+    sodio_mg: float | None = None
+    azucar_g: float | None = None
+    cantidad: float | None = None
+    unidad: str | None = None
+    precio_aprox: float | None = None
+    fecha_vencimiento: str | None = None
 
 class DespensaItem(pydantic.BaseModel):
     id: str
     producto_id: str
     nombre_producto: str
     categoria: str
+    codigo_barra: str | None = None
+    marca: str | None = None
+    imagen_url: str | None = None
+    energia_kcal: float | None = None
+    proteinas_g: float | None = None
+    carbohidratos_g: float | None = None
+    grasas_g: float | None = None
+    fibra_g: float | None = None
+    sodio_mg: float | None = None
+    azucar_g: float | None = None
     cantidad: float | None = None
     unidad: str | None = None
+    precio_aprox: float | None = None
+    fecha_vencimiento: str | None = None
     created_at: str | None = None

@@ -133,7 +133,7 @@ export default function LoginScreen() {
             setSignupMsg('¡Cuenta creada! a continuacion complete el resto de su perfil');
             setSignupError(false);
             setTimeout(() => {
-                router.replace('/completar_perfil');
+                router.replace('/(auth)/completar_perfil');
             }, 1500);
         } else {
             setSignupMsg(result.error || 'Error al crear la cuenta');

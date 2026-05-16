@@ -7,8 +7,39 @@ export interface DespensaAddData {
   user_id: string;
   nombre_producto: string;
   categoria: string;
+  codigo_barra?: string;
+  marca?: string;
+  imagen_url?: string;
+  energia_kcal?: number;
+  proteinas_g?: number;
+  carbohidratos_g?: number;
+  grasas_g?: number;
+  fibra_g?: number;
+  sodio_mg?: number;
+  azucar_g?: number;
   cantidad?: number;
   unidad?: string;
+  precio_aprox?: number;
+  fecha_vencimiento?: string;
+}
+
+export interface DespensaUpdateData {
+  nombre_producto?: string;
+  categoria?: string;
+  codigo_barra?: string;
+  marca?: string;
+  imagen_url?: string;
+  energia_kcal?: number;
+  proteinas_g?: number;
+  carbohidratos_g?: number;
+  grasas_g?: number;
+  fibra_g?: number;
+  sodio_mg?: number;
+  azucar_g?: number;
+  cantidad?: number;
+  unidad?: string;
+  precio_aprox?: number;
+  fecha_vencimiento?: string;
 }
 
 export interface DespensaItemData {
@@ -16,8 +47,20 @@ export interface DespensaItemData {
   producto_id: string;
   nombre_producto: string;
   categoria: string;
+  codigo_barra?: string;
+  marca?: string;
+  imagen_url?: string;
+  energia_kcal?: number;
+  proteinas_g?: number;
+  carbohidratos_g?: number;
+  grasas_g?: number;
+  fibra_g?: number;
+  sodio_mg?: number;
+  azucar_g?: number;
   cantidad?: number;
   unidad?: string;
+  precio_aprox?: number;
+  fecha_vencimiento?: string;
   created_at?: string;
 }
 
@@ -39,6 +82,24 @@ export async function agregarIngrediente(data: DespensaAddData): Promise<Despens
   try {
     const res = await fetch(`${API_URL}/despensa/agregar`, {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    const responseData = await res.json();
+    return responseData;
+  } catch (e: any) {
+    return { error: `Error de conexión: ${e.message}` } as any;
+  }
+}
+
+/** Actualiza un ingrediente y sus características */
+export async function actualizarIngrediente(
+  itemId: string,
+  data: DespensaUpdateData
+): Promise<DespensaItemData & { error?: string }> {
+  try {
+    const res = await fetch(`${API_URL}/despensa/actualizar/${itemId}`, {
+      method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     });

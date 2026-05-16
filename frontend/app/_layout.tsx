@@ -14,7 +14,7 @@ export {
 } from 'expo-router';
 
 export const unstable_settings = {
-  initialRouteName: '(tabs)',
+  initialRouteName: '(auth)',
 };
 
 SplashScreen.preventAutoHideAsync();
@@ -73,16 +73,33 @@ function ProtectedLayout({ children }: { children: React.ReactNode }) {
 
     const inAuthGroup = segments[0] === '(auth)';
     const isLogin = segments[1] === 'login';
+    const isCompletingProfile = segments[1] === 'completar_perfil';
 
-    // Si tiene un registro pendiente (user sin token), dejarlo en la zona de auth (completar_perfil)
     const hasPendingRegistration = !!user && !isAuthenticated && !!pendingCredentials;
+    const hasIncompleteProfile =
+      !!user &&
+      isAuthenticated &&
+      (!user.edad || !user.peso || !user.altura || !user.genero || user.objetivos.length === 0);
 
-    if (!isAuthenticated && !inAuthGroup && !hasPendingRegistration) {
+    if (hasPendingRegistration && !isCompletingProfile) {
+      router.replace('/(auth)/completar_perfil');
+      return;
+    }
+
+    if (hasIncompleteProfile && !isCompletingProfile) {
+      router.replace('/(auth)/completar_perfil');
+      return;
+    }
+
+    if (!isAuthenticated && !hasPendingRegistration && !isLogin) {
       router.replace('/(auth)/login');
-    } else if (isAuthenticated && inAuthGroup && isLogin) {
+      return;
+    }
+
+    if (isAuthenticated && inAuthGroup && !hasIncompleteProfile) {
       router.replace('/(tabs)');
     }
-  }, [isAuthenticated, isLoading, segments]);
+  }, [isAuthenticated, isLoading, pendingCredentials, router, segments, user]);
 
   return <>{children}</>;
 }

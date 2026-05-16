@@ -5,14 +5,18 @@ import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Tex
 import { Text, View } from '@/components/Themed';
 import { useAuth } from '@/contexts/AuthContext';
 import {
+  DespensaAddData,
   DespensaItemData,
+  DespensaUpdateData,
+  actualizarIngrediente,
   agregarIngrediente,
   buscarIngredientes,
   eliminarIngrediente,
   fetchDespensa,
 } from '@/services/despensa';
 
-// Tipos de categoría 
+type ActiveView = 'categories' | 'category' | 'add' | 'search' | 'edit';
+type FormMode = 'add' | 'edit';
 
 type CategoryDef = {
   id: string;
@@ -21,7 +25,27 @@ type CategoryDef = {
   color: string;
 };
 
-const CATEGORIES: CategoryDef[] = [
+type IngredientFormState = {
+  nombre_producto: string;
+  categoria: string;
+  newCategoria: string;
+  codigo_barra: string;
+  marca: string;
+  imagen_url: string;
+  cantidad: string;
+  unidad: string;
+  precio_aprox: string;
+  fecha_vencimiento: string;
+  energia_kcal: string;
+  proteinas_g: string;
+  carbohidratos_g: string;
+  grasas_g: string;
+  fibra_g: string;
+  sodio_mg: string;
+  azucar_g: string;
+};
+
+const DEFAULT_CATEGORIES: CategoryDef[] = [
   { id: 'carnes', name: 'Carnes', icon: 'food-steak', color: '#BE123C' },
   { id: 'vegetales', name: 'Vegetales', icon: 'carrot', color: '#16A34A' },
   { id: 'frutas', name: 'Frutas', icon: 'fruit-cherries', color: '#DC2626' },
@@ -34,60 +58,266 @@ const CATEGORIES: CategoryDef[] = [
   { id: 'otros', name: 'Otros', icon: 'dots-horizontal', color: '#6B7280' },
 ];
 
-// Genera un placeholder de imagen con las primeras 2 letras
+const UNIT_OPTIONS = ['unidad', 'g', 'kg', 'ml', 'l', 'taza', 'cda'];
+
+const EMPTY_FORM: IngredientFormState = {
+  nombre_producto: '',
+  categoria: DEFAULT_CATEGORIES[0].id,
+  newCategoria: '',
+  codigo_barra: '',
+  marca: '',
+  imagen_url: '',
+  cantidad: '',
+  unidad: '',
+  precio_aprox: '',
+  fecha_vencimiento: '',
+  energia_kcal: '',
+  proteinas_g: '',
+  carbohidratos_g: '',
+  grasas_g: '',
+  fibra_g: '',
+  sodio_mg: '',
+  azucar_g: '',
+};
+
+const NUTRIENT_FIELDS: Array<{
+  key: keyof IngredientFormState;
+  label: string;
+  unit: string;
+  itemKey: keyof DespensaItemData;
+}> = [
+  { key: 'energia_kcal', label: 'Energía', unit: 'kcal', itemKey: 'energia_kcal' },
+  { key: 'proteinas_g', label: 'Proteínas', unit: 'g', itemKey: 'proteinas_g' },
+  { key: 'carbohidratos_g', label: 'Carbohidratos', unit: 'g', itemKey: 'carbohidratos_g' },
+  { key: 'grasas_g', label: 'Grasas', unit: 'g', itemKey: 'grasas_g' },
+  { key: 'fibra_g', label: 'Fibra', unit: 'g', itemKey: 'fibra_g' },
+  { key: 'sodio_mg', label: 'Sodio', unit: 'mg', itemKey: 'sodio_mg' },
+  { key: 'azucar_g', label: 'Azúcar', unit: 'g', itemKey: 'azucar_g' },
+];
+
+function slugifyCategory(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'otros';
+}
+
+function titleize(value: string) {
+  return value
+    .replace(/[-_]+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 function getPlaceholderUri(name: string) {
-  const label = encodeURIComponent(name.trim().slice(0, 2).toUpperCase());
+  const label = encodeURIComponent(name.trim().slice(0, 2).toUpperCase() || 'IN');
   return `https://placehold.co/96x96/2a2a2a/ffffff/png?text=${label}`;
+}
+
+function numberToInput(value?: number | null) {
+  if (value === undefined || value === null) return '';
+  return String(value).replace('.', ',');
+}
+
+function parseInputNumber(value: string) {
+  const normalized = value.trim().replace(',', '.');
+  if (!normalized) return undefined;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function cleanText(value: string) {
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function formFromItem(item: DespensaItemData): IngredientFormState {
+  return {
+    nombre_producto: item.nombre_producto || '',
+    categoria: slugifyCategory(item.categoria || 'otros'),
+    newCategoria: '',
+    codigo_barra: item.codigo_barra || '',
+    marca: item.marca || '',
+    imagen_url: item.imagen_url || '',
+    cantidad: numberToInput(item.cantidad),
+    unidad: item.unidad || '',
+    precio_aprox: numberToInput(item.precio_aprox),
+    fecha_vencimiento: item.fecha_vencimiento || '',
+    energia_kcal: numberToInput(item.energia_kcal),
+    proteinas_g: numberToInput(item.proteinas_g),
+    carbohidratos_g: numberToInput(item.carbohidratos_g),
+    grasas_g: numberToInput(item.grasas_g),
+    fibra_g: numberToInput(item.fibra_g),
+    sodio_mg: numberToInput(item.sodio_mg),
+    azucar_g: numberToInput(item.azucar_g),
+  };
+}
+
+function categoryDisplay(category: CategoryDef) {
+  return category.name || titleize(category.id);
+}
+
+function Field({
+  label,
+  value,
+  onChangeText,
+  placeholder,
+  keyboardType = 'default',
+  required = false,
+  hasError = false,
+}: {
+  label: string;
+  value: string;
+  onChangeText: (value: string) => void;
+  placeholder?: string;
+  keyboardType?: 'default' | 'numeric' | 'decimal-pad';
+  required?: boolean;
+  hasError?: boolean;
+}) {
+  return (
+    <View style={styles.field}>
+      <View style={styles.fieldLabelRow}>
+        <Text style={styles.fieldLabel}>{label}</Text>
+        {required && <Text style={styles.requiredMark}>*</Text>}
+      </View>
+      <TextInput
+        keyboardType={keyboardType}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor="#6B7280"
+        style={[styles.fieldInput, hasError && styles.fieldInputError]}
+        value={value}
+      />
+    </View>
+  );
+}
+
+function CategoryDropdown({
+  categories,
+  value,
+  newValue,
+  expanded,
+  onToggle,
+  onSelect,
+  onNewValueChange,
+}: {
+  categories: CategoryDef[];
+  value: string;
+  newValue: string;
+  expanded: boolean;
+  onToggle: () => void;
+  onSelect: (value: string) => void;
+  onNewValueChange: (value: string) => void;
+}) {
+  const selected = categories.find((category) => category.id === value);
+  const isCreating = value === '__new__';
+
+  return (
+    <View style={styles.dropdownWrap}>
+      <Text style={styles.fieldLabel}>Categoria</Text>
+      <Pressable accessibilityRole="button" onPress={onToggle} style={styles.dropdownButton}>
+        <View style={styles.dropdownLeft}>
+          <View style={[styles.dropdownDot, { backgroundColor: selected?.color || '#6B7280' }]} />
+          <Text style={styles.dropdownText}>{isCreating ? 'Crear categoria' : selected?.name || 'Seleccionar'}</Text>
+        </View>
+        <MaterialCommunityIcons name={expanded ? 'chevron-up' : 'chevron-down'} size={22} color="#FFFFFF" />
+      </Pressable>
+
+      {expanded && (
+        <View style={styles.dropdownMenu}>
+          {categories.map((category) => (
+            <Pressable
+              accessibilityRole="button"
+              key={category.id}
+              onPress={() => onSelect(category.id)}
+              style={[styles.dropdownOption, value === category.id && styles.dropdownOptionSelected]}>
+              <MaterialCommunityIcons name={category.icon} size={20} color={category.color} />
+              <Text style={styles.dropdownOptionText}>{category.name}</Text>
+            </Pressable>
+          ))}
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => onSelect('__new__')}
+            style={[styles.dropdownOption, isCreating && styles.dropdownOptionSelected]}>
+            <MaterialCommunityIcons name="plus-circle-outline" size={20} color="#FFFFFF" />
+            <Text style={styles.dropdownOptionText}>Crear categoria nueva</Text>
+          </Pressable>
+        </View>
+      )}
+
+      {isCreating && (
+        <TextInput
+          autoCapitalize="words"
+          onChangeText={onNewValueChange}
+          placeholder="Nombre de la categoria"
+          placeholderTextColor="#6B7280"
+          style={styles.fieldInputStandalone}
+          value={newValue}
+        />
+      )}
+    </View>
+  );
 }
 
 export default function FridgeScreen() {
   const { user } = useAuth();
 
-  // Estado principal
   const [items, setItems] = useState<DespensaItemData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [addingLoading, setAddingLoading] = useState(false);
-
-  // Input y navegación
-  const [ingredient, setIngredient] = useState('');
-  const [selectedCategoryId, setSelectedCategoryId] = useState(CATEGORIES[0].id);
-  const [activeView, setActiveView] = useState<'categories' | 'category' | 'add' | 'search'>('categories');
-
-  // Busqueda
+  const [saving, setSaving] = useState(false);
+  const [activeView, setActiveView] = useState<ActiveView>('categories');
+  const [selectedCategoryId, setSelectedCategoryId] = useState(DEFAULT_CATEGORIES[0].id);
+  const [selectedItem, setSelectedItem] = useState<DespensaItemData | null>(null);
+  const [form, setForm] = useState<IngredientFormState>(EMPTY_FORM);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<DespensaItemData[]>([]);
   const [searching, setSearching] = useState(false);
+  const [formError, setFormError] = useState('');
 
-  // La categoria seleccionada actual
-  const selectedCategory = useMemo(
-    () => CATEGORIES.find((c) => c.id === selectedCategoryId) ?? CATEGORIES[0],
-    [selectedCategoryId]
-  );
-
-  // Ingredientes agrupados por categoria
-  const itemsByCategory = useMemo(() => {
-    const grouped: Record<string, DespensaItemData[]> = {};
-    for (const cat of CATEGORIES) {
-      grouped[cat.id] = [];
-    }
+  const categories = useMemo(() => {
+    const base = new Map(DEFAULT_CATEGORIES.map((category) => [category.id, category]));
     for (const item of items) {
-      const catId = item.categoria?.toLowerCase() || 'otros';
-      if (grouped[catId]) {
-        grouped[catId].push(item);
-      } else {
-        grouped['otros'].push(item);
+      const id = slugifyCategory(item.categoria || 'otros');
+      if (!base.has(id)) {
+        base.set(id, {
+          id,
+          name: titleize(item.categoria || id),
+          icon: 'tag-outline',
+          color: '#94A3B8',
+        });
       }
     }
-    return grouped;
+    return Array.from(base.values());
   }, [items]);
 
-  // Cargar datos al montar
+  const selectedCategory = useMemo(
+    () => categories.find((category) => category.id === selectedCategoryId) ?? categories[0],
+    [categories, selectedCategoryId]
+  );
+
+  const itemsByCategory = useMemo(() => {
+    const grouped: Record<string, DespensaItemData[]> = {};
+    for (const category of categories) grouped[category.id] = [];
+    for (const item of items) {
+      const categoryId = slugifyCategory(item.categoria || 'otros');
+      if (!grouped[categoryId]) grouped[categoryId] = [];
+      grouped[categoryId].push(item);
+    }
+    return grouped;
+  }, [categories, items]);
+
   const loadDespensa = useCallback(async () => {
     if (!user?.id) return;
     setLoading(true);
     const result = await fetchDespensa(user.id);
     if (result.items) {
       setItems(result.items);
+    } else if (result.error) {
+      Alert.alert('Error', result.error);
     }
     setLoading(false);
   }, [user?.id]);
@@ -96,52 +326,115 @@ export default function FridgeScreen() {
     loadDespensa();
   }, [loadDespensa]);
 
-  // ---------- Agregar ingrediente ----------
-  async function handleAddIngredient(categoryId = selectedCategory.id) {
-    const nombre = ingredient.trim();
-    if (!nombre || !user?.id) return;
+  function updateForm<K extends keyof IngredientFormState>(key: K, value: IngredientFormState[K]) {
+    setFormError('');
+    setForm((prev) => ({ ...prev, [key]: value }));
+  }
 
-    setAddingLoading(true);
-    const result = await agregarIngrediente({
-      user_id: user.id,
-      nombre_producto: nombre,
-      categoria: categoryId,
-    });
+  function openAddView(categoryId = selectedCategoryId) {
+    setForm({ ...EMPTY_FORM, categoria: categoryId });
+    setFormError('');
+    setSelectedItem(null);
+    setDropdownOpen(false);
+    setActiveView('add');
+  }
+
+  function openEditView(item: DespensaItemData) {
+    setSelectedItem(item);
+    setForm(formFromItem(item));
+    setFormError('');
+    setDropdownOpen(false);
+    setActiveView('edit');
+  }
+
+  function closeToCategories() {
+    setActiveView('categories');
+    setSearchQuery('');
+    setSearchResults([]);
+    setSelectedItem(null);
+    setFormError('');
+    setDropdownOpen(false);
+  }
+
+  function getFormCategoryName() {
+    if (form.categoria === '__new__') return form.newCategoria.trim() || 'Otros';
+    return categories.find((category) => category.id === form.categoria)?.name || form.categoria;
+  }
+
+  function buildPayload(): DespensaUpdateData {
+    return {
+      nombre_producto: form.nombre_producto.trim(),
+      categoria: getFormCategoryName(),
+      codigo_barra: cleanText(form.codigo_barra),
+      marca: cleanText(form.marca),
+      imagen_url: cleanText(form.imagen_url),
+      cantidad: parseInputNumber(form.cantidad),
+      unidad: cleanText(form.unidad),
+      precio_aprox: parseInputNumber(form.precio_aprox),
+      fecha_vencimiento: cleanText(form.fecha_vencimiento),
+      energia_kcal: parseInputNumber(form.energia_kcal),
+      proteinas_g: parseInputNumber(form.proteinas_g),
+      carbohidratos_g: parseInputNumber(form.carbohidratos_g),
+      grasas_g: parseInputNumber(form.grasas_g),
+      fibra_g: parseInputNumber(form.fibra_g),
+      sodio_mg: parseInputNumber(form.sodio_mg),
+      azucar_g: parseInputNumber(form.azucar_g),
+    };
+  }
+
+  async function saveIngredient(mode: FormMode) {
+    if (!user?.id) return;
+    if (!form.nombre_producto.trim()) {
+      setFormError('Agrega el nombre del ingrediente.');
+      return;
+    }
+    if (mode === 'add' && parseInputNumber(form.cantidad) === undefined) {
+      setFormError('Agrega la cantidad del ingrediente.');
+      return;
+    }
+
+    setSaving(true);
+    const payload = buildPayload();
+    const result =
+      mode === 'add'
+        ? await agregarIngrediente({ ...(payload as DespensaAddData), user_id: user.id })
+        : selectedItem
+          ? await actualizarIngrediente(selectedItem.id, payload)
+          : ({ error: 'No hay ingrediente seleccionado' } as DespensaItemData & { error?: string });
 
     if (result.error) {
       Alert.alert('Error', result.error);
-    } else {
-      // agregamos al estado local para ver el cambio inmediatamente
+    } else if (mode === 'add') {
       setItems((prev) => [result, ...prev]);
-      setIngredient('');
+      setSelectedCategoryId(slugifyCategory(result.categoria));
+      setActiveView('category');
+    } else {
+      setItems((prev) => prev.map((item) => (item.id === result.id ? result : item)));
+      setSelectedCategoryId(slugifyCategory(result.categoria));
+      setActiveView('category');
     }
-    setAddingLoading(false);
+    setSaving(false);
   }
 
-  // ---------- Eliminar ingrediente ----------
   async function handleDeleteIngredient(itemId: string) {
-    Alert.alert(
-      'Eliminar ingrediente',
-      '¿Estás seguro de que quieres eliminar este ingrediente de tu despensa?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Eliminar',
-          style: 'destructive',
-          onPress: async () => {
-            const result = await eliminarIngrediente(itemId);
-            if (result.error) {
-              Alert.alert('Error', result.error);
-            } else {
-              setItems((prev) => prev.filter((i) => i.id !== itemId));
-            }
-          },
+    Alert.alert('Eliminar ingrediente', '¿Quieres eliminar este ingrediente de tu despensa?', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Eliminar',
+        style: 'destructive',
+        onPress: async () => {
+          const result = await eliminarIngrediente(itemId);
+          if (result.error) {
+            Alert.alert('Error', result.error);
+          } else {
+            setItems((prev) => prev.filter((item) => item.id !== itemId));
+            setActiveView('category');
+          }
         },
-      ]
-    );
+      },
+    ]);
   }
 
-  // Busqueda
   async function handleSearch(query: string) {
     setSearchQuery(query);
     if (!query.trim() || !user?.id) {
@@ -157,13 +450,163 @@ export default function FridgeScreen() {
     setSearching(false);
   }
 
-  // Abrir categoria
-  function openCategory(categoryId: string) {
-    setSelectedCategoryId(categoryId);
-    setActiveView('category');
+  function renderIngredientCard(item: DespensaItemData, compact = false) {
+    const imageUri = item.imagen_url || getPlaceholderUri(item.nombre_producto);
+    return (
+      <Pressable accessibilityRole="button" key={item.id} onPress={() => openEditView(item)} style={styles.ingredientRow}>
+        <Image source={{ uri: imageUri }} style={styles.ingredientImage} />
+        <View style={styles.ingredientInfo}>
+          <Text style={styles.ingredientTitle} numberOfLines={1}>
+            {item.nombre_producto}
+          </Text>
+          <Text style={styles.ingredientMeta} numberOfLines={1}>
+            {[item.marca, item.cantidad ? `${item.cantidad} ${item.unidad || ''}`.trim() : undefined]
+              .filter(Boolean)
+              .join(' · ') || item.categoria}
+          </Text>
+          {!compact && (
+            <View style={styles.nutritionPreview}>
+              <Text style={styles.nutritionPill}>{item.energia_kcal ?? 0} kcal</Text>
+              <Text style={styles.nutritionPill}>P {item.proteinas_g ?? 0}g</Text>
+              <Text style={styles.nutritionPill}>C {item.carbohidratos_g ?? 0}g</Text>
+              <Text style={styles.nutritionPill}>G {item.grasas_g ?? 0}g</Text>
+            </View>
+          )}
+        </View>
+        <MaterialCommunityIcons name="pencil-outline" size={22} color="#9CA3AF" />
+      </Pressable>
+    );
   }
 
-  // Render
+  function renderIngredientForm(mode: FormMode) {
+    const nameHasError = !!formError && !form.nombre_producto.trim();
+    const quantityHasError = mode === 'add' && !!formError && parseInputNumber(form.cantidad) === undefined;
+
+    return (
+      <View style={styles.formPanel}>
+        {formError !== '' && (
+          <View style={styles.formErrorPanel}>
+            <MaterialCommunityIcons name="alert-circle-outline" size={20} color="#f87171" />
+            <Text style={styles.formErrorText}>{formError}</Text>
+          </View>
+        )}
+
+        <View style={styles.formSection}>
+          <Text style={styles.formSectionTitle}>Identificacion</Text>
+          <Field
+            hasError={nameHasError}
+            label="Nombre"
+            onChangeText={(value) => updateForm('nombre_producto', value)}
+            placeholder="Ej: pollo, arroz, tomate"
+            required
+            value={form.nombre_producto}
+          />
+          <CategoryDropdown
+            categories={categories}
+            expanded={dropdownOpen}
+            newValue={form.newCategoria}
+            onNewValueChange={(value) => updateForm('newCategoria', value)}
+            onSelect={(value) => {
+              updateForm('categoria', value);
+              setDropdownOpen(false);
+            }}
+            onToggle={() => setDropdownOpen((prev) => !prev)}
+            value={form.categoria}
+          />
+          <View style={styles.twoColumn}>
+            <Field label="Marca" onChangeText={(value) => updateForm('marca', value)} placeholder="Opcional" value={form.marca} />
+            <Field
+              label="Codigo barra"
+              onChangeText={(value) => updateForm('codigo_barra', value)}
+              placeholder="Opcional"
+              value={form.codigo_barra}
+            />
+          </View>
+          <Field
+            label="Imagen URL"
+            onChangeText={(value) => updateForm('imagen_url', value)}
+            placeholder="https://..."
+            value={form.imagen_url}
+          />
+        </View>
+
+        <View style={styles.formSection}>
+          <Text style={styles.formSectionTitle}>Despensa</Text>
+          <View style={styles.twoColumn}>
+            <Field
+              hasError={quantityHasError}
+              keyboardType="decimal-pad"
+              label="Cantidad"
+              onChangeText={(value) => updateForm('cantidad', value)}
+              placeholder="1,5"
+              required={mode === 'add'}
+              value={form.cantidad}
+            />
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>Unidad</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.unitRow}>
+                {UNIT_OPTIONS.map((unit) => (
+                  <Pressable
+                    accessibilityRole="button"
+                    key={unit}
+                    onPress={() => updateForm('unidad', unit)}
+                    style={[styles.unitChip, form.unidad === unit && styles.unitChipSelected]}>
+                    <Text style={[styles.unitChipText, form.unidad === unit && styles.unitChipTextSelected]}>{unit}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+          </View>
+          <View style={styles.twoColumn}>
+            <Field
+              keyboardType="decimal-pad"
+              label="Precio aprox"
+              onChangeText={(value) => updateForm('precio_aprox', value)}
+              placeholder="CLP"
+              value={form.precio_aprox}
+            />
+            <Field
+              label="Vencimiento"
+              onChangeText={(value) => updateForm('fecha_vencimiento', value)}
+              placeholder="YYYY-MM-DD"
+              value={form.fecha_vencimiento}
+            />
+          </View>
+        </View>
+
+        <View style={styles.formSection}>
+          <Text style={styles.formSectionTitle}>Nutricion</Text>
+          <View style={styles.nutritionGrid}>
+            {NUTRIENT_FIELDS.map((field) => (
+              <Field
+                keyboardType="decimal-pad"
+                key={field.key}
+                label={`${field.label} (${field.unit})`}
+                onChangeText={(value) => updateForm(field.key, value)}
+                placeholder="0"
+                value={form[field.key]}
+              />
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.formActions}>
+          {mode === 'edit' && selectedItem && (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => handleDeleteIngredient(selectedItem.id)}
+              style={styles.deleteAction}>
+              <MaterialCommunityIcons name="trash-can-outline" size={20} color="#f87171" />
+              <Text style={styles.deleteActionText}>Eliminar</Text>
+            </Pressable>
+          )}
+          <Pressable accessibilityRole="button" disabled={saving} onPress={() => saveIngredient(mode)} style={styles.primaryAction}>
+            {saving ? <ActivityIndicator size="small" color="#0B0B0B" /> : <Text style={styles.primaryActionText}>Guardar</Text>}
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
 
   if (loading) {
     return (
@@ -178,50 +621,40 @@ export default function FridgeScreen() {
 
   return (
     <View style={styles.container}>
-      <ScrollView
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <View style={styles.hero}>
           <View style={styles.titleRow}>
-            {/* Botón de volver si no estamos en la vista principal */}
             {activeView !== 'categories' && (
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => {
-                  setActiveView('categories');
-                  setSearchQuery('');
-                  setSearchResults([]);
-                }}
-                style={styles.inlineBackButton}>
+              <Pressable accessibilityRole="button" onPress={closeToCategories} style={styles.inlineBackButton}>
                 <MaterialCommunityIcons name="chevron-left" size={24} color="#FFFFFF" />
               </Pressable>
             )}
             <Text style={styles.title}>
               {activeView === 'category'
-                ? selectedCategory.name
+                ? categoryDisplay(selectedCategory)
                 : activeView === 'add'
                   ? 'Agregar'
-                  : activeView === 'search'
-                    ? 'Buscar'
-                    : 'Tu refri'}
+                  : activeView === 'edit'
+                    ? 'Editar'
+                    : activeView === 'search'
+                      ? 'Buscar'
+                      : 'Tu refri'}
             </Text>
           </View>
           <Text style={styles.subtitle}>
-            {activeView === 'category'
-              ? 'Ingredientes categorizados en esta seccion.'
-              : activeView === 'add'
-                ? 'Elige una categoria y guarda el ingrediente donde corresponde.'
+            {activeView === 'add'
+              ? 'Registra un ingrediente con datos de despensa y nutricion.'
+              : activeView === 'edit'
+                ? 'Actualiza cantidad, categoria y características del ingrediente.'
                 : activeView === 'search'
-                  ? 'Busca ingredientes en tu despensa por nombre.'
-                  : 'Elige una categoria para revisar y agregar ingredientes.'}
+                  ? 'Busca ingredientes y abre su pantalla de edición.'
+                  : 'Organiza ingredientes por categoria y características.'}
           </Text>
         </View>
 
-        {/* Barra de accion */}
-        {activeView === 'categories' ? (
+        {activeView === 'categories' && (
           <View style={styles.addBar}>
-            <Pressable accessibilityRole="button" onPress={() => setActiveView('add')} style={styles.addButton}>
+            <Pressable accessibilityRole="button" onPress={() => openAddView()} style={styles.addButton}>
               <MaterialCommunityIcons name="plus" size={22} color="#FFFFFF" />
             </Pressable>
             <Text style={styles.addBarText}>Agregar ingrediente</Text>
@@ -229,53 +662,26 @@ export default function FridgeScreen() {
               <MaterialCommunityIcons name="magnify" size={22} color="#FFFFFF" />
             </Pressable>
           </View>
-        ) : activeView === 'search' ? (
+        )}
+
+        {activeView === 'search' && (
           <View style={styles.addBar}>
             <View style={styles.searchIconStatic}>
               <MaterialCommunityIcons name="magnify" size={22} color="#9CA3AF" />
             </View>
             <TextInput
+              autoFocus
               onChangeText={handleSearch}
               placeholder="Buscar en tu despensa..."
               placeholderTextColor="#9CA3AF"
               returnKeyType="search"
               style={styles.input}
               value={searchQuery}
-              autoFocus
             />
             {searching && <ActivityIndicator size="small" color="#FFFFFF" />}
           </View>
-        ) : (
-          <View style={styles.addBar}>
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => handleAddIngredient()}
-              style={styles.addButton}
-              disabled={addingLoading}>
-              {addingLoading ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <MaterialCommunityIcons name="plus" size={22} color="#FFFFFF" />
-              )}
-            </Pressable>
-            <TextInput
-              onChangeText={setIngredient}
-              onSubmitEditing={() => handleAddIngredient()}
-              placeholder={`Agregar a ${selectedCategory.name.toLowerCase()}`}
-              placeholderTextColor="#9CA3AF"
-              returnKeyType="done"
-              style={styles.input}
-              value={ingredient}
-            />
-            <Pressable accessibilityRole="button" onPress={() => setActiveView('search')} style={styles.searchButton}>
-              <MaterialCommunityIcons name="magnify" size={22} color="#FFFFFF" />
-            </Pressable>
-          </View>
         )}
 
-        {/* Contenido según vista */}
-
-        {/* VISTA: Categorias */}
         {activeView === 'categories' && (
           <>
             <View style={styles.sectionHeader}>
@@ -284,13 +690,16 @@ export default function FridgeScreen() {
             </View>
 
             <View style={styles.categoryGrid}>
-              {CATEGORIES.map((category) => {
+              {categories.map((category) => {
                 const count = itemsByCategory[category.id]?.length || 0;
                 return (
                   <Pressable
                     accessibilityRole="button"
                     key={category.id}
-                    onPress={() => openCategory(category.id)}
+                    onPress={() => {
+                      setSelectedCategoryId(category.id);
+                      setActiveView('category');
+                    }}
                     style={styles.categoryCard}>
                     <View style={[styles.categoryIcon, { backgroundColor: category.color + '33' }]}>
                       <MaterialCommunityIcons name={category.icon} size={24} color={category.color} />
@@ -309,37 +718,6 @@ export default function FridgeScreen() {
           </>
         )}
 
-        {/* VISTA: Agregar ingrediente */}
-        {activeView === 'add' && (
-          <>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Agregar en</Text>
-              <Text style={styles.sectionMeta}>{selectedCategory.name}</Text>
-            </View>
-
-            <View style={styles.categoryGrid}>
-              {CATEGORIES.map((category) => {
-                const isSelected = category.id === selectedCategory.id;
-                return (
-                  <Pressable
-                    accessibilityRole="button"
-                    key={category.id}
-                    onPress={() => setSelectedCategoryId(category.id)}
-                    style={[styles.categoryCard, isSelected && styles.categoryCardSelected]}>
-                    <View style={[styles.categoryIcon, isSelected && styles.categoryIconSelected]}>
-                      <MaterialCommunityIcons name={category.icon} size={24} color="#FFFFFF" />
-                    </View>
-                    <View style={styles.categoryCopy}>
-                      <Text style={styles.categoryName}>{category.name}</Text>
-                    </View>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </>
-        )}
-
-        {/* VISTA: Detalle de categoría */}
         {activeView === 'category' && (
           <View style={styles.detailPanel}>
             <View style={styles.detailHeader}>
@@ -347,53 +725,33 @@ export default function FridgeScreen() {
                 <MaterialCommunityIcons name={selectedCategory.icon} size={26} color={selectedCategory.color} />
               </View>
               <View style={styles.detailCopy}>
-                <Text style={styles.detailTitle}>{selectedCategory.name}</Text>
+                <Text style={styles.detailTitle}>{categoryDisplay(selectedCategory)}</Text>
                 <Text style={styles.detailSubtitle}>
                   {itemsByCategory[selectedCategory.id]?.length || 0} ingredientes en esta categoria.
                 </Text>
               </View>
+              <Pressable accessibilityRole="button" onPress={() => openAddView(selectedCategory.id)} style={styles.smallIconButton}>
+                <MaterialCommunityIcons name="plus" size={22} color="#FFFFFF" />
+              </Pressable>
             </View>
 
-            {/* Lista de ingredientes */}
-            <View style={styles.ingredientsList}>
-              {(itemsByCategory[selectedCategory.id] || []).length === 0 ? (
-                <View style={styles.emptyState}>
-                  <MaterialCommunityIcons name="food-off" size={40} color="#555" />
-                  <Text style={styles.emptyText}>No hay ingredientes en esta categoría</Text>
-                  <Pressable
-                    style={styles.emptyButton}
-                    onPress={() => {
-                      setActiveView('add');
-                      setSelectedCategoryId(selectedCategory.id);
-                    }}>
-                    <Text style={styles.emptyButtonText}>Agregar uno</Text>
-                  </Pressable>
-                </View>
-              ) : (
-                (itemsByCategory[selectedCategory.id] || []).map((item) => (
-                  <Pressable
-                    key={item.id}
-                    style={styles.ingredientCard}
-                    onLongPress={() => handleDeleteIngredient(item.id)}>
-                    <Image source={{ uri: getPlaceholderUri(item.nombre_producto) }} style={styles.ingredientImage} />
-                    <View style={styles.ingredientLabel}>
-                      <Text style={styles.ingredientText} numberOfLines={2}>
-                        {item.nombre_producto}
-                      </Text>
-                    </View>
-                    <Pressable
-                      style={styles.deleteButton}
-                      onPress={() => handleDeleteIngredient(item.id)}>
-                      <MaterialCommunityIcons name="close-circle" size={18} color="#f87171" />
-                    </Pressable>
-                  </Pressable>
-                ))
-              )}
-            </View>
+            {(itemsByCategory[selectedCategory.id] || []).length === 0 ? (
+              <View style={styles.emptyState}>
+                <MaterialCommunityIcons name="food-off" size={40} color="#555" />
+                <Text style={styles.emptyText}>No hay ingredientes en esta categoría</Text>
+                <Pressable style={styles.emptyButton} onPress={() => openAddView(selectedCategory.id)}>
+                  <Text style={styles.emptyButtonText}>Agregar uno</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <View style={styles.ingredientsList}>{(itemsByCategory[selectedCategory.id] || []).map((item) => renderIngredientCard(item))}</View>
+            )}
           </View>
         )}
 
-        {/* VISTA: Busqueda */}
+        {activeView === 'add' && renderIngredientForm('add')}
+        {activeView === 'edit' && renderIngredientForm('edit')}
+
         {activeView === 'search' && (
           <View style={styles.detailPanel}>
             {searchQuery.trim() === '' ? (
@@ -411,27 +769,7 @@ export default function FridgeScreen() {
                 <Text style={styles.emptyText}>No se encontraron ingredientes con "{searchQuery}"</Text>
               </View>
             ) : (
-              <>
-                <Text style={styles.searchResultsTitle}>
-                  {searchResults.length} resultado{searchResults.length !== 1 ? 's' : ''}
-                </Text>
-                <View style={styles.ingredientsList}>
-                  {searchResults.map((item) => (
-                    <Pressable
-                      key={item.id}
-                      style={styles.ingredientCard}
-                      onLongPress={() => handleDeleteIngredient(item.id)}>
-                      <Image source={{ uri: getPlaceholderUri(item.nombre_producto) }} style={styles.ingredientImage} />
-                      <View style={styles.ingredientLabel}>
-                        <Text style={styles.ingredientText} numberOfLines={2}>
-                          {item.nombre_producto}
-                        </Text>
-                        <Text style={styles.ingredientCategory}>{item.categoria}</Text>
-                      </View>
-                    </Pressable>
-                  ))}
-                </View>
-              </>
+              <View style={styles.ingredientsList}>{searchResults.map((item) => renderIngredientCard(item, true))}</View>
             )}
           </View>
         )}
@@ -457,6 +795,12 @@ const styles = StyleSheet.create({
     shadowRadius: 22,
     elevation: 2,
   },
+  addBarText: {
+    flex: 1,
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '800',
+  },
   addButton: {
     width: 38,
     height: 38,
@@ -464,12 +808,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 14,
     backgroundColor: '#2A2A2A',
-  },
-  addBarText: {
-    flex: 1,
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '800',
   },
   categoryCard: {
     width: '48%',
@@ -486,10 +824,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.24,
     shadowRadius: 18,
     elevation: 1,
-  },
-  categoryCardSelected: {
-    borderColor: '#FFFFFF',
-    backgroundColor: '#232323',
   },
   categoryCopy: {
     gap: 3,
@@ -515,9 +849,6 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     backgroundColor: '#2A2A2A',
   },
-  categoryIconSelected: {
-    backgroundColor: '#3A3A3A',
-  },
   categoryInfoRow: {
     width: '100%',
     flexDirection: 'row',
@@ -541,11 +872,22 @@ const styles = StyleSheet.create({
     paddingTop: 54,
     paddingBottom: 130,
   },
-  deleteButton: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    padding: 2,
+  deleteAction: {
+    minHeight: 52,
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#7F1D1D',
+    backgroundColor: '#241313',
+  },
+  deleteActionText: {
+    color: '#f87171',
+    fontSize: 15,
+    fontWeight: '900',
   },
   detailCopy: {
     flex: 1,
@@ -589,17 +931,61 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '900',
   },
-  emptyState: {
+  dropdownButton: {
+    minHeight: 54,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 32,
-    gap: 12,
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    backgroundColor: '#101010',
+  },
+  dropdownDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  dropdownLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
     backgroundColor: 'transparent',
   },
-  emptyText: {
-    color: '#888',
+  dropdownMenu: {
+    gap: 8,
+    padding: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    backgroundColor: '#101010',
+  },
+  dropdownOption: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    backgroundColor: 'transparent',
+  },
+  dropdownOptionSelected: {
+    backgroundColor: '#2A2A2A',
+  },
+  dropdownOptionText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  dropdownText: {
+    color: '#FFFFFF',
     fontSize: 15,
-    textAlign: 'center',
+    fontWeight: '900',
+  },
+  dropdownWrap: {
+    gap: 8,
+    backgroundColor: 'transparent',
   },
   emptyButton: {
     paddingHorizontal: 20,
@@ -612,6 +998,105 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '700',
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 32,
+    gap: 12,
+    backgroundColor: 'transparent',
+  },
+  emptyText: {
+    color: '#888',
+    fontSize: 15,
+    textAlign: 'center',
+  },
+  field: {
+    flex: 1,
+    gap: 8,
+    backgroundColor: 'transparent',
+  },
+  fieldInput: {
+    minHeight: 54,
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    backgroundColor: '#101010',
+  },
+  fieldInputError: {
+    borderColor: '#f87171',
+    backgroundColor: '#241313',
+  },
+  fieldInputStandalone: {
+    minHeight: 54,
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    backgroundColor: '#101010',
+  },
+  fieldLabel: {
+    color: '#B8B8B8',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  fieldLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'transparent',
+  },
+  formErrorPanel: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#7F1D1D',
+    backgroundColor: '#241313',
+  },
+  formErrorText: {
+    flex: 1,
+    color: '#f87171',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  formActions: {
+    flexDirection: 'row',
+    gap: 10,
+    backgroundColor: 'transparent',
+  },
+  formPanel: {
+    gap: 14,
+    padding: 16,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    backgroundColor: '#171717',
+  },
+  formSection: {
+    gap: 12,
+    paddingBottom: 2,
+    backgroundColor: 'transparent',
+  },
+  formSectionTitle: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '900',
+  },
+  requiredMark: {
+    color: '#f87171',
+    fontSize: 15,
+    fontWeight: '900',
   },
   hero: {
     gap: 14,
@@ -626,54 +1111,41 @@ const styles = StyleSheet.create({
     shadowRadius: 28,
     elevation: 2,
   },
-  ingredientCard: {
-    width: '30%',
-    minWidth: 84,
-    gap: 8,
-    padding: 8,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#2A2A2A',
-    backgroundColor: '#171717',
-    position: 'relative',
-  },
-  ingredientCategory: {
-    color: '#9CA3AF',
-    fontSize: 11,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
   ingredientImage: {
-    width: '100%',
-    aspectRatio: 1,
-    borderRadius: 12,
+    width: 64,
+    height: 64,
+    borderRadius: 14,
     backgroundColor: '#2A2A2A',
   },
-  ingredientLabel: {
-    minHeight: 34,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'transparent',
-  },
-  ingredientText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
-  ingredientsList: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    backgroundColor: 'transparent',
-  },
-  input: {
+  ingredientInfo: {
     flex: 1,
-    minWidth: 0,
+    gap: 5,
+    backgroundColor: 'transparent',
+  },
+  ingredientMeta: {
+    color: '#B8B8B8',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  ingredientRow: {
+    minHeight: 90,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 10,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    backgroundColor: '#101010',
+  },
+  ingredientTitle: {
     color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: '800',
-    paddingVertical: 12,
+    fontWeight: '900',
+  },
+  ingredientsList: {
+    gap: 10,
+    backgroundColor: 'transparent',
   },
   inlineBackButton: {
     width: 42,
@@ -682,6 +1154,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 14,
     backgroundColor: '#2A2A2A',
+  },
+  input: {
+    flex: 1,
+    minWidth: 0,
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '800',
+    paddingVertical: 12,
   },
   loadingContainer: {
     flex: 1,
@@ -694,6 +1174,39 @@ const styles = StyleSheet.create({
     color: '#B8B8B8',
     fontSize: 16,
     fontWeight: '700',
+  },
+  nutritionGrid: {
+    gap: 10,
+    backgroundColor: 'transparent',
+  },
+  nutritionPill: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '800',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: '#2A2A2A',
+    overflow: 'hidden',
+  },
+  nutritionPreview: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 5,
+    backgroundColor: 'transparent',
+  },
+  primaryAction: {
+    minHeight: 52,
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+  },
+  primaryActionText: {
+    color: '#0B0B0B',
+    fontSize: 15,
+    fontWeight: '900',
   },
   searchButton: {
     width: 38,
@@ -708,11 +1221,6 @@ const styles = StyleSheet.create({
     height: 38,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  searchResultsTitle: {
-    color: '#B8B8B8',
-    fontSize: 14,
-    fontWeight: '700',
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -729,6 +1237,14 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 18,
     fontWeight: '900',
+  },
+  smallIconButton: {
+    width: 42,
+    height: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    backgroundColor: '#2A2A2A',
   },
   subtitle: {
     color: '#B8B8B8',
@@ -748,5 +1264,35 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     backgroundColor: 'transparent',
+  },
+  twoColumn: {
+    flexDirection: 'row',
+    gap: 10,
+    backgroundColor: 'transparent',
+  },
+  unitChip: {
+    minHeight: 38,
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    backgroundColor: '#101010',
+  },
+  unitChipSelected: {
+    borderColor: '#FFFFFF',
+    backgroundColor: '#2A2A2A',
+  },
+  unitChipText: {
+    color: '#B8B8B8',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  unitChipTextSelected: {
+    color: '#FFFFFF',
+  },
+  unitRow: {
+    gap: 8,
+    paddingRight: 4,
   },
 });
