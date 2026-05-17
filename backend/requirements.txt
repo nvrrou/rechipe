@@ -5,3 +5,5 @@ python-dotenv==1.*
 pydantic==2.*
 httpx==0.28.*
 openai==1.*
+sqlalchemy
+psycopg2-binary

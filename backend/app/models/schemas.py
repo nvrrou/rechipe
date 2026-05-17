@@ -60,8 +60,10 @@ class UserLogin(pydantic.BaseModel):
 
 #IA
 class RecipeRequest(BaseModel):
-    ingredientes: List[str]
-    objetivo_nutricional: Optional[str] = ""
+    user_id: str         # El ID del usuario en Supabase (UUID)
+    tipo_comida: str     # Ej: "desayuno", "almuerzo", "cena"
+    ingredientes: List[str] = []         # Lista de nombres de ingredientes obligatorios
+    objetivo_nutricional: Optional[str] = "" # El objetivo que manda el frontend
 
 class EsquemaAlimento(BaseModel):
     nombre: str

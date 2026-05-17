@@ -27,6 +27,7 @@ Thumbs.db
 # entornos virtuales
 .venv
 venv
+venv/
 
 # bases de datos
 .db

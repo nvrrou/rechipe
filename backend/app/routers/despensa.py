@@ -2,6 +2,8 @@ from fastapi import APIRouter
 
 from app.dependencias import get_supabase_client
 from app.models.schemas import DespensaAdd, DespensaUpdate
+# IMPORTAMOS NUESTRA IA
+from app.services.ai_service import obtener_info_nutricional
 
 router = APIRouter(
     prefix="/despensa",
@@ -88,7 +90,7 @@ async def agregar_ingrediente(data: DespensaAdd):
             buscar = await client.get(
                 "/productos_catalogo",
                 params={
-                    "nombre": f"ilike.{data.nombre_producto}",
+                    "nombre": f"ilike.{data.nombre_producto.strip()}",
                     "select": PRODUCT_FIELDS,
                     "limit": "1",
                 },
@@ -98,30 +100,59 @@ async def agregar_ingrediente(data: DespensaAdd):
                 return {"error": f"Error al buscar producto. Detalle: {buscar.text}"}
 
             productos = buscar.json()
-            product_payload = _clean_payload({
-                "nombre": data.nombre_producto,
-                "codigo_barra": data.codigo_barra,
-                "categoria": data.categoria,
-                "marca": data.marca,
-                "imagen_url": data.imagen_url,
-                "energia_kcal": data.energia_kcal,
-                "proteinas_g": data.proteinas_g,
-                "carbohidratos_g": data.carbohidratos_g,
-                "grasas_g": data.grasas_g,
-                "fibra_g": data.fibra_g,
-                "sodio_mg": data.sodio_mg,
-                "azucar_g": data.azucar_g,
-            })
 
             if productos:
+                # SI EL PRODUCTO YA EXISTE, procedemos a actualizar si el usuario envió datos extra
                 producto_id = productos[0]["id"]
-                actualizar_producto = await client.patch(
-                    f"/productos_catalogo?id=eq.{producto_id}",
-                    json=product_payload,
-                )
-                if actualizar_producto.status_code not in (200, 204):
-                    return {"error": f"No se pudo actualizar el producto. Detalle: {actualizar_producto.text}"}
+                product_payload = _clean_payload({
+                    "nombre": data.nombre_producto.strip(),
+                    "codigo_barra": data.codigo_barra,
+                    "categoria": data.categoria,
+                    "marca": data.marca,
+                    "imagen_url": data.imagen_url,
+                    "energia_kcal": data.energia_kcal,
+                    "proteinas_g": data.proteinas_g,
+                    "carbohidratos_g": data.carbohidratos_g,
+                    "grasas_g": data.grasas_g,
+                    "fibra_g": data.fibra_g,
+                    "sodio_mg": data.sodio_mg,
+                    "azucar_g": data.azucar_g,
+                })
+                
+                # Solo hacemos la petición PATCH si hay datos que actualizar
+                if product_payload:
+                    actualizar_producto = await client.patch(
+                        f"/productos_catalogo?id=eq.{producto_id}",
+                        json=product_payload,
+                    )
+                    if actualizar_producto.status_code not in (200, 204):
+                        return {"error": f"No se pudo actualizar el producto. Detalle: {actualizar_producto.text}"}
             else:
+                # SI EL PRODUCTO NO EXISTE: ¡Magia de la IA!
+                print(f"Producto '{data.nombre_producto}' nuevo. Consultando IA para valores nutricionales...")
+                resultado_ia = await obtener_info_nutricional(data.nombre_producto)
+                
+                if "error" in resultado_ia:
+                    return {"error": f"Error de la IA al calcular nutrición: {resultado_ia['error']}"}
+
+                # Combinamos lo que haya mandado el usuario con lo que calculó la IA
+                # Priorizamos lo del usuario por si lo ingresó manualmente
+                product_payload = _clean_payload({
+                    "nombre": data.nombre_producto.strip(),
+                    "codigo_barra": data.codigo_barra,
+                    "categoria": data.categoria,
+                    "marca": data.marca,
+                    "imagen_url": data.imagen_url,
+                    "energia_kcal": data.energia_kcal if data.energia_kcal is not None else resultado_ia.get("energia_kcal"),
+                    "proteinas_g": data.proteinas_g if data.proteinas_g is not None else resultado_ia.get("proteinas_g"),
+                    "carbohidratos_g": data.carbohidratos_g if data.carbohidratos_g is not None else resultado_ia.get("carbohidratos_g"),
+                    # Ojo aquí: Mapeamos 'grasas_totales_g' de la IA a 'grasas_g' de la DB
+                    "grasas_g": data.grasas_g if data.grasas_g is not None else resultado_ia.get("grasas_totales_g"),
+                    "sodio_mg": data.sodio_mg if data.sodio_mg is not None else resultado_ia.get("sodio_mg"),
+                    "fibra_g": data.fibra_g,
+                    "azucar_g": data.azucar_g,
+                })
+
                 crear_resp = await client.post("/productos_catalogo", json=product_payload)
 
                 if crear_resp.status_code != 201:
@@ -129,6 +160,7 @@ async def agregar_ingrediente(data: DespensaAdd):
 
                 producto_id = crear_resp.json()[0]["id"]
 
+            # Ahora procedemos a guardar en la despensa del usuario usando el producto_id (ya sea el nuevo o el existente)
             ya_existe = await client.get(
                 "/despensa",
                 params={
@@ -160,6 +192,7 @@ async def agregar_ingrediente(data: DespensaAdd):
             item_id = insertar.json()[0]["id"]
             item, error = await _get_item(client, item_id)
             return error or item
+            
     except Exception as e:
         return {"error": str(e)}
 
