@@ -1,13 +1,14 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { BlurView } from 'expo-blur';
+import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Modal, Pressable, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text, View } from '@/components/Themed';
+import { useAuth } from '@/contexts/AuthContext';
 
-const MENU_OPTIONS = ['Op 1', 'Op 2', 'Op 3'];
 const NAVBAR_HORIZONTAL_PADDING = 10;
 const ACTIVE_INDICATOR_SIZE = 46;
 
@@ -22,6 +23,8 @@ const TAB_CONFIG: Record<string, { label: string; icon: keyof typeof MaterialCom
 
 export function Navbar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const { user } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
   const [navbarWidth, setNavbarWidth] = useState(0);
@@ -119,6 +122,15 @@ export function Navbar({ state, descriptors, navigation }: BottomTabBarProps) {
     setMenuOpen(false);
   }
 
+  function openConfig() {
+    closeMenu();
+    router.push('/config');
+  }
+
+  const profileInitial = (user?.nombre || user?.email || 'U').trim().charAt(0).toUpperCase();
+  const profileName = user?.nombre || 'Usuario';
+  const profileEmail = user?.email || 'Sin correo';
+
   return (
     <>
       <Modal transparent visible={isVisible} onRequestClose={closeMenu}>
@@ -140,12 +152,31 @@ export function Navbar({ state, descriptors, navigation }: BottomTabBarProps) {
               </Pressable>
             </View>
 
+            <View style={styles.profileCard}>
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>{profileInitial}</Text>
+              </View>
+              <View style={styles.profileCopy}>
+                <Text style={styles.profileName} numberOfLines={1}>
+                  {profileName}
+                </Text>
+                <Text style={styles.profileEmail} numberOfLines={1}>
+                  {profileEmail}
+                </Text>
+              </View>
+            </View>
+
             <View style={styles.optionsList}>
-              {MENU_OPTIONS.map((option) => (
-                <Pressable key={option} style={styles.optionButton}>
-                  <Text style={styles.optionText}>{option}</Text>
-                </Pressable>
-              ))}
+              <Pressable accessibilityRole="button" onPress={openConfig} style={styles.optionButton}>
+                <View style={styles.optionIcon}>
+                  <MaterialCommunityIcons name="cog-outline" size={22} color="#0F172A" />
+                </View>
+                <View style={styles.optionCopy}>
+                  <Text style={styles.optionText}>Configuracion</Text>
+                  <Text style={styles.optionDescription}>Preferencias de la app</Text>
+                </View>
+                <MaterialCommunityIcons name="chevron-right" size={22} color="#64748B" />
+              </Pressable>
             </View>
           </Animated.View>
         </Animated.View>
@@ -252,6 +283,19 @@ const styles = StyleSheet.create({
   backdropPressable: {
     ...StyleSheet.absoluteFillObject,
   },
+  avatar: {
+    width: 54,
+    height: 54,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 18,
+    backgroundColor: '#0F172A',
+  },
+  avatarText: {
+    color: '#FFFFFF',
+    fontSize: 22,
+    fontWeight: '900',
+  },
   closeButton: {
     padding: 6,
     borderRadius: 999,
@@ -289,19 +333,67 @@ const styles = StyleSheet.create({
     borderRadius: 999,
   },
   optionButton: {
-    paddingVertical: 14,
-    paddingHorizontal: 16,
+    minHeight: 64,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     borderRadius: 14,
     backgroundColor: '#EFF6FF',
   },
+  optionCopy: {
+    flex: 1,
+    gap: 2,
+    backgroundColor: 'transparent',
+  },
+  optionDescription: {
+    color: '#64748B',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  optionIcon: {
+    width: 42,
+    height: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    backgroundColor: '#DBEAFE',
+  },
   optionText: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '900',
     color: '#0F172A',
   },
   optionsList: {
     gap: 12,
     backgroundColor: 'transparent',
+  },
+  profileCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 14,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+    marginBottom: 18,
+  },
+  profileCopy: {
+    flex: 1,
+    gap: 3,
+    backgroundColor: 'transparent',
+  },
+  profileEmail: {
+    color: '#64748B',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  profileName: {
+    color: '#0F172A',
+    fontSize: 17,
+    fontWeight: '900',
   },
   sideHeader: {
     flexDirection: 'row',
