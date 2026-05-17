@@ -127,6 +127,11 @@ export function Navbar({ state, descriptors, navigation }: BottomTabBarProps) {
     router.push('/config');
   }
 
+  function openProfile() {
+    closeMenu();
+    router.push('/(tabs)/perfil');
+  }
+
   const profileInitial = (user?.nombre || user?.email || 'U').trim().charAt(0).toUpperCase();
   const profileName = user?.nombre || 'Usuario';
   const profileEmail = user?.email || 'Sin correo';
@@ -152,7 +157,7 @@ export function Navbar({ state, descriptors, navigation }: BottomTabBarProps) {
               </Pressable>
             </View>
 
-            <View style={styles.profileCard}>
+            <Pressable accessibilityRole="button" onPress={openProfile} style={styles.profileCard}>
               <View style={styles.avatar}>
                 <Text style={styles.avatarText}>{profileInitial}</Text>
               </View>
@@ -164,7 +169,8 @@ export function Navbar({ state, descriptors, navigation }: BottomTabBarProps) {
                   {profileEmail}
                 </Text>
               </View>
-            </View>
+              <MaterialCommunityIcons name="chevron-right" size={22} color="#9CA3AF" />
+            </Pressable>
 
             <View style={styles.optionsList}>
               <Pressable accessibilityRole="button" onPress={openConfig} style={styles.optionButton}>
