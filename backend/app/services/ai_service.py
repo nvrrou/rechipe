@@ -54,6 +54,41 @@ async def obtener_info_nutricional(nombre_producto: str):
     except Exception as e:
         return {"error": str(e)}
 
+async def generar_url_temporal_dalle(nombre_producto: str) -> str:
+    """
+    Llama a la API de OpenAI para generar la imagen de un producto.
+    Soporta tanto URLs públicas como respuestas en formato Base64.
+    """
+    try:
+        prompt_estandar = f"""
+        A high-resolution, professional studio photograph of a single {nombre_producto}, 
+        fresh and appetizing, centered on a pristine, solid white background. 
+        Natural, soft lighting. Overhead or slightly elevated angle, suitable for a clean grocery catalogue. 
+        No packaging, no text, no logos, no surrounding clutter.
+        """
+
+        respuesta = await client.images.generate(
+            model="gpt-image-1-mini", 
+            prompt=prompt_estandar,
+            n=1,
+            size="1024x1024"
+        )
+        
+        # 1. Intentamos sacar la URL clásica (por si acaso)
+        url_generada = getattr(respuesta.data[0], 'url', None)
+        if url_generada:
+            return url_generada
+            
+        # 2. Si no hay URL, extraemos el contenido Base64 (el muro de texto)
+        b64_generado = getattr(respuesta.data[0], 'b64_json', None)
+        if b64_generado:
+            return b64_generado
+            
+        raise Exception("La API de imágenes no devolvió ni una URL ni datos en Base64.")
+        
+    except Exception as e:
+        raise Exception(f"Error al procesar la imagen de {nombre_producto}: {str(e)}")
+
 async def generar_receta_con_ia(ingredientes: list, objetivo_nutricional: str, tipo_comida: str, ingredientes_obligatorios: list = None):
     """
     Toma una lista de ingredientes (con sus macros), un objetivo (combinado) y un tipo de comida,
