@@ -5,6 +5,12 @@ export interface GeneratedRecipe {
   tiempo_preparacion?: string;
   dificultad?: string;
   por_que_funciona?: string | null;
+  macros_totales?: {
+    calorias?: number;
+    proteinas?: number;
+    carbohidratos?: number;
+    grasas?: number;
+  };
   ingredientes?: string[];
   pasos?: string[];
 }
@@ -16,9 +22,10 @@ export interface GenerateRecipeResponse {
 }
 
 export interface GenerateRecipeData {
+  user_id: string;
+  tipo_comida: string;
   ingredientes: string[];
   objetivo_nutricional?: string;
-  tipo_comida?: string;
 }
 
 export async function generateRecipes(data: GenerateRecipeData): Promise<GenerateRecipeResponse> {

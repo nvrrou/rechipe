@@ -1,6 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, TextInput } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput } from 'react-native';
 
 import { Text, View } from '@/components/Themed';
 import { useAuth } from '@/contexts/AuthContext';
@@ -60,6 +61,12 @@ export default function RecipeScreen() {
     loadDespensa();
   }, [loadDespensa]);
 
+  useFocusEffect(
+    useCallback(() => {
+      loadDespensa();
+    }, [loadDespensa])
+  );
+
   const filteredItems = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     if (!query) return items;
@@ -90,8 +97,8 @@ export default function RecipeScreen() {
   }
 
   async function handleGenerate() {
-    if (selectedIngredients.length === 0) {
-      setError('Selecciona al menos un ingrediente obligatorio.');
+    if (!user?.id) {
+      setError('No hay usuario activo para generar recetas.');
       return;
     }
 
@@ -100,15 +107,16 @@ export default function RecipeScreen() {
     setRecipes([]);
 
     const result = await generateRecipes({
+      user_id: user.id,
+      tipo_comida: selectedMeal,
       ingredientes: selectedIngredients.map((item) => item.nombre_producto),
       objetivo_nutricional: objective.trim(),
-      tipo_comida: selectedMeal,
     });
 
     if (result.error) {
       setError(result.error);
     } else if (result.recetas?.length) {
-      setRecipes(result.recetas);
+      setRecipes(result.recetas.slice(0, 3));
     } else {
       setError('No llegaron recetas desde el backend.');
     }
@@ -132,7 +140,7 @@ export default function RecipeScreen() {
             </View>
             <View style={styles.titleCopy}>
               <Text style={styles.title}>Generar receta</Text>
-              <Text style={styles.subtitle}>Elige el tipo de comida y los ingredientes que deben aparecer sí o sí.</Text>
+              <Text style={styles.subtitle}>Elige el tipo de comida y, si quieres, ingredientes que deben aparecer sí o sí.</Text>
             </View>
           </View>
         </View>
@@ -225,8 +233,12 @@ export default function RecipeScreen() {
               <MaterialCommunityIcons name="fridge-outline" size={22} color="#FFFFFF" />
             </View>
             <View style={styles.panelCopy}>
-              <Text style={styles.panelTitle}>Ingredientes obligatorios</Text>
-              <Text style={styles.panelSubtitle}>{selectedIngredients.length} seleccionado{selectedIngredients.length === 1 ? '' : 's'}</Text>
+              <Text style={styles.panelTitle}>Ingredientes opcionales</Text>
+              <Text style={styles.panelSubtitle}>
+                {selectedIngredients.length > 0
+                  ? `${selectedIngredients.length} obligatorio${selectedIngredients.length === 1 ? '' : 's'}`
+                  : 'La IA puede usar toda tu despensa'}
+              </Text>
             </View>
             {selectedIngredients.length > 0 && (
               <Pressable accessibilityRole="button" onPress={clearSelection} style={styles.clearButton}>
@@ -239,6 +251,7 @@ export default function RecipeScreen() {
             <MaterialCommunityIcons name="magnify" size={22} color="#9CA3AF" />
             <TextInput
               onChangeText={setSearchQuery}
+              onFocus={loadDespensa}
               placeholder="Buscar ingredientes de tu refri..."
               placeholderTextColor="#9CA3AF"
               style={styles.searchInput}
@@ -256,7 +269,11 @@ export default function RecipeScreen() {
               <Text style={styles.emptyText}>No hay ingredientes para seleccionar</Text>
             </View>
           ) : (
-            <View style={styles.ingredientList}>
+            <ScrollView
+              nestedScrollEnabled
+              showsVerticalScrollIndicator
+              style={styles.ingredientScroller}
+              contentContainerStyle={styles.ingredientList}>
               {filteredItems.map((item) => {
                 const isSelected = selectedIngredientIds.includes(item.id);
                 return (
@@ -276,7 +293,7 @@ export default function RecipeScreen() {
                   </Pressable>
                 );
               })}
-            </View>
+            </ScrollView>
           )}
         </View>
 
@@ -322,6 +339,15 @@ export default function RecipeScreen() {
                 {!!recipe.por_que_funciona && (
                   <View style={styles.whyBox}>
                     <Text style={styles.whyText}>{recipe.por_que_funciona}</Text>
+                  </View>
+                )}
+
+                {!!recipe.macros_totales && (
+                  <View style={styles.macroRow}>
+                    <Text style={styles.macroPill}>{recipe.macros_totales.calorias ?? 0} kcal</Text>
+                    <Text style={styles.macroPill}>P {recipe.macros_totales.proteinas ?? 0}g</Text>
+                    <Text style={styles.macroPill}>C {recipe.macros_totales.carbohidratos ?? 0}g</Text>
+                    <Text style={styles.macroPill}>G {recipe.macros_totales.grasas ?? 0}g</Text>
                   </View>
                 )}
 
@@ -493,6 +519,9 @@ const styles = StyleSheet.create({
     borderColor: '#FFFFFF',
     backgroundColor: '#232323',
   },
+  ingredientScroller: {
+    maxHeight: 224,
+  },
   ingredientSubtitle: {
     color: '#B8B8B8',
     fontSize: 13,
@@ -512,6 +541,12 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: '#2A2A2A',
     overflow: 'hidden',
+  },
+  macroRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    backgroundColor: 'transparent',
   },
   mealDropdownButton: {
     minHeight: 56,

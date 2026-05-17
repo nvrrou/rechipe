@@ -77,7 +77,7 @@ async def generar_receta_con_ia(ingredientes: list, objetivo_nutricional: str, t
         - Utiliza utensilios básicos (sartenes, ollas, horno convencional).
         
         REGLAS CRÍTICAS:
-        1. EXPRIME LA DESPENSA: Genera la MAYOR cantidad de recetas DISTINTAS posibles que tengan sentido culinario para un/a {tipo_comida}.
+        1. EXPRIME LA DESPENSA: Genera como máximo 3 recetas DISTINTAS que tengan sentido culinario para un/a {tipo_comida}. Nunca devuelvas más de 3 opciones.
         2. CERO INGREDIENTES EXTERNOS: Solo puedes usar los ingredientes de la lista (más agua, sal y aceite).
         3. CÁLCULO NUTRICIONAL ESTRICTO: Por cada receta, calcula el TOTAL de kcal, proteínas, carbohidratos y grasas sumando las porciones, basándote ÚNICAMENTE en la 'Info base por 100g' proporcionada.
         """
@@ -97,6 +97,7 @@ async def generar_receta_con_ia(ingredientes: list, objetivo_nutricional: str, t
 
         instrucciones += """\n
         FORMATO DE SALIDA ESTRICTO (JSON):
+        El array "recetas" debe contener entre 1 y 3 opciones como máximo.
         {
           "recetas": [
             {
