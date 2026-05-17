@@ -148,7 +148,7 @@ export function Navbar({ state, descriptors, navigation }: BottomTabBarProps) {
             <View style={styles.sideHeader}>
               <Text style={styles.sideTitle}>Mas opciones</Text>
               <Pressable accessibilityRole="button" onPress={closeMenu} style={styles.closeButton}>
-                <MaterialCommunityIcons name="close" size={24} color="#0F172A" />
+                <MaterialCommunityIcons name="close" size={24} color="#FFFFFF" />
               </Pressable>
             </View>
 
@@ -169,13 +169,13 @@ export function Navbar({ state, descriptors, navigation }: BottomTabBarProps) {
             <View style={styles.optionsList}>
               <Pressable accessibilityRole="button" onPress={openConfig} style={styles.optionButton}>
                 <View style={styles.optionIcon}>
-                  <MaterialCommunityIcons name="cog-outline" size={22} color="#0F172A" />
+                  <MaterialCommunityIcons name="cog-outline" size={22} color="#FFFFFF" />
                 </View>
                 <View style={styles.optionCopy}>
                   <Text style={styles.optionText}>Configuracion</Text>
                   <Text style={styles.optionDescription}>Preferencias de la app</Text>
                 </View>
-                <MaterialCommunityIcons name="chevron-right" size={22} color="#64748B" />
+                <MaterialCommunityIcons name="chevron-right" size={22} color="#9CA3AF" />
               </Pressable>
             </View>
           </Animated.View>
@@ -276,7 +276,7 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.35)',
+    backgroundColor: 'rgba(0, 0, 0, 0.56)',
     justifyContent: 'flex-start',
     alignItems: 'flex-end',
   },
@@ -289,7 +289,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 18,
-    backgroundColor: '#0F172A',
+    backgroundColor: '#2A2A2A',
   },
   avatarText: {
     color: '#FFFFFF',
@@ -297,9 +297,12 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   closeButton: {
-    padding: 6,
-    borderRadius: 999,
-    backgroundColor: '#E2E8F0',
+    width: 42,
+    height: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    backgroundColor: '#2A2A2A',
   },
   iconButton: {
     flex: 1,
@@ -339,8 +342,10 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingVertical: 10,
     paddingHorizontal: 12,
-    borderRadius: 14,
-    backgroundColor: '#EFF6FF',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    backgroundColor: '#171717',
   },
   optionCopy: {
     flex: 1,
@@ -348,7 +353,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   optionDescription: {
-    color: '#64748B',
+    color: '#B8B8B8',
     fontSize: 13,
     fontWeight: '700',
   },
@@ -358,12 +363,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 14,
-    backgroundColor: '#DBEAFE',
+    backgroundColor: '#2A2A2A',
   },
   optionText: {
     fontSize: 16,
     fontWeight: '900',
-    color: '#0F172A',
+    color: '#FFFFFF',
   },
   optionsList: {
     gap: 12,
@@ -374,11 +379,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     padding: 14,
-    borderRadius: 20,
+    borderRadius: 22,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    backgroundColor: '#FFFFFF',
+    borderColor: '#2A2A2A',
+    backgroundColor: '#171717',
     marginBottom: 18,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.26,
+    shadowRadius: 20,
+    elevation: 2,
   },
   profileCopy: {
     flex: 1,
@@ -386,12 +396,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   profileEmail: {
-    color: '#64748B',
+    color: '#B8B8B8',
     fontSize: 13,
     fontWeight: '700',
   },
   profileName: {
-    color: '#0F172A',
+    color: '#FFFFFF',
     fontSize: 17,
     fontWeight: '900',
   },
@@ -409,17 +419,17 @@ const styles = StyleSheet.create({
     height: '100%',
     paddingHorizontal: 20,
     paddingBottom: 32,
-    backgroundColor: '#F8FAFC',
-    shadowColor: '#0F172A',
+    backgroundColor: '#0B0B0B',
+    shadowColor: '#000000',
     shadowOffset: { width: -8, height: 0 },
-    shadowOpacity: 0.18,
-    shadowRadius: 16,
+    shadowOpacity: 0.34,
+    shadowRadius: 24,
     elevation: 12,
   },
   sideTitle: {
     fontSize: 22,
-    fontWeight: '700',
-    color: '#0F172A',
+    fontWeight: '900',
+    color: '#FFFFFF',
   },
   wrapper: {
     position: 'absolute',
