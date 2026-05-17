@@ -4,31 +4,84 @@ import { useRouter } from 'expo-router';
 import React, { useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  FlatList,
   KeyboardAvoidingView,
-  PanResponder,
+  LayoutChangeEvent,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Platform,
   Pressable,
   SafeAreaView,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
+import WheelPickerExpo from 'react-native-wheel-picker-expo';
 
 import { useAuth } from '@/contexts/AuthContext';
 
-type MetricKey = 'edad' | 'peso' | 'altura';
+type StepId = 'edad' | 'peso' | 'altura' | 'genero' | 'objetivos' | 'restricciones' | 'favoritos';
 
-function parseMetricValue(value: string) {
-  return Number(value.replace(',', '.')) || 0;
-}
+type StepDef = {
+  id: StepId;
+  title: string;
+  subtitle: string;
+  category: string;
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+};
 
-function formatMetricValue(value: number, decimals = 0) {
-  const formatted = decimals > 0 ? value.toFixed(decimals) : String(Math.round(value));
-  return formatted.replace('.', ',');
-}
+const STEPS: StepDef[] = [
+  {
+    id: 'edad',
+    title: 'Edad',
+    subtitle: 'Selecciona tu edad para ajustar recomendaciones iniciales.',
+    category: 'Datos personales',
+    icon: 'calendar-heart',
+  },
+  {
+    id: 'peso',
+    title: 'Peso',
+    subtitle: 'Usaremos este dato para estimar porciones y objetivos.',
+    category: 'Datos personales',
+    icon: 'scale-bathroom',
+  },
+  {
+    id: 'altura',
+    title: 'Altura',
+    subtitle: 'Ayuda a contextualizar tus recomendaciones nutricionales.',
+    category: 'Datos personales',
+    icon: 'human-male-height',
+  },
+  {
+    id: 'genero',
+    title: 'Genero',
+    subtitle: 'Elige la opcion que mejor te represente.',
+    category: 'Datos personales',
+    icon: 'account-outline',
+  },
+  {
+    id: 'objetivos',
+    title: 'Objetivos',
+    subtitle: 'Selecciona al menos un objetivo para orientar las recetas.',
+    category: 'Nutricion',
+    icon: 'target',
+  },
+  {
+    id: 'restricciones',
+    title: 'Restricciones',
+    subtitle: 'Opcional: marca alimentos o estilos que quieres evitar.',
+    category: 'Preferencias',
+    icon: 'shield-check-outline',
+  },
+  {
+    id: 'favoritos',
+    title: 'Favoritos',
+    subtitle: 'Agrega ingredientes que quieres ver más seguido.',
+    category: 'Preferencias',
+    icon: 'silverware-fork-knife',
+  },
+];
 
 const OBJETIVOS_OPTIONS = [
   'Perder peso',
@@ -59,6 +112,40 @@ const GENEROS = [
   { label: 'Femenino', icon: 'female' },
   { label: 'Otro', icon: 'accessibility' },
 ] as const;
+
+const RULER_TICK_WIDTH = 18;
+
+function parseMetricValue(value: string) {
+  return Number(value.replace(',', '.')) || 0;
+}
+
+function formatMetricValue(value: number, decimals = 0) {
+  const formatted = decimals > 0 ? value.toFixed(decimals) : String(Math.round(value));
+  return formatted.replace('.', ',');
+}
+
+function snapMetricValue(value: string, min: number, max: number, step: number) {
+  const numericValue = parseMetricValue(value);
+  const clampedValue = Math.min(max, Math.max(min, numericValue || min));
+  return Math.round((clampedValue - min) / step) * step + min;
+}
+
+function buildWheelItems(min: number, max: number, step: number, decimals = 0) {
+  const total = Math.floor((max - min) / step) + 1;
+  return Array.from({ length: total }, (_, index) => {
+    const value = min + index * step;
+    return {
+      label: formatMetricValue(value, decimals),
+      value,
+    };
+  });
+}
+
+function getInitialIndex(value: string, min: number, max: number, step: number) {
+  const numericValue = parseMetricValue(value);
+  const clampedValue = Math.min(max, Math.max(min, numericValue || min));
+  return Math.round((clampedValue - min) / step);
+}
 
 function ChipSelector({
   options,
@@ -93,74 +180,45 @@ function ChipSelector({
   );
 }
 
-function MetricSlider({
-  label,
+function MetricWheel({
   value,
   unit,
-  icon,
   min,
   max,
   step,
   decimals = 0,
   onChange,
 }: {
-  label: string;
   value: string;
   unit: string;
-  icon: keyof typeof MaterialCommunityIcons.glyphMap;
   min: number;
   max: number;
   step: number;
   decimals?: number;
   onChange: (value: string) => void;
 }) {
-  const trackRef = useRef<View>(null);
-  const numericValue = parseMetricValue(value);
-  const clampedValue = Math.min(max, Math.max(min, numericValue || min));
-  const progress = ((clampedValue - min) / (max - min)) * 100;
-
-  function updateFromPageX(pageX: number) {
-    trackRef.current?.measure((_x, _y, width, _height, pageLeft) => {
-      if (!width) return;
-      const ratio = Math.min(1, Math.max(0, (pageX - pageLeft) / width));
-      const rawValue = min + ratio * (max - min);
-      const steppedValue = Math.round(rawValue / step) * step;
-      const nextValue = Math.min(max, Math.max(min, steppedValue));
-      onChange(formatMetricValue(nextValue, decimals));
-    });
-  }
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (event) => updateFromPageX(event.nativeEvent.pageX),
-      onPanResponderMove: (event) => updateFromPageX(event.nativeEvent.pageX),
-    })
-  ).current;
+  const items = useMemo(() => buildWheelItems(min, max, step, decimals), [decimals, max, min, step]);
+  const initialSelectedIndex = useMemo(() => getInitialIndex(value, min, max, step), [max, min, step, value]);
 
   function handleTextChange(text: string) {
     const normalizedText = decimals > 0 ? text.replace(/[^\d,.]/g, '').replace('.', ',') : text.replace(/\D/g, '');
     const parts = normalizedText.split(',');
     const nextText =
       decimals > 0 && parts.length > 1 ? `${parts[0]},${parts.slice(1).join('').slice(0, decimals)}` : normalizedText;
-
     onChange(nextText);
   }
 
-  return (
-    <View style={styles.metricField}>
-      <View style={styles.metricHeader}>
-        <View style={styles.metricIcon}>
-          <MaterialCommunityIcons name={icon} size={22} color="#FFFFFF" />
-        </View>
-        <Text style={styles.metricLabel}>{label}</Text>
-      </View>
+  function snapTypedValue() {
+    onChange(formatMetricValue(snapMetricValue(value, min, max, step), decimals));
+  }
 
+  return (
+    <View style={styles.metricWrap}>
       <View style={styles.metricValueWrap}>
         <TextInput
           keyboardType={decimals > 0 ? 'decimal-pad' : 'numeric'}
           onChangeText={handleTextChange}
+          onEndEditing={snapTypedValue}
           placeholder="0"
           placeholderTextColor="#6B7280"
           selectTextOnFocus
@@ -170,15 +228,123 @@ function MetricSlider({
         <Text style={styles.metricUnit}>{unit}</Text>
       </View>
 
-      <View style={styles.sliderBlock}>
-        <View style={styles.sliderRangeRow}>
-          <Text style={styles.sliderRangeText}>{formatMetricValue(min, decimals)}</Text>
-          <Text style={styles.sliderRangeText}>{formatMetricValue(max, decimals)}</Text>
-        </View>
-        <View ref={trackRef} style={styles.sliderTrack} {...panResponder.panHandlers}>
-          <View style={[styles.sliderFill, { width: `${progress}%` }]} />
-          <View style={[styles.sliderThumb, { left: `${progress}%` }]} />
-        </View>
+      <View style={styles.wheelWrap}>
+        <WheelPickerExpo
+          backgroundColor="#171717"
+          height={210}
+          haptics
+          initialSelectedIndex={initialSelectedIndex}
+          items={items}
+          onChange={({ item }) => onChange(formatMetricValue(Number(item.value), decimals))}
+          selectedStyle={styles.wheelSelected}
+          width="100%"
+          renderItem={({ label, fontSize }) => (
+            <Text style={[styles.wheelItemText, { fontSize: Math.min(fontSize, 23) }]}>{label}</Text>
+          )}
+        />
+      </View>
+    </View>
+  );
+}
+
+function HeightRuler({
+  value,
+  min,
+  max,
+  onChange,
+}: {
+  value: string;
+  min: number;
+  max: number;
+  onChange: (value: string) => void;
+}) {
+  const listRef = useRef<FlatList<number>>(null);
+  const [rulerWidth, setRulerWidth] = useState(0);
+  const items = useMemo(() => Array.from({ length: max - min + 1 }, (_, index) => min + index), [max, min]);
+  const selectedIndex = Math.min(max - min, Math.max(0, Math.round((parseMetricValue(value) || min) - min)));
+  const sidePadding = Math.max((rulerWidth - RULER_TICK_WIDTH) / 2, 0);
+
+  function scrollToIndex(index: number, animated = true) {
+    listRef.current?.scrollToOffset({
+      animated,
+      offset: index * RULER_TICK_WIDTH,
+    });
+  }
+
+  function handleLayout(event: LayoutChangeEvent) {
+    const nextWidth = event.nativeEvent.layout.width;
+    setRulerWidth(nextWidth);
+    requestAnimationFrame(() => scrollToIndex(selectedIndex, false));
+  }
+
+  function handleTextChange(text: string) {
+    onChange(text.replace(/\D/g, ''));
+  }
+
+  function snapHeightFromText() {
+    const nextValue = Math.round(snapMetricValue(value, min, max, 1));
+    onChange(String(nextValue));
+    scrollToIndex(nextValue - min);
+  }
+
+  function snapHeightFromScroll(event: NativeSyntheticEvent<NativeScrollEvent>) {
+    const index = Math.min(max - min, Math.max(0, Math.round(event.nativeEvent.contentOffset.x / RULER_TICK_WIDTH)));
+    onChange(String(min + index));
+  }
+
+  return (
+    <View style={styles.metricWrap}>
+      <View style={styles.metricValueWrap}>
+        <TextInput
+          keyboardType="numeric"
+          onChangeText={handleTextChange}
+          onEndEditing={snapHeightFromText}
+          placeholder="0"
+          placeholderTextColor="#6B7280"
+          selectTextOnFocus
+          style={styles.metricInput}
+          value={value}
+        />
+        <Text style={styles.metricUnit}>cm</Text>
+      </View>
+
+      <View onLayout={handleLayout} style={styles.rulerWrap}>
+        <FlatList
+          ref={listRef}
+          data={items}
+          horizontal
+          keyExtractor={(item) => String(item)}
+          showsHorizontalScrollIndicator={false}
+          snapToInterval={RULER_TICK_WIDTH}
+          decelerationRate="fast"
+          bounces={false}
+          onMomentumScrollEnd={snapHeightFromScroll}
+          onScrollEndDrag={snapHeightFromScroll}
+          getItemLayout={(_, index) => ({
+            length: RULER_TICK_WIDTH,
+            offset: RULER_TICK_WIDTH * index,
+            index,
+          })}
+          contentContainerStyle={{ paddingHorizontal: sidePadding }}
+          renderItem={({ item }) => {
+            const isMajorTick = item % 10 === 0;
+            const isMiddleTick = item % 5 === 0;
+
+            return (
+              <View style={styles.rulerTick}>
+                <View
+                  style={[
+                    styles.rulerTickLine,
+                    isMiddleTick && styles.rulerTickLineMid,
+                    isMajorTick && styles.rulerTickLineTall,
+                  ]}
+                />
+                {isMajorTick && <Text style={styles.rulerTickLabel}>{item}</Text>}
+              </View>
+            );
+          }}
+        />
+        <View pointerEvents="none" style={styles.rulerCenterMarker} />
       </View>
     </View>
   );
@@ -188,6 +354,7 @@ export default function CompleteProfileScreen() {
   const router = useRouter();
   const { updateProfile } = useAuth();
 
+  const [stepIndex, setStepIndex] = useState(0);
   const [edad, setEdad] = useState('25');
   const [peso, setPeso] = useState('70');
   const [altura, setAltura] = useState('170');
@@ -196,48 +363,42 @@ export default function CompleteProfileScreen() {
   const [restricciones, setRestricciones] = useState<string[]>([]);
   const [ingredientesFavoritos, setIngredientesFavoritos] = useState<string[]>([]);
   const [favoritoInput, setFavoritoInput] = useState('');
-
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState('');
   const [error, setError] = useState(false);
 
-  const profileProgress = useMemo(() => {
+  const currentStep = STEPS[stepIndex];
+  const isLastStep = stepIndex === STEPS.length - 1;
+  const progress = Math.round(((stepIndex + 1) / STEPS.length) * 100);
+
+  const completedCount = useMemo(() => {
     const checks = [
       parseMetricValue(edad) > 0,
       parseMetricValue(peso) > 0,
       parseMetricValue(altura) > 0,
       genero.length > 0,
       objetivos.length > 0,
+      true,
       ingredientesFavoritos.length > 0,
     ];
-    return Math.round((checks.filter(Boolean).length / checks.length) * 100);
-  }, [edad, peso, altura, genero, objetivos.length, ingredientesFavoritos.length]);
-
-  const metrics: Array<{
-    key: MetricKey;
-    label: string;
-    value: string;
-    unit: string;
-    icon: keyof typeof MaterialCommunityIcons.glyphMap;
-    onChange: (value: string) => void;
-  }> = [
-    { key: 'edad', label: 'Edad', value: edad, unit: 'años', icon: 'calendar-heart', onChange: setEdad },
-    { key: 'peso', label: 'Peso', value: peso, unit: 'kg', icon: 'scale-bathroom', onChange: setPeso },
-    { key: 'altura', label: 'Altura', value: altura, unit: 'cm', icon: 'human-male-height', onChange: setAltura },
-  ];
+    return checks.filter(Boolean).length;
+  }, [altura, edad, genero, ingredientesFavoritos.length, objetivos.length, peso]);
 
   const toggleObjetivo = (option: string) => {
     setObjetivos((prev) => (prev.includes(option) ? prev.filter((o) => o !== option) : [...prev, option]));
+    setMsg('');
   };
 
   const toggleRestriccion = (option: string) => {
     setRestricciones((prev) => (prev.includes(option) ? prev.filter((r) => r !== option) : [...prev, option]));
+    setMsg('');
   };
 
   const toggleFavorito = (option: string) => {
     setIngredientesFavoritos((prev) =>
       prev.includes(option) ? prev.filter((item) => item !== option) : [...prev, option]
     );
+    setMsg('');
   };
 
   const addFavorito = () => {
@@ -245,18 +406,56 @@ export default function CompleteProfileScreen() {
     if (!next) return;
     setIngredientesFavoritos((prev) => (prev.includes(next) ? prev : [...prev, next]));
     setFavoritoInput('');
+    setMsg('');
   };
+
+  function validateCurrentStep() {
+    if (currentStep.id === 'genero' && !genero) {
+      return 'Elige tu genero para continuar';
+    }
+    if (currentStep.id === 'objetivos' && objetivos.length === 0) {
+      return 'Selecciona al menos un objetivo nutricional';
+    }
+    return '';
+  }
+
+  function goNext() {
+    const validationMsg = validateCurrentStep();
+    if (validationMsg) {
+      setMsg(validationMsg);
+      setError(true);
+      return;
+    }
+
+    setMsg('');
+    setError(false);
+
+    if (isLastStep) {
+      handleSaveProfile();
+      return;
+    }
+
+    setStepIndex((prev) => Math.min(prev + 1, STEPS.length - 1));
+  }
+
+  function goBack() {
+    setMsg('');
+    setError(false);
+    setStepIndex((prev) => Math.max(prev - 1, 0));
+  }
 
   const handleSaveProfile = async () => {
     if (!genero) {
       setMsg('Elige tu genero para completar el perfil');
       setError(true);
+      setStepIndex(STEPS.findIndex((step) => step.id === 'genero'));
       return;
     }
 
     if (objetivos.length === 0) {
       setMsg('Selecciona al menos un objetivo nutricional');
       setError(true);
+      setStepIndex(STEPS.findIndex((step) => step.id === 'objetivos'));
       return;
     }
 
@@ -287,25 +486,103 @@ export default function CompleteProfileScreen() {
     setLoading(false);
   };
 
+  function renderStepContent() {
+    if (currentStep.id === 'edad') {
+      return <MetricWheel decimals={0} max={100} min={10} onChange={setEdad} step={1} unit="años" value={edad} />;
+    }
+
+    if (currentStep.id === 'peso') {
+      return <MetricWheel decimals={1} max={200} min={30} onChange={setPeso} step={0.5} unit="kg" value={peso} />;
+    }
+
+    if (currentStep.id === 'altura') {
+      return <HeightRuler max={230} min={100} onChange={setAltura} value={altura} />;
+    }
+
+    if (currentStep.id === 'genero') {
+      return (
+        <View style={styles.genderStack}>
+          {GENEROS.map((item) => {
+            const isSelected = genero === item.label;
+            return (
+              <Pressable
+                accessibilityRole="button"
+                key={item.label}
+                onPress={() => {
+                  setGenero(item.label);
+                  setMsg('');
+                }}
+                style={[styles.optionRow, isSelected && styles.optionRowSelected]}>
+                <View style={styles.optionIcon}>
+                  <Ionicons name={item.icon} size={22} color={isSelected ? '#FFFFFF' : '#9CA3AF'} />
+                </View>
+                <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>{item.label}</Text>
+                {isSelected && <Ionicons name="checkmark-circle" size={22} color="#FFFFFF" />}
+              </Pressable>
+            );
+          })}
+        </View>
+      );
+    }
+
+    if (currentStep.id === 'objetivos') {
+      return <ChipSelector accentColor="#4ade80" onToggle={toggleObjetivo} options={OBJETIVOS_OPTIONS} selected={objetivos} />;
+    }
+
+    if (currentStep.id === 'restricciones') {
+      return (
+        <ChipSelector
+          accentColor="#60a5fa"
+          onToggle={toggleRestriccion}
+          options={RESTRICCIONES_OPTIONS}
+          selected={restricciones}
+        />
+      );
+    }
+
+    return (
+      <View style={styles.favoriteStack}>
+        <View style={styles.addBar}>
+          <TextInput
+            autoCapitalize="words"
+            onChangeText={setFavoritoInput}
+            onSubmitEditing={addFavorito}
+            placeholder="Agregar ingrediente"
+            placeholderTextColor="#9CA3AF"
+            returnKeyType="done"
+            style={styles.favoriteInput}
+            value={favoritoInput}
+          />
+          <Pressable accessibilityRole="button" onPress={addFavorito} style={styles.addButton}>
+            <Ionicons name="add" size={22} color="#FFFFFF" />
+          </Pressable>
+        </View>
+
+        <ChipSelector
+          accentColor="#F97316"
+          onToggle={toggleFavorito}
+          options={[...FAVORITOS_SUGERIDOS, ...ingredientesFavoritos.filter((item) => !FAVORITOS_SUGERIDOS.includes(item))]}
+          selected={ingredientesFavoritos}
+        />
+      </View>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="light" />
       <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-          <View style={styles.hero}>
-            <View style={styles.titleRow}>
-              <View style={styles.logoMark}>
-                <MaterialCommunityIcons name="food-apple-outline" size={28} color="#FFFFFF" />
-              </View>
-              <View style={styles.titleCopy}>
-                <Text style={styles.title}>Tu perfil</Text>
-                <Text style={styles.subtitle}>Ajusta tus datos para personalizar recetas y porciones.</Text>
-              </View>
+        <View style={styles.content}>
+          <View style={styles.progressPanel}>
+            <View style={styles.progressHeader}>
+              <Text style={styles.progressText}>{progress}% completo</Text>
+              <Text style={styles.progressMeta}>
+                {stepIndex + 1}/{STEPS.length}
+              </Text>
             </View>
             <View style={styles.progressShell}>
-              <View style={[styles.progressFill, { width: `${profileProgress}%` }]} />
+              <View style={[styles.progressFill, { width: `${progress}%` }]} />
             </View>
-            <Text style={styles.progressText}>{profileProgress}% completo</Text>
           </View>
 
           {msg !== '' && (
@@ -315,133 +592,51 @@ export default function CompleteProfileScreen() {
             </View>
           )}
 
-          <View style={styles.detailPanel}>
-            <View style={styles.panelHeader}>
-              <View style={styles.panelIcon}>
-                <MaterialCommunityIcons name="clipboard-text-outline" size={22} color="#FFFFFF" />
+          <View style={styles.stepPanel}>
+            <View style={styles.stepHeader}>
+              <View style={styles.stepIcon}>
+                <MaterialCommunityIcons name={currentStep.icon} size={30} color="#FFFFFF" />
               </View>
-              <View style={styles.panelCopy}>
-                <Text style={styles.panelTitle}>Datos personales</Text>
-                <Text style={styles.panelSubtitle}>Completa cada campo en orden.</Text>
-              </View>
+              <Text style={styles.title}>{currentStep.title}</Text>
             </View>
+            <Text style={styles.subtitle}>{currentStep.subtitle}</Text>
 
-            <View style={styles.formStack}>
-            {metrics.map((metric) => (
-              <MetricSlider
-                decimals={metric.key === 'peso' ? 1 : 0}
-                icon={metric.icon}
-                key={metric.key}
-                label={metric.label}
-                max={metric.key === 'edad' ? 100 : metric.key === 'peso' ? 200 : 230}
-                min={metric.key === 'edad' ? 10 : metric.key === 'peso' ? 30 : 120}
-                onChange={metric.onChange}
-                step={metric.key === 'peso' ? 0.5 : 1}
-                unit={metric.unit}
-                value={metric.value}
-              />
-            ))}
-            </View>
+            <View style={styles.stepContent}>{renderStepContent()}</View>
           </View>
 
-          <View style={styles.detailPanel}>
-            <View style={styles.panelHeader}>
-              <View style={styles.panelIcon}>
-                <Ionicons name="person-outline" size={22} color="#FFFFFF" />
-              </View>
-              <View style={styles.panelCopy}>
-                <Text style={styles.panelTitle}>Genero</Text>
-                <Text style={styles.panelSubtitle}>Usado para calcular recomendaciones iniciales.</Text>
-              </View>
+          <View style={styles.footer}>
+            <View style={styles.categoryBadge}>
+              <Text style={styles.categoryLabel}>{currentStep.category}</Text>
+              <Text style={styles.categoryMeta}>{completedCount} datos listos</Text>
             </View>
 
-            <View style={styles.genderRow}>
-              {GENEROS.map((item) => {
-                const isSelected = genero === item.label;
-                return (
-                  <Pressable
-                    accessibilityRole="button"
-                    key={item.label}
-                    onPress={() => setGenero(item.label)}
-                    style={[styles.genderChip, isSelected && styles.genderChipSelected]}>
-                    <Ionicons name={item.icon} size={20} color={isSelected ? '#FFFFFF' : '#9CA3AF'} />
-                    <Text style={[styles.genderChipText, isSelected && styles.genderChipTextSelected]}>{item.label}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
+            <View style={styles.navRow}>
+              <Pressable
+                accessibilityRole="button"
+                disabled={stepIndex === 0 || loading}
+                onPress={goBack}
+                style={[styles.navButton, styles.secondaryButton, stepIndex === 0 && styles.buttonDisabled]}>
+                <Ionicons name="chevron-back" size={20} color="#FFFFFF" />
+                <Text style={styles.secondaryButtonText}>Atrás</Text>
+              </Pressable>
 
-          <View style={styles.detailPanel}>
-            <View style={styles.panelHeader}>
-              <View style={styles.panelIcon}>
-                <MaterialCommunityIcons name="target" size={22} color="#FFFFFF" />
-              </View>
-              <View style={styles.panelCopy}>
-                <Text style={styles.panelTitle}>Objetivos</Text>
-                <Text style={styles.panelSubtitle}>{objetivos.length || 'Sin'} seleccionado{objetivos.length === 1 ? '' : 's'}</Text>
-              </View>
-            </View>
-            <ChipSelector options={OBJETIVOS_OPTIONS} selected={objetivos} onToggle={toggleObjetivo} accentColor="#4ade80" />
-          </View>
-
-          <View style={styles.detailPanel}>
-            <View style={styles.panelHeader}>
-              <View style={styles.panelIcon}>
-                <MaterialCommunityIcons name="shield-check-outline" size={22} color="#FFFFFF" />
-              </View>
-              <View style={styles.panelCopy}>
-                <Text style={styles.panelTitle}>Restricciones</Text>
-                <Text style={styles.panelSubtitle}>Opcional, pero ayuda a filtrar recetas.</Text>
-              </View>
-            </View>
-            <ChipSelector
-              options={RESTRICCIONES_OPTIONS}
-              selected={restricciones}
-              onToggle={toggleRestriccion}
-              accentColor="#60a5fa"
-            />
-          </View>
-
-          <View style={styles.detailPanel}>
-            <View style={styles.panelHeader}>
-              <View style={styles.panelIcon}>
-                <MaterialCommunityIcons name="silverware-fork-knife" size={22} color="#FFFFFF" />
-              </View>
-              <View style={styles.panelCopy}>
-                <Text style={styles.panelTitle}>Favoritos</Text>
-                <Text style={styles.panelSubtitle}>Ingredientes que quieres ver más seguido.</Text>
-              </View>
-            </View>
-
-            <View style={styles.addBar}>
-              <TextInput
-                autoCapitalize="words"
-                onChangeText={setFavoritoInput}
-                onSubmitEditing={addFavorito}
-                placeholder="Agregar ingrediente"
-                placeholderTextColor="#9CA3AF"
-                returnKeyType="done"
-                style={styles.favoriteInput}
-                value={favoritoInput}
-              />
-              <Pressable accessibilityRole="button" onPress={addFavorito} style={styles.addButton}>
-                <Ionicons name="add" size={22} color="#FFFFFF" />
+              <Pressable
+                accessibilityRole="button"
+                disabled={loading}
+                onPress={goNext}
+                style={[styles.navButton, styles.primaryButton, loading && styles.buttonDisabled]}>
+                {loading ? (
+                  <ActivityIndicator color="#0B0B0B" />
+                ) : (
+                  <>
+                    <Text style={styles.primaryButtonText}>{isLastStep ? 'Guardar' : 'Siguiente'}</Text>
+                    <Ionicons name={isLastStep ? 'checkmark' : 'chevron-forward'} size={20} color="#0B0B0B" />
+                  </>
+                )}
               </Pressable>
             </View>
-
-            <ChipSelector
-              options={[...FAVORITOS_SUGERIDOS, ...ingredientesFavoritos.filter((item) => !FAVORITOS_SUGERIDOS.includes(item))]}
-              selected={ingredientesFavoritos}
-              onToggle={toggleFavorito}
-              accentColor="#F97316"
-            />
           </View>
-
-          <TouchableOpacity style={[styles.button, loading && styles.buttonDisabled]} onPress={handleSaveProfile} disabled={loading}>
-            {loading ? <ActivityIndicator color="#0B0B0B" /> : <Text style={styles.buttonText}>Guardar perfil</Text>}
-          </TouchableOpacity>
-        </ScrollView>
+        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -467,21 +662,26 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     backgroundColor: '#2A2A2A',
   },
-  button: {
-    minHeight: 58,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 18,
-    backgroundColor: '#FFFFFF',
-    marginTop: 2,
-  },
   buttonDisabled: {
-    opacity: 0.6,
+    opacity: 0.45,
   },
-  buttonText: {
-    color: '#0B0B0B',
-    fontSize: 16,
+  categoryBadge: {
+    gap: 3,
+    padding: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    backgroundColor: '#171717',
+  },
+  categoryLabel: {
+    color: '#FFFFFF',
+    fontSize: 15,
     fontWeight: '900',
+  },
+  categoryMeta: {
+    color: '#B8B8B8',
+    fontSize: 13,
+    fontWeight: '700',
   },
   chip: {
     minHeight: 42,
@@ -511,23 +711,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#0B0B0B',
   },
   content: {
-    gap: 18,
+    flex: 1,
+    gap: 14,
     paddingHorizontal: 20,
-    paddingTop: 54,
-    paddingBottom: 48,
-  },
-  detailPanel: {
-    gap: 16,
-    padding: 16,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: '#2A2A2A',
-    backgroundColor: '#171717',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 24,
-    elevation: 2,
+    paddingTop: 24,
+    paddingBottom: 18,
+    backgroundColor: '#0B0B0B',
   },
   errorText: {
     color: '#f87171',
@@ -540,60 +729,17 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     paddingVertical: 12,
   },
-  formStack: {
+  favoriteStack: {
+    gap: 14,
+    backgroundColor: 'transparent',
+  },
+  footer: {
     gap: 12,
     backgroundColor: 'transparent',
   },
-  genderChip: {
-    flex: 1,
-    minHeight: 74,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    padding: 10,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: '#2A2A2A',
-    backgroundColor: '#101010',
-  },
-  genderChipSelected: {
-    borderColor: '#FFFFFF',
-    backgroundColor: '#2A2A2A',
-  },
-  genderChipText: {
-    color: '#9CA3AF',
-    fontSize: 13,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
-  genderChipTextSelected: {
-    color: '#FFFFFF',
-  },
-  genderRow: {
-    flexDirection: 'row',
-    gap: 8,
+  genderStack: {
+    gap: 10,
     backgroundColor: 'transparent',
-  },
-  hero: {
-    gap: 14,
-    padding: 22,
-    borderRadius: 26,
-    backgroundColor: '#171717',
-    borderWidth: 1,
-    borderColor: '#2A2A2A',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: 0.28,
-    shadowRadius: 28,
-    elevation: 2,
-  },
-  logoMark: {
-    width: 54,
-    height: 54,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 18,
-    backgroundColor: '#2A2A2A',
   },
   messagePanel: {
     minHeight: 52,
@@ -610,45 +756,17 @@ const styles = StyleSheet.create({
     borderColor: '#7F1D1D',
     backgroundColor: '#241313',
   },
-  metricField: {
-    width: '100%',
-    gap: 12,
-    padding: 14,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: '#2A2A2A',
-    backgroundColor: '#101010',
-  },
-  metricHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: 'transparent',
-  },
-  metricIcon: {
-    width: 38,
-    height: 38,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 14,
-    backgroundColor: '#2A2A2A',
-  },
   metricInput: {
     color: '#FFFFFF',
-    fontSize: 30,
+    fontSize: 34,
     fontWeight: '900',
-    minWidth: 54,
+    minWidth: 62,
     padding: 0,
     textAlign: 'center',
   },
-  metricLabel: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '900',
-  },
   metricUnit: {
     color: '#B8B8B8',
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '800',
   },
   metricValueWrap: {
@@ -659,75 +777,87 @@ const styles = StyleSheet.create({
     gap: 6,
     backgroundColor: 'transparent',
   },
-  sliderBlock: {
-    gap: 8,
+  metricWrap: {
+    gap: 16,
     backgroundColor: 'transparent',
   },
-  sliderFill: {
-    height: '100%',
-    borderRadius: 999,
-    backgroundColor: '#FFFFFF',
-  },
-  sliderRangeRow: {
+  navButton: {
+    minHeight: 56,
+    flex: 1,
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: 18,
+  },
+  navRow: {
+    flexDirection: 'row',
+    gap: 10,
     backgroundColor: 'transparent',
   },
-  sliderRangeText: {
-    color: '#6B7280',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  sliderThumb: {
-    position: 'absolute',
-    top: -7,
-    width: 24,
-    height: 24,
-    marginLeft: -12,
-    borderRadius: 12,
-    borderWidth: 3,
-    borderColor: '#171717',
-    backgroundColor: '#FFFFFF',
-  },
-  sliderTrack: {
-    height: 10,
+  optionIcon: {
+    width: 42,
+    height: 42,
+    alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 999,
+    borderRadius: 14,
     backgroundColor: '#2A2A2A',
   },
-  panelCopy: {
-    flex: 1,
-    gap: 3,
-    backgroundColor: 'transparent',
-  },
-  panelHeader: {
+  optionRow: {
+    minHeight: 68,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: 'transparent',
+    padding: 12,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    backgroundColor: '#101010',
   },
-  panelIcon: {
-    width: 46,
-    height: 46,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 16,
-    backgroundColor: '#2A2A2A',
+  optionRowSelected: {
+    borderColor: '#FFFFFF',
+    backgroundColor: '#232323',
   },
-  panelSubtitle: {
+  optionText: {
+    flex: 1,
     color: '#B8B8B8',
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: '900',
   },
-  panelTitle: {
+  optionTextSelected: {
     color: '#FFFFFF',
-    fontSize: 18,
+  },
+  primaryButton: {
+    backgroundColor: '#FFFFFF',
+  },
+  primaryButtonText: {
+    color: '#0B0B0B',
+    fontSize: 16,
     fontWeight: '900',
   },
   progressFill: {
     height: '100%',
     borderRadius: 999,
     backgroundColor: '#FFFFFF',
+  },
+  progressHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'transparent',
+  },
+  progressMeta: {
+    color: '#B8B8B8',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  progressPanel: {
+    gap: 10,
+    padding: 16,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    backgroundColor: '#171717',
   },
   progressShell: {
     height: 8,
@@ -736,36 +866,65 @@ const styles = StyleSheet.create({
     backgroundColor: '#2A2A2A',
   },
   progressText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  rulerCenterMarker: {
+    position: 'absolute',
+    top: 18,
+    bottom: 34,
+    left: '50%',
+    width: 3,
+    marginLeft: -1.5,
+    borderRadius: 999,
+    backgroundColor: '#FFFFFF',
+  },
+  rulerTick: {
+    width: RULER_TICK_WIDTH,
+    height: 118,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    paddingTop: 20,
+    backgroundColor: 'transparent',
+  },
+  rulerTickLabel: {
+    marginTop: 12,
     color: '#B8B8B8',
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '800',
   },
-  roundButton: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 14,
-    backgroundColor: '#2A2A2A',
+  rulerTickLine: {
+    width: 2,
+    height: 22,
+    borderRadius: 999,
+    backgroundColor: '#525252',
+  },
+  rulerTickLineMid: {
+    height: 34,
+    backgroundColor: '#737373',
+  },
+  rulerTickLineTall: {
+    height: 48,
+    backgroundColor: '#FFFFFF',
+  },
+  rulerWrap: {
+    height: 132,
+    overflow: 'hidden',
+    backgroundColor: 'transparent',
   },
   safeArea: {
     flex: 1,
     backgroundColor: '#0B0B0B',
   },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: 'transparent',
+  secondaryButton: {
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    backgroundColor: '#171717',
   },
-  sectionMeta: {
-    color: '#B8B8B8',
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  sectionTitle: {
+  secondaryButtonText: {
     color: '#FFFFFF',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '900',
   },
   statusText: {
@@ -774,11 +933,39 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
   },
+  stepContent: {
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
+  stepHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: 'transparent',
+  },
+  stepIcon: {
+    width: 58,
+    height: 58,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 20,
+    backgroundColor: '#2A2A2A',
+  },
+  stepPanel: {
+    flex: 1,
+    gap: 14,
+    justifyContent: 'center',
+    padding: 18,
+    borderRadius: 26,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    backgroundColor: '#171717',
+  },
   subtitle: {
     color: '#B8B8B8',
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '700',
-    lineHeight: 20,
+    lineHeight: 21,
   },
   title: {
     color: '#FFFFFF',
@@ -786,15 +973,18 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     lineHeight: 38,
   },
-  titleCopy: {
-    flex: 1,
-    gap: 5,
-    backgroundColor: 'transparent',
+  wheelItemText: {
+    color: '#FFFFFF',
+    fontWeight: '900',
+    textAlign: 'center',
   },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+  wheelSelected: {
+    borderColor: '#FFFFFF',
+    borderWidth: 1,
+  },
+  wheelWrap: {
+    height: 210,
+    overflow: 'hidden',
     backgroundColor: 'transparent',
   },
 });
