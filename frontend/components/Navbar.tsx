@@ -132,6 +132,11 @@ export function Navbar({ state, descriptors, navigation }: BottomTabBarProps) {
     router.push('/(tabs)/perfil');
   }
 
+  function openList() {
+    closeMenu();
+    router.push('/(tabs)/lista');
+  }
+
   const profileInitial = (user?.nombre || user?.email || 'U').trim().charAt(0).toUpperCase();
   const profileName = user?.nombre || 'Usuario';
   const profileEmail = user?.email || 'Sin correo';
@@ -173,6 +178,17 @@ export function Navbar({ state, descriptors, navigation }: BottomTabBarProps) {
             </Pressable>
 
             <View style={styles.optionsList}>
+              <Pressable accessibilityRole="button" onPress={openList} style={styles.optionButton}>
+                <View style={styles.optionIcon}>
+                  <MaterialCommunityIcons name="clipboard-list-outline" size={22} color="#FFFFFF" />
+                </View>
+                <View style={styles.optionCopy}>
+                  <Text style={styles.optionText}>Test lista</Text>
+                  <Text style={styles.optionDescription}>Ir a lista de compras</Text>
+                </View>
+                <MaterialCommunityIcons name="chevron-right" size={22} color="#9CA3AF" />
+              </Pressable>
+
               <Pressable accessibilityRole="button" onPress={openConfig} style={styles.optionButton}>
                 <View style={styles.optionIcon}>
                   <MaterialCommunityIcons name="cog-outline" size={22} color="#FFFFFF" />

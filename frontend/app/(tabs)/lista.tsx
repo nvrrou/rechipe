@@ -1,54 +1,31 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useMemo, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 import {
   Pressable,
   ScrollView,
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  Alert,
 } from 'react-native';
 
 import { Text, View } from '@/components/Themed';
-
-type ShoppingItem = {
-  id: string;
-  nombre: string;
-  categoria: string;
-  cantidad: string;
-  precio: number;
-  comprado: boolean;
-};
-//Prodcutos iniciales
-const INITIAL_ITEMS: ShoppingItem[] = [
-  { id: '1', nombre: 'Arroz',  categoria: 'Cereales',  cantidad: '1 kg',     precio: 1890, comprado: false },
-  { id: '2', nombre: 'Tomate', categoria: 'Verduras',  cantidad: '500 g',    precio: 1200, comprado: false },
-  { id: '3', nombre: 'Pollo',  categoria: 'Carnes',    cantidad: '1 unidad', precio: 4990, comprado: false },
-  { id: '4', nombre: 'Leche',  categoria: 'Lácteos',   cantidad: '1 litro',  precio: 1150, comprado: false },
-  { id: '5', nombre: 'Pan',    categoria: 'Panadería', cantidad: '1 bolsa',  precio: 1800, comprado: false },
-];
-
-//Id para los nuevos producto
-
-let _nextId = 6;
-function nextId() {
-  return String(_nextId++);
-}
-
+import {
+  INITIAL_SHOPPING_ITEMS,
+  ShoppingItem,
+  getShoppingItems,
+  saveShoppingItems,
+} from '@/services/shoppingList';
 
 function formatPrice(value: number) {
   return `$${Math.round(value).toLocaleString('es-CL')}`;
 }
 
 export default function ShoppingListScreen() {
-  const [items, setItems]   = useState<ShoppingItem[]>(INITIAL_ITEMS);
+  const [items, setItems]   = useState<ShoppingItem[]>(INITIAL_SHOPPING_ITEMS);
   const [search, setSearch] = useState('');
-
-  // agregar producto
-  const [nombre,    setNombre]    = useState('');
-  const [categoria, setCategoria] = useState('');
-  const [cantidad,  setCantidad]  = useState('');
-  const [precioStr, setPrecioStr] = useState('');
+  const [replacementRequest, setReplacementRequest] = useState('');
+  const [replacementMessage, setReplacementMessage] = useState('');
 
   // Buscar productos por nombre
   const filteredItems = useMemo(
@@ -66,36 +43,42 @@ export default function ShoppingListScreen() {
 
   const progreso = items.length ? Math.round((totalComprado / items.length) * 100) : 0;
 
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+      getShoppingItems().then((storedItems) => {
+        if (isActive) setItems(storedItems);
+      });
+
+      return () => {
+        isActive = false;
+      };
+    }, [])
+  );
+
+  function persistItems(nextItems: ShoppingItem[]) {
+    setItems(nextItems);
+    saveShoppingItems(nextItems);
+  }
+
   // --- acciones ---
   function toggleItem(id: string) {
-    setItems(prev => prev.map(i => i.id === id ? { ...i, comprado: !i.comprado } : i));
+    persistItems(items.map(i => i.id === id ? { ...i, comprado: !i.comprado } : i));
   }
 
   function deleteItem(id: string) {
-    setItems(prev => prev.filter(i => i.id !== id));
+    persistItems(items.filter(i => i.id !== id));
   }
   
-  //Agregar producto
-  function addItem() {
-    const trimNombre = nombre.trim();
-    if (!trimNombre) {
-      Alert.alert('Nombre requerido', 'Ingresa el nombre del producto.');
+  function requestReplacements() {
+    const query = replacementRequest.trim();
+    if (!query) {
+      setReplacementMessage('Escribe qué producto quieres reemplazar.');
       return;
     }
-    const precio = parseFloat(precioStr.replace(',', '.')) || 0;
-    const newItem: ShoppingItem = {
-      id:        nextId(),
-      nombre:    trimNombre,
-      categoria: categoria.trim() || 'General',
-      cantidad:  cantidad.trim()  || '1 unidad',
-      precio,
-      comprado:  false,
-    };
-    setItems(prev => [...prev, newItem]);
-    setNombre('');
-    setCategoria('');
-    setCantidad('');
-    setPrecioStr('');
+
+    setReplacementMessage(`Solicitud guardada para buscar reemplazos de "${query}".`);
+    setReplacementRequest('');
   }
 
   return (
@@ -182,43 +165,32 @@ export default function ShoppingListScreen() {
           </View>
         )}
 
-        {/* Formulario agregar */}
-        <View style={styles.addCard}>
-          <TextInput
-            value={nombre}
-            onChangeText={setNombre}
-            placeholder="Nombre"
-            placeholderTextColor="#6B7280"
-            style={styles.addInput}
-          />
-          <View style={styles.addRow}>
-            <TextInput
-              value={categoria}
-              onChangeText={setCategoria}
-              placeholder="Categoría"
-              placeholderTextColor="#6B7280"
-              style={[styles.addInput, styles.addInputFlex]}
-            />
-            <TextInput
-              value={cantidad}
-              onChangeText={setCantidad}
-              placeholder="Cantidad"
-              placeholderTextColor="#6B7280"
-              style={[styles.addInput, styles.addInputFlex]}
-            />
+        {/* Reemplazos */}
+        <View style={styles.replacementCard}>
+          <View style={styles.replacementHeader}>
+            <View style={styles.replacementIcon}>
+              <MaterialCommunityIcons name="swap-horizontal" size={22} color="#4ADE80" />
+            </View>
+            <View style={styles.replacementCopy}>
+              <Text style={styles.replacementTitle}>Solicitar reemplazos</Text>
+              <Text style={styles.replacementSubtitle}>Pide alternativas si algo está caro o no lo encuentras.</Text>
+            </View>
           </View>
           <TextInput
-            value={precioStr}
-            onChangeText={setPrecioStr}
-            placeholder="Precio ($)"
+            value={replacementRequest}
+            onChangeText={(value) => {
+              setReplacementRequest(value);
+              setReplacementMessage('');
+            }}
+            placeholder="Ej: reemplazar pollo por algo más barato"
             placeholderTextColor="#6B7280"
-            keyboardType="numeric"
-            style={styles.addInput}
+            style={styles.replacementInput}
           />
-          <TouchableOpacity style={styles.addBtn} onPress={addItem}>
-            <MaterialCommunityIcons name="plus" size={18} color="#FFFFFF" />
-            <Text style={styles.addBtnText}>Agregar producto</Text>
-          </TouchableOpacity>
+          {replacementMessage !== '' && <Text style={styles.replacementMessage}>{replacementMessage}</Text>}
+          <Pressable accessibilityRole="button" style={styles.replacementButton} onPress={requestReplacements}>
+            <MaterialCommunityIcons name="creation" size={18} color="#0B0B0B" />
+            <Text style={styles.replacementButtonText}>Solicitar reemplazos</Text>
+          </Pressable>
         </View>
 
       </ScrollView>
@@ -229,35 +201,36 @@ export default function ShoppingListScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: '#0B0B0B',
   },
   content: {
     padding: 20,
-    paddingBottom: 48,
+    paddingBottom: 140,
   },
   header: {
     backgroundColor: 'transparent',
-    marginBottom: 20,
+    marginBottom: 18,
   },
   title: {
     color: '#FFFFFF',
-    fontSize: 30,
-    fontWeight: '800',
+    fontSize: 34,
+    fontWeight: '900',
   },
   subtitle: {
-    color: '#9CA3AF',
-    fontSize: 14,
-    marginTop: 5,
+    color: '#B8B8B8',
+    fontSize: 15,
+    fontWeight: '700',
+    marginTop: 6,
   },
 
   // Resumen
   summaryCard: {
-    backgroundColor: '#111827',
-    borderRadius: 24,
+    backgroundColor: '#171717',
+    borderRadius: 22,
     padding: 18,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#1F2937',
+    borderColor: '#2A2A2A',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -267,50 +240,52 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   summaryLabel: {
-    color: '#9CA3AF',
+    color: '#B8B8B8',
     fontSize: 13,
+    fontWeight: '800',
   },
   summaryTotal: {
     color: '#FFFFFF',
     fontSize: 28,
-    fontWeight: '800',
+    fontWeight: '900',
     marginTop: 3,
   },
   summarySmall: {
-    color: '#9CA3AF',
+    color: '#B8B8B8',
     fontSize: 12,
+    fontWeight: '700',
     marginTop: 3,
   },
   summaryIcon: {
     width: 54,
     height: 54,
     borderRadius: 18,
-    backgroundColor: '#16A34A',
+    backgroundColor: '#22C55E',
     alignItems: 'center',
     justifyContent: 'center',
     marginLeft: 12,
   },
   progressTrack: {
-    height: 4,
-    backgroundColor: '#1F2937',
+    height: 6,
+    backgroundColor: '#2A2A2A',
     borderRadius: 99,
     marginTop: 10,
     width: '80%',
   },
   progressFill: {
-    height: 4,
+    height: 6,
     backgroundColor: '#22C55E',
     borderRadius: 99,
   },
 
   // Búsqueda
   searchContainer: {
-    backgroundColor: '#0F172A',
+    backgroundColor: '#171717',
     borderRadius: 16,
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderWidth: 1,
-    borderColor: '#1F2937',
+    borderColor: '#2A2A2A',
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 18,
@@ -318,7 +293,8 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 15,
+    fontWeight: '700',
     marginLeft: 10,
   },
 
@@ -332,21 +308,22 @@ const styles = StyleSheet.create({
   sectionTitle: {
     color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '900',
   },
   sectionCount: {
-    color: '#9CA3AF',
+    color: '#B8B8B8',
     fontSize: 13,
+    fontWeight: '700',
   },
 
   // Items
   itemCard: {
-    backgroundColor: '#111827',
-    borderRadius: 20,
+    backgroundColor: '#171717',
+    borderRadius: 18,
     padding: 14,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: '#1F2937',
+    borderColor: '#2A2A2A',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
@@ -361,83 +338,117 @@ const styles = StyleSheet.create({
   itemName: {
     color: '#FFFFFF',
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '900',
   },
   itemNameDone: {
-    color: '#9CA3AF',
+    color: '#B8B8B8',
     textDecorationLine: 'line-through',
   },
   itemDetail: {
-    color: '#9CA3AF',
+    color: '#B8B8B8',
     fontSize: 12,
+    fontWeight: '700',
     marginTop: 3,
   },
   priceBox: {
-    backgroundColor: '#1F2937',
+    backgroundColor: '#163321',
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#235D38',
   },
   priceText: {
-    color: '#E5E7EB',
+    color: '#4ADE80',
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '900',
   },
 
   // Empty
   emptyBox: {
-    backgroundColor: '#111827',
-    borderRadius: 20,
+    backgroundColor: '#171717',
+    borderRadius: 18,
     padding: 28,
     borderWidth: 1,
-    borderColor: '#1F2937',
+    borderColor: '#2A2A2A',
     alignItems: 'center',
     marginTop: 8,
   },
   emptyText: {
-    color: '#9CA3AF',
+    color: '#B8B8B8',
     fontSize: 14,
+    fontWeight: '700',
     marginTop: 10,
   },
 
-  // Agregar
-  addCard: {
-    backgroundColor: '#111827',
-    borderRadius: 20,
-    padding: 14,
-    marginTop: 16,
-    borderWidth: 1,
-    borderColor: '#1F2937',
-    gap: 10,
-  },
-  addRow: {
-    flexDirection: 'row',
-    gap: 8,
-    backgroundColor: 'transparent',
-  },
-  addInput: {
-    backgroundColor: '#1F2937',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    color: '#FFFFFF',
-    fontSize: 13,
-  },
-  addInputFlex: {
-    flex: 1,
-  },
-  addBtn: {
-    backgroundColor: '#16A34A',
+  // Reemplazos
+  replacementButton: {
+    backgroundColor: '#FFFFFF',
     borderRadius: 14,
-    paddingVertical: 11,
+    paddingVertical: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
   },
-  addBtnText: {
+  replacementButtonText: {
+    color: '#0B0B0B',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  replacementCard: {
+    backgroundColor: '#171717',
+    borderRadius: 18,
+    padding: 14,
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    gap: 10,
+  },
+  replacementCopy: {
+    flex: 1,
+    gap: 3,
+    backgroundColor: 'transparent',
+  },
+  replacementHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: 'transparent',
+  },
+  replacementIcon: {
+    width: 42,
+    height: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    backgroundColor: '#102017',
+  },
+  replacementInput: {
+    minHeight: 52,
+    backgroundColor: '#101010',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+    paddingHorizontal: 12,
+    paddingVertical: 9,
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '700',
+  },
+  replacementMessage: {
+    color: '#4ADE80',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  replacementSubtitle: {
+    color: '#B8B8B8',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  replacementTitle: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '900',
   },
 });
