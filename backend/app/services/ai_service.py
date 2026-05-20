@@ -11,6 +11,13 @@ load_dotenv()
 client = AsyncOpenAI()
 
 
+NUTRIENT_KEYS = ("energia_kcal", "proteinas_g", "carbohidratos_g", "grasas_totales_g", "sodio_mg")
+
+
+def _nutrientes_en_cero(datos: dict) -> bool:
+    return all(float(datos.get(key) or 0) == 0 for key in NUTRIENT_KEYS)
+
+
 async def obtener_info_nutricional(nombre_producto: str):
     """
     Toma el nombre de un producto y devuelve su perfil nutricional estándar por 100g en JSON.
@@ -34,21 +41,33 @@ async def obtener_info_nutricional(nombre_producto: str):
     }}
     """
 
-    try:
+    async def consultar_nutricion(instrucciones_extra: str = ""):
         response = await client.chat.completions.create(
             model="gpt-4o-mini", # Excelente y barato para extraer datos fijos
             messages=[
-                {"role": "system", "content": instrucciones}
+                {"role": "system", "content": instrucciones + instrucciones_extra}
             ],
             temperature=0.1 # Muy baja para que sea preciso y no "invente" variaciones
         )
-        
-        contenido = response.choices[0].message.content
-        
-        # Convertimos el texto (String) a un diccionario real de Python (JSON)
+        return response.choices[0].message.content
+
+    try:
+        contenido = await consultar_nutricion()
         datos_nutricionales = json.loads(contenido)
+
+        if _nutrientes_en_cero(datos_nutricionales):
+            contenido = await consultar_nutricion(
+                """
+
+                ATENCIÓN: La respuesta anterior quedó con todos los nutrientes en 0.
+                Vuelve a estimar el perfil nutricional estándar del alimento.
+                Solo usa todos los valores en 0 si el producto realmente no es un alimento reconocible.
+                """
+            )
+            datos_nutricionales = json.loads(contenido)
+
         return datos_nutricionales
-        
+
     except json.JSONDecodeError:
         return {"error": "La IA no devolvió un JSON válido", "texto_crudo": contenido}
     except Exception as e:
