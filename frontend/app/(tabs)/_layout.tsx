@@ -33,12 +33,6 @@ export default function TabLayout() {
           title: 'Progreso',
         }}
       />
-      <Tabs.Screen
-        name="perfil"
-        options={{
-          title: 'Perfil',
-        }}
-      />
     </Tabs>
   );
 }

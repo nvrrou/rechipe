@@ -1,5 +1,5 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import {
   Pressable,
@@ -22,6 +22,7 @@ function formatPrice(value: number) {
 }
 
 export default function ShoppingListScreen() {
+  const router = useRouter();
   const [items, setItems]   = useState<ShoppingItem[]>(INITIAL_SHOPPING_ITEMS);
   const [search, setSearch] = useState('');
   const [replacementRequest, setReplacementRequest] = useState('');
@@ -81,14 +82,28 @@ export default function ShoppingListScreen() {
     setReplacementRequest('');
   }
 
+  function goBack() {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+
+    router.replace('/(tabs)');
+  }
+
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
 
         {/* Encabezado */}
         <View style={styles.header}>
-          <Text style={styles.title}>Lista de compras</Text>
-          <Text style={styles.subtitle}>Organiza los productos que necesitas comprar.</Text>
+          <Pressable accessibilityRole="button" onPress={goBack} style={styles.backButton}>
+            <MaterialCommunityIcons name="chevron-left" size={24} color="#123B2A" />
+          </Pressable>
+          <View style={styles.headerCopy}>
+            <Text style={styles.title}>Lista de compras</Text>
+            <Text style={styles.subtitle}>Organiza los productos que necesitas comprar.</Text>
+          </View>
         </View>
 
         {/* Tarjeta resumen */}
@@ -105,18 +120,18 @@ export default function ShoppingListScreen() {
             </View>
           </View>
           <View style={styles.summaryIcon}>
-            <MaterialCommunityIcons name="cart-outline" size={28} color="#FFFFFF" />
+            <MaterialCommunityIcons name="cart-outline" size={28} color="#123B2A" />
           </View>
         </View>
 
         {/* Búsqueda */}
         <View style={styles.searchContainer}>
-          <MaterialCommunityIcons name="magnify" size={20} color="#9CA3AF" />
+          <MaterialCommunityIcons name="magnify" size={20} color="#5F7F6E" />
           <TextInput
             value={search}
             onChangeText={setSearch}
             placeholder="Buscar producto"
-            placeholderTextColor="#6B7280"
+            placeholderTextColor="#6F8C78"
             style={styles.searchInput}
           />
         </View>
@@ -137,7 +152,7 @@ export default function ShoppingListScreen() {
             <MaterialCommunityIcons
               name={item.comprado ? 'check-circle' : 'checkbox-blank-circle-outline'}
               size={26}
-              color={item.comprado ? '#22C55E' : '#9CA3AF'}
+              color={item.comprado ? '#1FA463' : '#5F7F6E'}
             />
 
             <View style={styles.itemInfo}>
@@ -160,7 +175,7 @@ export default function ShoppingListScreen() {
 
         {filteredItems.length === 0 && (
           <View style={styles.emptyBox}>
-            <MaterialCommunityIcons name="basket-off-outline" size={40} color="#6B7280" />
+            <MaterialCommunityIcons name="basket-off-outline" size={40} color="#6F8C78" />
             <Text style={styles.emptyText}>No se encontraron productos.</Text>
           </View>
         )}
@@ -169,7 +184,7 @@ export default function ShoppingListScreen() {
         <View style={styles.replacementCard}>
           <View style={styles.replacementHeader}>
             <View style={styles.replacementIcon}>
-              <MaterialCommunityIcons name="swap-horizontal" size={22} color="#4ADE80" />
+              <MaterialCommunityIcons name="swap-horizontal" size={22} color="#1FA463" />
             </View>
             <View style={styles.replacementCopy}>
               <Text style={styles.replacementTitle}>Solicitar reemplazos</Text>
@@ -183,12 +198,12 @@ export default function ShoppingListScreen() {
               setReplacementMessage('');
             }}
             placeholder="Ej: reemplazar pollo por algo más barato"
-            placeholderTextColor="#6B7280"
+            placeholderTextColor="#6F8C78"
             style={styles.replacementInput}
           />
           {replacementMessage !== '' && <Text style={styles.replacementMessage}>{replacementMessage}</Text>}
           <Pressable accessibilityRole="button" style={styles.replacementButton} onPress={requestReplacements}>
-            <MaterialCommunityIcons name="creation" size={18} color="#0B0B0B" />
+            <MaterialCommunityIcons name="creation" size={18} color="#FFFFFF" />
             <Text style={styles.replacementButtonText}>Solicitar reemplazos</Text>
           </Pressable>
         </View>
@@ -201,23 +216,44 @@ export default function ShoppingListScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0B0B0B',
+    backgroundColor: '#FFFFFF',
   },
   content: {
-    padding: 20,
+    paddingHorizontal: 20,
+    paddingTop: 54,
     paddingBottom: 140,
   },
+  backButton: {
+    width: 42,
+    height: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    backgroundColor: '#F4FBF5',
+    shadowColor: '#FFFFFF',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.24,
+    shadowRadius: 14,
+    elevation: 2,
+  },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
     backgroundColor: 'transparent',
     marginBottom: 18,
   },
+  headerCopy: {
+    flex: 1,
+    backgroundColor: 'transparent',
+  },
   title: {
-    color: '#FFFFFF',
+    color: '#123B2A',
     fontSize: 34,
     fontWeight: '900',
   },
   subtitle: {
-    color: '#B8B8B8',
+    color: '#5F7F6E',
     fontSize: 15,
     fontWeight: '700',
     marginTop: 6,
@@ -225,12 +261,12 @@ const styles = StyleSheet.create({
 
   // Resumen
   summaryCard: {
-    backgroundColor: '#171717',
+    backgroundColor: '#F4FBF5',
     borderRadius: 22,
     padding: 18,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#2A2A2A',
+    borderColor: '#CDE8D5',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -240,18 +276,18 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   summaryLabel: {
-    color: '#B8B8B8',
+    color: '#5F7F6E',
     fontSize: 13,
     fontWeight: '800',
   },
   summaryTotal: {
-    color: '#FFFFFF',
+    color: '#123B2A',
     fontSize: 28,
     fontWeight: '900',
     marginTop: 3,
   },
   summarySmall: {
-    color: '#B8B8B8',
+    color: '#5F7F6E',
     fontSize: 12,
     fontWeight: '700',
     marginTop: 3,
@@ -260,39 +296,39 @@ const styles = StyleSheet.create({
     width: 54,
     height: 54,
     borderRadius: 18,
-    backgroundColor: '#22C55E',
+    backgroundColor: '#1FA463',
     alignItems: 'center',
     justifyContent: 'center',
     marginLeft: 12,
   },
   progressTrack: {
     height: 6,
-    backgroundColor: '#2A2A2A',
+    backgroundColor: '#CDE8D5',
     borderRadius: 99,
     marginTop: 10,
     width: '80%',
   },
   progressFill: {
     height: 6,
-    backgroundColor: '#22C55E',
+    backgroundColor: '#1FA463',
     borderRadius: 99,
   },
 
   // Búsqueda
   searchContainer: {
-    backgroundColor: '#171717',
+    backgroundColor: '#F4FBF5',
     borderRadius: 16,
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderWidth: 1,
-    borderColor: '#2A2A2A',
+    borderColor: '#CDE8D5',
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 18,
   },
   searchInput: {
     flex: 1,
-    color: '#FFFFFF',
+    color: '#123B2A',
     fontSize: 15,
     fontWeight: '700',
     marginLeft: 10,
@@ -306,24 +342,24 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   sectionTitle: {
-    color: '#FFFFFF',
+    color: '#123B2A',
     fontSize: 16,
     fontWeight: '900',
   },
   sectionCount: {
-    color: '#B8B8B8',
+    color: '#5F7F6E',
     fontSize: 13,
     fontWeight: '700',
   },
 
   // Items
   itemCard: {
-    backgroundColor: '#171717',
+    backgroundColor: '#F4FBF5',
     borderRadius: 18,
     padding: 14,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: '#2A2A2A',
+    borderColor: '#CDE8D5',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
@@ -336,46 +372,46 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   itemName: {
-    color: '#FFFFFF',
+    color: '#123B2A',
     fontSize: 15,
     fontWeight: '900',
   },
   itemNameDone: {
-    color: '#B8B8B8',
+    color: '#5F7F6E',
     textDecorationLine: 'line-through',
   },
   itemDetail: {
-    color: '#B8B8B8',
+    color: '#5F7F6E',
     fontSize: 12,
     fontWeight: '700',
     marginTop: 3,
   },
   priceBox: {
-    backgroundColor: '#163321',
+    backgroundColor: '#E7F7EC',
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#235D38',
+    borderColor: '#A9DDB8',
   },
   priceText: {
-    color: '#4ADE80',
+    color: '#1FA463',
     fontSize: 12,
     fontWeight: '900',
   },
 
   // Empty
   emptyBox: {
-    backgroundColor: '#171717',
+    backgroundColor: '#F4FBF5',
     borderRadius: 18,
     padding: 28,
     borderWidth: 1,
-    borderColor: '#2A2A2A',
+    borderColor: '#CDE8D5',
     alignItems: 'center',
     marginTop: 8,
   },
   emptyText: {
-    color: '#B8B8B8',
+    color: '#5F7F6E',
     fontSize: 14,
     fontWeight: '700',
     marginTop: 10,
@@ -383,26 +419,31 @@ const styles = StyleSheet.create({
 
   // Reemplazos
   replacementButton: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#1FA463',
     borderRadius: 14,
     paddingVertical: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
+    shadowColor: '#1FA463',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.22,
+    shadowRadius: 14,
+    elevation: 3,
   },
   replacementButtonText: {
-    color: '#0B0B0B',
+    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '900',
   },
   replacementCard: {
-    backgroundColor: '#171717',
+    backgroundColor: '#F4FBF5',
     borderRadius: 18,
     padding: 14,
     marginTop: 16,
     borderWidth: 1,
-    borderColor: '#2A2A2A',
+    borderColor: '#CDE8D5',
     gap: 10,
   },
   replacementCopy: {
@@ -422,32 +463,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 14,
-    backgroundColor: '#102017',
+    backgroundColor: '#E7F7EC',
   },
   replacementInput: {
     minHeight: 52,
-    backgroundColor: '#101010',
+    backgroundColor: '#EAF7EE',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#2A2A2A',
+    borderColor: '#CDE8D5',
     paddingHorizontal: 12,
     paddingVertical: 9,
-    color: '#FFFFFF',
+    color: '#123B2A',
     fontSize: 14,
     fontWeight: '700',
   },
   replacementMessage: {
-    color: '#4ADE80',
+    color: '#1FA463',
     fontSize: 13,
     fontWeight: '800',
   },
   replacementSubtitle: {
-    color: '#B8B8B8',
+    color: '#5F7F6E',
     fontSize: 13,
     fontWeight: '700',
   },
   replacementTitle: {
-    color: '#FFFFFF',
+    color: '#123B2A',
     fontSize: 14,
     fontWeight: '900',
   },

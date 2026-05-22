@@ -29,12 +29,12 @@ type PurchaseSuggestion = {
 };
 
 const MEAL_TYPES: MealType[] = [
-  { id: 'Desayuno', label: 'Desayuno', icon: 'coffee-outline', color: '#F97316' },
-  { id: 'Almuerzo', label: 'Almuerzo', icon: 'silverware-fork-knife', color: '#16A34A' },
-  { id: 'Cena', label: 'Cena', icon: 'food-turkey', color: '#2563EB' },
-  { id: 'Snack', label: 'Snack', icon: 'food-apple-outline', color: '#DC2626' },
-  { id: 'Postre', label: 'Postre', icon: 'cupcake', color: '#C026D3' },
-  { id: 'Meal prep', label: 'Meal prep', icon: 'calendar-clock', color: '#0891B2' },
+  { id: 'Desayuno', label: 'Desayuno', icon: 'coffee-outline', color: '#1FA463' },
+  { id: 'Almuerzo', label: 'Almuerzo', icon: 'silverware-fork-knife', color: '#168A50' },
+  { id: 'Cena', label: 'Cena', icon: 'food-turkey', color: '#36B779' },
+  { id: 'Snack', label: 'Snack', icon: 'food-apple-outline', color: '#45B883' },
+  { id: 'Postre', label: 'Postre', icon: 'cupcake', color: '#69DFA5' },
+  { id: 'Meal prep', label: 'Meal prep', icon: 'calendar-clock', color: '#4ECFA1' },
 ];
 
 const QUICK_OBJECTIVES = ['Alto en proteínas', 'Bajo en calorías', 'Barato', 'Rápido', 'Sin azúcar', 'Equilibrado'];
@@ -328,22 +328,15 @@ export default function RecipeScreen() {
       )
     );
     setError('');
-    router.push('/(tabs)/lista');
+    router.push('/(navbarnt)/lista');
   }
 
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <View style={styles.hero}>
-          <View style={styles.titleRow}>
-            <View style={styles.heroIcon}>
-              <MaterialCommunityIcons name="chef-hat" size={28} color="#FFFFFF" />
-            </View>
-            <View style={styles.titleCopy}>
-              <Text style={styles.title}>Generar receta</Text>
-              <Text style={styles.subtitle}>Elige el tipo de comida y, si quieres, ingredientes que deben aparecer sí o sí.</Text>
-            </View>
-          </View>
+          <Text style={styles.title}>Generar receta</Text>
+          <Text style={styles.subtitle}>Elige el tipo de comida y, si quieres, ingredientes que deben aparecer sí o sí.</Text>
         </View>
 
         <View style={styles.modeSwitch}>
@@ -354,7 +347,7 @@ export default function RecipeScreen() {
             <MaterialCommunityIcons
               name="fridge-outline"
               size={18}
-              color={recipeMode === 'despensa' ? '#0B0B0B' : '#B8B8B8'}
+              color={recipeMode === 'despensa' ? '#FFFFFF' : '#5F7F6E'}
             />
             <Text style={[styles.modeButtonText, recipeMode === 'despensa' && styles.modeButtonTextActive]}>
               Desde la despensa
@@ -367,7 +360,7 @@ export default function RecipeScreen() {
             <MaterialCommunityIcons
               name="cash-multiple"
               size={18}
-              color={recipeMode === 'presupuesto' ? '#0B0B0B' : '#B8B8B8'}
+              color={recipeMode === 'presupuesto' ? '#FFFFFF' : '#5F7F6E'}
             />
             <Text style={[styles.modeButtonText, recipeMode === 'presupuesto' && styles.modeButtonTextActive]}>
               Presupuestada
@@ -380,7 +373,7 @@ export default function RecipeScreen() {
             <View style={styles.detailPanel}>
               <View style={styles.panelHeader}>
                 <View style={styles.panelIcon}>
-                  <MaterialCommunityIcons name="silverware" size={22} color="#FFFFFF" />
+                  <MaterialCommunityIcons name="silverware" size={22} color="#123B2A" />
                 </View>
                 <View style={styles.panelCopy}>
                   <Text style={styles.panelTitle}>Tipo de comida</Text>
@@ -399,7 +392,7 @@ export default function RecipeScreen() {
                     </View>
                     <Text style={styles.mealDropdownText}>{selectedMealType.label}</Text>
                   </View>
-                  <MaterialCommunityIcons name={mealDropdownOpen ? 'chevron-up' : 'chevron-down'} size={22} color="#FFFFFF" />
+                  <MaterialCommunityIcons name={mealDropdownOpen ? 'chevron-up' : 'chevron-down'} size={22} color="#123B2A" />
                 </Pressable>
 
                 {mealDropdownOpen && (
@@ -430,7 +423,7 @@ export default function RecipeScreen() {
             <View style={styles.detailPanel}>
               <View style={styles.panelHeader}>
                 <View style={styles.panelIcon}>
-                  <MaterialCommunityIcons name="target" size={22} color="#FFFFFF" />
+                  <MaterialCommunityIcons name="target" size={22} color="#123B2A" />
                 </View>
                 <View style={styles.panelCopy}>
                   <Text style={styles.panelTitle}>Objetivo</Text>
@@ -453,7 +446,7 @@ export default function RecipeScreen() {
               <TextInput
                 onChangeText={setObjective}
                 placeholder="O escribe algo más específico..."
-                placeholderTextColor="#6B7280"
+                placeholderTextColor="#6F8C78"
                 style={styles.textInput}
                 value={objective}
               />
@@ -462,7 +455,7 @@ export default function RecipeScreen() {
             <View style={styles.detailPanel}>
               <View style={styles.panelHeader}>
                 <View style={styles.panelIcon}>
-                  <MaterialCommunityIcons name="fridge-outline" size={22} color="#FFFFFF" />
+                  <MaterialCommunityIcons name="fridge-outline" size={22} color="#123B2A" />
                 </View>
                 <View style={styles.panelCopy}>
                   <Text style={styles.panelTitle}>Ingredientes opcionales</Text>
@@ -474,18 +467,18 @@ export default function RecipeScreen() {
                 </View>
                 {selectedIngredients.length > 0 && (
                   <Pressable accessibilityRole="button" onPress={clearSelection} style={styles.clearButton}>
-                    <MaterialCommunityIcons name="close" size={20} color="#FFFFFF" />
+                    <MaterialCommunityIcons name="close" size={20} color="#123B2A" />
                   </Pressable>
                 )}
               </View>
 
               <View style={styles.searchBar}>
-                <MaterialCommunityIcons name="magnify" size={22} color="#9CA3AF" />
+                <MaterialCommunityIcons name="magnify" size={22} color="#5F7F6E" />
                 <TextInput
                   onChangeText={setSearchQuery}
                   onFocus={loadDespensa}
                   placeholder="Buscar ingredientes de tu refri..."
-                  placeholderTextColor="#9CA3AF"
+                  placeholderTextColor="#5F7F6E"
                   style={styles.searchInput}
                   value={searchQuery}
                 />
@@ -493,11 +486,11 @@ export default function RecipeScreen() {
 
               {loadingItems ? (
                 <View style={styles.emptyState}>
-                  <ActivityIndicator size="large" color="#FFFFFF" />
+                  <ActivityIndicator size="large" color="#123B2A" />
                 </View>
               ) : filteredItems.length === 0 ? (
                 <View style={styles.emptyState}>
-                  <MaterialCommunityIcons name="food-off" size={40} color="#555" />
+                  <MaterialCommunityIcons name="food-off" size={40} color="#789684" />
                   <Text style={styles.emptyText}>No hay ingredientes para seleccionar</Text>
                 </View>
               ) : (
@@ -515,7 +508,7 @@ export default function RecipeScreen() {
                         onPress={() => toggleIngredient(item.id)}
                         style={[styles.ingredientRow, isSelected && styles.ingredientRowSelected]}>
                         <View style={[styles.checkBox, isSelected && styles.checkBoxSelected]}>
-                          {isSelected && <MaterialCommunityIcons name="check" size={17} color="#0B0B0B" />}
+                          {isSelected && <MaterialCommunityIcons name="check" size={17} color="#FFFFFF" />}
                         </View>
                         <View style={styles.ingredientCopy}>
                           <Text style={styles.ingredientTitle}>{item.nombre_producto}</Text>
@@ -533,7 +526,7 @@ export default function RecipeScreen() {
           <View style={styles.detailPanel}>
             <View style={styles.panelHeader}>
               <View style={styles.panelIcon}>
-                <MaterialCommunityIcons name="cash-multiple" size={22} color="#FFFFFF" />
+                <MaterialCommunityIcons name="cash-multiple" size={22} color="#123B2A" />
               </View>
               <View style={styles.panelCopy}>
                 <Text style={styles.panelTitle}>Receta presupuestada</Text>
@@ -548,13 +541,13 @@ export default function RecipeScreen() {
                   keyboardType="numeric"
                   onChangeText={setBudgetInput}
                   placeholder="Ej: 12000"
-                  placeholderTextColor="#6B7280"
+                  placeholderTextColor="#6F8C78"
                   style={styles.budgetInput}
                   value={budgetInput}
                 />
               </View>
               <Pressable accessibilityRole="button" onPress={buildPurchaseSuggestions} style={styles.budgetGenerateButton}>
-                <MaterialCommunityIcons name="lightbulb-on-outline" size={20} color="#0B0B0B" />
+                <MaterialCommunityIcons name="lightbulb-on-outline" size={20} color="#FFFFFF" />
               </Pressable>
             </View>
 
@@ -565,7 +558,7 @@ export default function RecipeScreen() {
 
             {purchaseSuggestions.length === 0 ? (
               <View style={styles.budgetBox}>
-                <MaterialCommunityIcons name="cart-plus" size={38} color="#4ADE80" />
+                <MaterialCommunityIcons name="cart-plus" size={38} color="#1FA463" />
                 <Text style={styles.budgetTitle}>Genera opciones de compra</Text>
                 <Text style={styles.budgetText}>
                   Te sugeriré productos que complementan lo que ya tienes, respetando el presupuesto ingresado.
@@ -587,7 +580,7 @@ export default function RecipeScreen() {
                       onPress={() => togglePurchaseSuggestion(item.id)}
                       style={[styles.purchaseRow, isSelected && styles.purchaseRowSelected]}>
                       <View style={[styles.checkBox, isSelected && styles.checkBoxSelected]}>
-                        {isSelected && <MaterialCommunityIcons name="check" size={17} color="#0B0B0B" />}
+                        {isSelected && <MaterialCommunityIcons name="check" size={17} color="#FFFFFF" />}
                       </View>
                       <View style={styles.ingredientCopy}>
                         <Text style={styles.ingredientTitle}>{item.nombre}</Text>
@@ -599,10 +592,10 @@ export default function RecipeScreen() {
                 })}
 
                 <Pressable accessibilityRole="button" onPress={addSuggestionsToShoppingList} style={styles.budgetLink}>
-                  <MaterialCommunityIcons name="cart-arrow-right" size={20} color="#0B0B0B" />
+                  <MaterialCommunityIcons name="cart-arrow-right" size={20} color="#FFFFFF" />
                   <Text style={styles.budgetLinkText}>Mandar a lista de compras</Text>
                 </Pressable>
-                <Pressable accessibilityRole="button" onPress={() => router.push('/(tabs)/lista')} style={styles.listGhostLink}>
+                <Pressable accessibilityRole="button" onPress={() => router.push('/(navbarnt)/lista')} style={styles.listGhostLink}>
                   <Text style={styles.listGhostLinkText}>Ver lista actual</Text>
                 </Pressable>
               </View>
@@ -612,7 +605,7 @@ export default function RecipeScreen() {
 
         {error !== '' && (
           <View style={styles.errorPanel}>
-            <MaterialCommunityIcons name="alert-circle-outline" size={20} color="#f87171" />
+            <MaterialCommunityIcons name="alert-circle-outline" size={20} color="#FF8A8A" />
             <Text style={styles.errorText}>{error}</Text>
           </View>
         )}
@@ -620,10 +613,10 @@ export default function RecipeScreen() {
         {recipeMode === 'despensa' && (
           <Pressable accessibilityRole="button" disabled={generating} onPress={handleGenerate} style={styles.generateButton}>
             {generating ? (
-              <ActivityIndicator size="small" color="#0B0B0B" />
+              <ActivityIndicator size="small" color="#FFFFFF" />
             ) : (
               <>
-                <MaterialCommunityIcons name="creation" size={22} color="#0B0B0B" />
+                <MaterialCommunityIcons name="creation" size={22} color="#FFFFFF" />
                 <Text style={styles.generateButtonText}>Generar recetas</Text>
               </>
             )}
@@ -703,8 +696,8 @@ const styles = StyleSheet.create({
     padding: 18,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#235D38',
-    backgroundColor: '#102017',
+    borderColor: '#A9DDB8',
+    backgroundColor: '#E7F7EC',
   },
   budgetContext: {
     flexDirection: 'row',
@@ -713,13 +706,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   budgetContextText: {
-    color: '#B8B8B8',
+    color: '#5F7F6E',
     fontSize: 12,
     fontWeight: '800',
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
-    backgroundColor: '#2A2A2A',
+    backgroundColor: '#CDE8D5',
     overflow: 'hidden',
   },
   budgetGenerateButton: {
@@ -728,10 +721,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 18,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#1FA463',
+    shadowColor: '#1FA463',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.24,
+    shadowRadius: 14,
+    elevation: 3,
   },
   budgetInput: {
-    color: '#FFFFFF',
+    color: '#123B2A',
     fontSize: 24,
     fontWeight: '900',
     padding: 0,
@@ -743,8 +741,8 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#2A2A2A',
-    backgroundColor: '#101010',
+    borderColor: '#CDE8D5',
+    backgroundColor: '#EAF7EE',
   },
   budgetInputRow: {
     flexDirection: 'row',
@@ -753,7 +751,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   budgetLabel: {
-    color: '#B8B8B8',
+    color: '#5F7F6E',
     fontSize: 12,
     fontWeight: '800',
   },
@@ -765,22 +763,27 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 16,
     borderRadius: 16,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#1FA463',
+    shadowColor: '#1FA463',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.24,
+    shadowRadius: 14,
+    elevation: 3,
   },
   budgetLinkText: {
-    color: '#0B0B0B',
+    color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '900',
   },
   budgetText: {
-    color: '#BBF7D0',
+    color: '#2F6B45',
     fontSize: 14,
     fontWeight: '700',
     lineHeight: 20,
     textAlign: 'center',
   },
   budgetTitle: {
-    color: '#FFFFFF',
+    color: '#123B2A',
     fontSize: 18,
     fontWeight: '900',
     textAlign: 'center',
@@ -793,11 +796,11 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderColor: '#3A3A3A',
-    backgroundColor: '#101010',
+    backgroundColor: '#EAF7EE',
   },
   checkBoxSelected: {
-    borderColor: '#FFFFFF',
-    backgroundColor: '#FFFFFF',
+    borderColor: '#1FA463',
+    backgroundColor: '#1FA463',
   },
   clearButton: {
     width: 38,
@@ -805,11 +808,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 14,
-    backgroundColor: '#2A2A2A',
+    backgroundColor: '#CDE8D5',
   },
   container: {
     flex: 1,
-    backgroundColor: '#0B0B0B',
+    backgroundColor: '#FFFFFF',
   },
   content: {
     gap: 18,
@@ -822,9 +825,9 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 22,
     borderWidth: 1,
-    borderColor: '#2A2A2A',
-    backgroundColor: '#171717',
-    shadowColor: '#000000',
+    borderColor: '#CDE8D5',
+    backgroundColor: '#F4FBF5',
+    shadowColor: '#FFFFFF',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.3,
     shadowRadius: 24,
@@ -842,7 +845,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   emptyText: {
-    color: '#888',
+    color: '#5F7F6E',
     fontSize: 15,
     textAlign: 'center',
   },
@@ -854,12 +857,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#7F1D1D',
-    backgroundColor: '#241313',
+    borderColor: '#8D2B3D',
+    backgroundColor: '#351928',
   },
   errorText: {
     flex: 1,
-    color: '#f87171',
+    color: '#FF8A8A',
     fontSize: 13,
     fontWeight: '800',
   },
@@ -870,33 +873,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 9,
     borderRadius: 18,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#1FA463',
+    shadowColor: '#1FA463',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.24,
+    shadowRadius: 14,
+    elevation: 3,
   },
   generateButtonText: {
-    color: '#0B0B0B',
+    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '900',
   },
   hero: {
     gap: 14,
-    padding: 22,
-    borderRadius: 26,
-    backgroundColor: '#171717',
-    borderWidth: 1,
-    borderColor: '#2A2A2A',
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: 0.28,
-    shadowRadius: 28,
-    elevation: 2,
-  },
-  heroIcon: {
-    width: 54,
-    height: 54,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 18,
-    backgroundColor: '#2A2A2A',
+    paddingVertical: 4,
+    backgroundColor: 'transparent',
   },
   ingredientCopy: {
     flex: 1,
@@ -915,34 +907,34 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#2A2A2A',
-    backgroundColor: '#101010',
+    borderColor: '#CDE8D5',
+    backgroundColor: '#EAF7EE',
   },
   ingredientRowSelected: {
-    borderColor: '#FFFFFF',
-    backgroundColor: '#232323',
+    borderColor: '#1FA463',
+    backgroundColor: '#DFF2E6',
   },
   ingredientScroller: {
     maxHeight: 224,
   },
   ingredientSubtitle: {
-    color: '#B8B8B8',
+    color: '#5F7F6E',
     fontSize: 13,
     fontWeight: '700',
   },
   ingredientTitle: {
-    color: '#FFFFFF',
+    color: '#123B2A',
     fontSize: 15,
     fontWeight: '900',
   },
   macroPill: {
-    color: '#FFFFFF',
+    color: '#123B2A',
     fontSize: 11,
     fontWeight: '800',
     paddingHorizontal: 8,
     paddingVertical: 5,
     borderRadius: 999,
-    backgroundColor: '#2A2A2A',
+    backgroundColor: '#CDE8D5',
     overflow: 'hidden',
   },
   macroRow: {
@@ -959,8 +951,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#2A2A2A',
-    backgroundColor: '#101010',
+    borderColor: '#CDE8D5',
+    backgroundColor: '#EAF7EE',
   },
   mealDropdownLeft: {
     flexDirection: 'row',
@@ -973,8 +965,8 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#2A2A2A',
-    backgroundColor: '#101010',
+    borderColor: '#CDE8D5',
+    backgroundColor: '#EAF7EE',
   },
   mealDropdownOption: {
     minHeight: 44,
@@ -986,15 +978,15 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   mealDropdownOptionSelected: {
-    backgroundColor: '#2A2A2A',
+    backgroundColor: '#CDE8D5',
   },
   mealDropdownOptionText: {
-    color: '#FFFFFF',
+    color: '#123B2A',
     fontSize: 14,
     fontWeight: '800',
   },
   mealDropdownText: {
-    color: '#FFFFFF',
+    color: '#123B2A',
     fontSize: 15,
     fontWeight: '900',
   },
@@ -1018,11 +1010,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#2A2A2A',
-    backgroundColor: '#101010',
+    borderColor: '#CDE8D5',
+    backgroundColor: '#EAF7EE',
   },
   listGhostLinkText: {
-    color: '#FFFFFF',
+    color: '#123B2A',
     fontSize: 14,
     fontWeight: '900',
   },
@@ -1038,15 +1030,15 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   modeButtonActive: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#1FA463',
   },
   modeButtonText: {
-    color: '#B8B8B8',
+    color: '#5F7F6E',
     fontSize: 13,
     fontWeight: '900',
   },
   modeButtonTextActive: {
-    color: '#0B0B0B',
+    color: '#FFFFFF',
   },
   modeSwitch: {
     flexDirection: 'row',
@@ -1054,8 +1046,8 @@ const styles = StyleSheet.create({
     padding: 6,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#2A2A2A',
-    backgroundColor: '#171717',
+    borderColor: '#CDE8D5',
+    backgroundColor: '#F4FBF5',
   },
   objectiveChip: {
     minHeight: 40,
@@ -1063,20 +1055,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 13,
     borderWidth: 1,
-    borderColor: '#2A2A2A',
-    backgroundColor: '#101010',
+    borderColor: '#CDE8D5',
+    backgroundColor: '#EAF7EE',
   },
   objectiveChipSelected: {
-    borderColor: '#FFFFFF',
-    backgroundColor: '#2A2A2A',
+    borderColor: '#1FA463',
+    backgroundColor: '#CDE8D5',
   },
   objectiveChipText: {
-    color: '#B8B8B8',
+    color: '#5F7F6E',
     fontSize: 13,
     fontWeight: '800',
   },
   objectiveChipTextSelected: {
-    color: '#FFFFFF',
+    color: '#123B2A',
   },
   objectiveRow: {
     flexDirection: 'row',
@@ -1101,28 +1093,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 16,
-    backgroundColor: '#2A2A2A',
+    backgroundColor: '#CDE8D5',
   },
   panelSubtitle: {
-    color: '#B8B8B8',
+    color: '#5F7F6E',
     fontSize: 14,
     fontWeight: '600',
   },
   panelTitle: {
-    color: '#FFFFFF',
+    color: '#123B2A',
     fontSize: 18,
     fontWeight: '900',
   },
   pricePill: {
-    color: '#4ADE80',
+    color: '#1FA463',
     fontSize: 11,
     fontWeight: '900',
     paddingHorizontal: 8,
     paddingVertical: 5,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#235D38',
-    backgroundColor: '#163321',
+    borderColor: '#A9DDB8',
+    backgroundColor: '#E7F7EC',
     overflow: 'hidden',
   },
   purchaseList: {
@@ -1137,20 +1129,20 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#2A2A2A',
-    backgroundColor: '#101010',
+    borderColor: '#CDE8D5',
+    backgroundColor: '#EAF7EE',
   },
   purchaseRowSelected: {
-    borderColor: '#235D38',
-    backgroundColor: '#102017',
+    borderColor: '#A9DDB8',
+    backgroundColor: '#E7F7EC',
   },
   recipeCard: {
     gap: 14,
     padding: 16,
     borderRadius: 22,
     borderWidth: 1,
-    borderColor: '#2A2A2A',
-    backgroundColor: '#171717',
+    borderColor: '#CDE8D5',
+    backgroundColor: '#F4FBF5',
   },
   recipeHeader: {
     flexDirection: 'row',
@@ -1163,13 +1155,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   recipeLine: {
-    color: '#D1D5DB',
+    color: '#355E45',
     fontSize: 14,
     fontWeight: '600',
     lineHeight: 20,
   },
   recipeMeta: {
-    color: '#B8B8B8',
+    color: '#5F7F6E',
     fontSize: 13,
     fontWeight: '700',
   },
@@ -1179,10 +1171,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 14,
-    backgroundColor: '#2A2A2A',
+    backgroundColor: '#CDE8D5',
   },
   recipeNumberText: {
-    color: '#FFFFFF',
+    color: '#123B2A',
     fontSize: 15,
     fontWeight: '900',
   },
@@ -1191,12 +1183,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   recipeSectionTitle: {
-    color: '#FFFFFF',
+    color: '#123B2A',
     fontSize: 15,
     fontWeight: '900',
   },
   recipeTitle: {
-    color: '#FFFFFF',
+    color: '#123B2A',
     fontSize: 19,
     fontWeight: '900',
   },
@@ -1212,13 +1204,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#2A2A2A',
-    backgroundColor: '#101010',
+    borderColor: '#CDE8D5',
+    backgroundColor: '#EAF7EE',
   },
   searchInput: {
     flex: 1,
     minWidth: 0,
-    color: '#FFFFFF',
+    color: '#123B2A',
     fontSize: 15,
     fontWeight: '800',
     paddingVertical: 12,
@@ -1230,58 +1222,47 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   sectionMeta: {
-    color: '#B8B8B8',
+    color: '#5F7F6E',
     fontSize: 13,
     fontWeight: '800',
   },
   sectionTitle: {
-    color: '#FFFFFF',
+    color: '#123B2A',
     fontSize: 18,
     fontWeight: '900',
   },
   subtitle: {
-    color: '#B8B8B8',
+    color: '#5F7F6E',
     fontSize: 15,
     fontWeight: '700',
     lineHeight: 21,
   },
   textInput: {
     minHeight: 54,
-    color: '#FFFFFF',
+    color: '#123B2A',
     fontSize: 15,
     fontWeight: '800',
     paddingHorizontal: 14,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#2A2A2A',
-    backgroundColor: '#101010',
+    borderColor: '#CDE8D5',
+    backgroundColor: '#EAF7EE',
   },
   title: {
-    color: '#FFFFFF',
+    color: '#123B2A',
     fontSize: 34,
     fontWeight: '900',
     lineHeight: 38,
   },
-  titleCopy: {
-    flex: 1,
-    gap: 5,
-    backgroundColor: 'transparent',
-  },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: 'transparent',
-  },
   whyBox: {
     padding: 12,
     borderRadius: 16,
-    backgroundColor: '#102017',
+    backgroundColor: '#E7F7EC',
     borderWidth: 1,
-    borderColor: '#235D38',
+    borderColor: '#A9DDB8',
   },
   whyText: {
-    color: '#BBF7D0',
+    color: '#2F6B45',
     fontSize: 13,
     fontWeight: '700',
     lineHeight: 19,

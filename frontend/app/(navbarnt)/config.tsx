@@ -13,7 +13,7 @@ export default function ConfigScreen() {
         <View style={styles.hero}>
           <View style={styles.titleRow}>
             <Pressable accessibilityRole="button" onPress={() => router.back()} style={styles.backButton}>
-              <MaterialCommunityIcons name="chevron-left" size={24} color="#FFFFFF" />
+              <MaterialCommunityIcons name="chevron-left" size={24} color="#123B2A" />
             </Pressable>
             <View style={styles.titleCopy}>
               <Text style={styles.title}>Configuracion</Text>
@@ -23,7 +23,7 @@ export default function ConfigScreen() {
         </View>
 
         <View style={styles.panel}>
-          <MaterialCommunityIcons name="cog-outline" size={34} color="#9CA3AF" />
+          <MaterialCommunityIcons name="cog-outline" size={34} color="#5F7F6E" />
           <Text style={styles.emptyTitle}>Sin ajustes por ahora</Text>
           <Text style={styles.emptyText}>Aqui podemos agregar opciones cuando las necesites.</Text>
         </View>
@@ -39,32 +39,34 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 14,
-    backgroundColor: '#2A2A2A',
+    backgroundColor: '#F4FBF5',
+    shadowColor: '#FFFFFF',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.24,
+    shadowRadius: 14,
+    elevation: 2,
   },
   container: {
     flex: 1,
     gap: 18,
     paddingHorizontal: 20,
     paddingTop: 54,
-    backgroundColor: '#0B0B0B',
+    backgroundColor: '#FFFFFF',
   },
   emptyText: {
-    color: '#888',
+    color: '#5F7F6E',
     fontSize: 15,
     textAlign: 'center',
   },
   emptyTitle: {
-    color: '#FFFFFF',
+    color: '#123B2A',
     fontSize: 18,
     fontWeight: '900',
   },
   hero: {
     gap: 14,
-    padding: 22,
-    borderRadius: 26,
-    backgroundColor: '#171717',
-    borderWidth: 1,
-    borderColor: '#2A2A2A',
+    paddingVertical: 4,
+    backgroundColor: 'transparent',
   },
   panel: {
     alignItems: 'center',
@@ -73,21 +75,21 @@ const styles = StyleSheet.create({
     padding: 24,
     borderRadius: 22,
     borderWidth: 1,
-    borderColor: '#2A2A2A',
-    backgroundColor: '#171717',
+    borderColor: '#CDE8D5',
+    backgroundColor: '#F4FBF5',
   },
   safeArea: {
     flex: 1,
-    backgroundColor: '#0B0B0B',
+    backgroundColor: '#FFFFFF',
   },
   subtitle: {
-    color: '#B8B8B8',
+    color: '#5F7F6E',
     fontSize: 15,
     fontWeight: '700',
     lineHeight: 21,
   },
   title: {
-    color: '#FFFFFF',
+    color: '#123B2A',
     fontSize: 32,
     fontWeight: '900',
     lineHeight: 36,
