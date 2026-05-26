@@ -23,7 +23,7 @@ export default function TabOneScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FBFFF8',
   },
   content: {
     flex: 1,
@@ -31,7 +31,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 54,
     paddingBottom: 130,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FBFFF8',
   },
   hero: {
     gap: 14,
@@ -46,30 +46,30 @@ const styles = StyleSheet.create({
     padding: 22,
     borderRadius: 22,
     borderWidth: 1,
-    borderColor: '#CDE8D5',
-    backgroundColor: '#F4FBF5',
+    borderColor: '#9FE7B9',
+    backgroundColor: '#E9FBEF',
   },
   panelText: {
     maxWidth: 260,
-    color: '#5F7F6E',
+    color: '#2F7A4F',
     fontSize: 15,
     fontWeight: '700',
     lineHeight: 21,
     textAlign: 'center',
   },
   panelTitle: {
-    color: '#123B2A',
+    color: '#064E2F',
     fontSize: 20,
     fontWeight: '900',
     textAlign: 'center',
   },
   subtitle: {
-    color: '#5F7F6E',
+    color: '#2F7A4F',
     fontSize: 15,
     fontWeight: '700',
   },
   title: {
-    color: '#123B2A',
+    color: '#064E2F',
     fontSize: 34,
     fontWeight: '900',
     lineHeight: 38,

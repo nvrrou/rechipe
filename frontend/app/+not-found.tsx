@@ -24,10 +24,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 20,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FBFFF8',
   },
   title: {
-    color: '#123B2A',
+    color: '#064E2F',
     fontSize: 24,
     fontWeight: '900',
   },
@@ -37,7 +37,7 @@ const styles = StyleSheet.create({
   },
   linkText: {
     fontSize: 14,
-    color: '#1FA463',
+    color: '#00B86B',
     fontWeight: '900',
   },
 });

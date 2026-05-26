@@ -98,7 +98,7 @@ export default function ShoppingListScreen() {
         {/* Encabezado */}
         <View style={styles.header}>
           <Pressable accessibilityRole="button" onPress={goBack} style={styles.backButton}>
-            <MaterialCommunityIcons name="chevron-left" size={24} color="#123B2A" />
+            <MaterialCommunityIcons name="chevron-left" size={24} color="#064E2F" />
           </Pressable>
           <View style={styles.headerCopy}>
             <Text style={styles.title}>Lista de compras</Text>
@@ -120,18 +120,18 @@ export default function ShoppingListScreen() {
             </View>
           </View>
           <View style={styles.summaryIcon}>
-            <MaterialCommunityIcons name="cart-outline" size={28} color="#123B2A" />
+            <MaterialCommunityIcons name="cart-outline" size={28} color="#064E2F" />
           </View>
         </View>
 
         {/* Búsqueda */}
         <View style={styles.searchContainer}>
-          <MaterialCommunityIcons name="magnify" size={20} color="#5F7F6E" />
+          <MaterialCommunityIcons name="magnify" size={20} color="#2F7A4F" />
           <TextInput
             value={search}
             onChangeText={setSearch}
             placeholder="Buscar producto"
-            placeholderTextColor="#6F8C78"
+            placeholderTextColor="#43A66C"
             style={styles.searchInput}
           />
         </View>
@@ -152,7 +152,7 @@ export default function ShoppingListScreen() {
             <MaterialCommunityIcons
               name={item.comprado ? 'check-circle' : 'checkbox-blank-circle-outline'}
               size={26}
-              color={item.comprado ? '#1FA463' : '#5F7F6E'}
+              color={item.comprado ? '#00B86B' : '#2F7A4F'}
             />
 
             <View style={styles.itemInfo}>
@@ -175,7 +175,7 @@ export default function ShoppingListScreen() {
 
         {filteredItems.length === 0 && (
           <View style={styles.emptyBox}>
-            <MaterialCommunityIcons name="basket-off-outline" size={40} color="#6F8C78" />
+            <MaterialCommunityIcons name="basket-off-outline" size={40} color="#43A66C" />
             <Text style={styles.emptyText}>No se encontraron productos.</Text>
           </View>
         )}
@@ -184,7 +184,7 @@ export default function ShoppingListScreen() {
         <View style={styles.replacementCard}>
           <View style={styles.replacementHeader}>
             <View style={styles.replacementIcon}>
-              <MaterialCommunityIcons name="swap-horizontal" size={22} color="#1FA463" />
+              <MaterialCommunityIcons name="swap-horizontal" size={22} color="#00B86B" />
             </View>
             <View style={styles.replacementCopy}>
               <Text style={styles.replacementTitle}>Solicitar reemplazos</Text>
@@ -198,12 +198,12 @@ export default function ShoppingListScreen() {
               setReplacementMessage('');
             }}
             placeholder="Ej: reemplazar pollo por algo más barato"
-            placeholderTextColor="#6F8C78"
+            placeholderTextColor="#43A66C"
             style={styles.replacementInput}
           />
           {replacementMessage !== '' && <Text style={styles.replacementMessage}>{replacementMessage}</Text>}
           <Pressable accessibilityRole="button" style={styles.replacementButton} onPress={requestReplacements}>
-            <MaterialCommunityIcons name="creation" size={18} color="#FFFFFF" />
+            <MaterialCommunityIcons name="creation" size={18} color="#FBFFF8" />
             <Text style={styles.replacementButtonText}>Solicitar reemplazos</Text>
           </Pressable>
         </View>
@@ -216,7 +216,7 @@ export default function ShoppingListScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FBFFF8',
   },
   content: {
     paddingHorizontal: 20,
@@ -229,8 +229,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 14,
-    backgroundColor: '#F4FBF5',
-    shadowColor: '#FFFFFF',
+    backgroundColor: '#E9FBEF',
+    shadowColor: '#74D997',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.24,
     shadowRadius: 14,
@@ -248,12 +248,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   title: {
-    color: '#123B2A',
+    color: '#064E2F',
     fontSize: 34,
     fontWeight: '900',
   },
   subtitle: {
-    color: '#5F7F6E',
+    color: '#2F7A4F',
     fontSize: 15,
     fontWeight: '700',
     marginTop: 6,
@@ -261,12 +261,12 @@ const styles = StyleSheet.create({
 
   // Resumen
   summaryCard: {
-    backgroundColor: '#F4FBF5',
+    backgroundColor: '#E9FBEF',
     borderRadius: 22,
     padding: 18,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#CDE8D5',
+    borderColor: '#9FE7B9',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -276,18 +276,18 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   summaryLabel: {
-    color: '#5F7F6E',
+    color: '#2F7A4F',
     fontSize: 13,
     fontWeight: '800',
   },
   summaryTotal: {
-    color: '#123B2A',
+    color: '#064E2F',
     fontSize: 28,
     fontWeight: '900',
     marginTop: 3,
   },
   summarySmall: {
-    color: '#5F7F6E',
+    color: '#2F7A4F',
     fontSize: 12,
     fontWeight: '700',
     marginTop: 3,
@@ -296,39 +296,39 @@ const styles = StyleSheet.create({
     width: 54,
     height: 54,
     borderRadius: 18,
-    backgroundColor: '#1FA463',
+    backgroundColor: '#00B86B',
     alignItems: 'center',
     justifyContent: 'center',
     marginLeft: 12,
   },
   progressTrack: {
     height: 6,
-    backgroundColor: '#CDE8D5',
+    backgroundColor: '#9FE7B9',
     borderRadius: 99,
     marginTop: 10,
     width: '80%',
   },
   progressFill: {
     height: 6,
-    backgroundColor: '#1FA463',
+    backgroundColor: '#00B86B',
     borderRadius: 99,
   },
 
   // Búsqueda
   searchContainer: {
-    backgroundColor: '#F4FBF5',
+    backgroundColor: '#E9FBEF',
     borderRadius: 16,
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderWidth: 1,
-    borderColor: '#CDE8D5',
+    borderColor: '#9FE7B9',
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 18,
   },
   searchInput: {
     flex: 1,
-    color: '#123B2A',
+    color: '#064E2F',
     fontSize: 15,
     fontWeight: '700',
     marginLeft: 10,
@@ -342,24 +342,24 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   sectionTitle: {
-    color: '#123B2A',
+    color: '#064E2F',
     fontSize: 16,
     fontWeight: '900',
   },
   sectionCount: {
-    color: '#5F7F6E',
+    color: '#2F7A4F',
     fontSize: 13,
     fontWeight: '700',
   },
 
   // Items
   itemCard: {
-    backgroundColor: '#F4FBF5',
+    backgroundColor: '#E9FBEF',
     borderRadius: 18,
     padding: 14,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: '#CDE8D5',
+    borderColor: '#9FE7B9',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
@@ -372,46 +372,46 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   itemName: {
-    color: '#123B2A',
+    color: '#064E2F',
     fontSize: 15,
     fontWeight: '900',
   },
   itemNameDone: {
-    color: '#5F7F6E',
+    color: '#2F7A4F',
     textDecorationLine: 'line-through',
   },
   itemDetail: {
-    color: '#5F7F6E',
+    color: '#2F7A4F',
     fontSize: 12,
     fontWeight: '700',
     marginTop: 3,
   },
   priceBox: {
-    backgroundColor: '#E7F7EC',
+    backgroundColor: '#D8FBE3',
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#A9DDB8',
+    borderColor: '#74D997',
   },
   priceText: {
-    color: '#1FA463',
+    color: '#00B86B',
     fontSize: 12,
     fontWeight: '900',
   },
 
   // Empty
   emptyBox: {
-    backgroundColor: '#F4FBF5',
+    backgroundColor: '#E9FBEF',
     borderRadius: 18,
     padding: 28,
     borderWidth: 1,
-    borderColor: '#CDE8D5',
+    borderColor: '#9FE7B9',
     alignItems: 'center',
     marginTop: 8,
   },
   emptyText: {
-    color: '#5F7F6E',
+    color: '#2F7A4F',
     fontSize: 14,
     fontWeight: '700',
     marginTop: 10,
@@ -419,31 +419,31 @@ const styles = StyleSheet.create({
 
   // Reemplazos
   replacementButton: {
-    backgroundColor: '#1FA463',
+    backgroundColor: '#00B86B',
     borderRadius: 14,
     paddingVertical: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    shadowColor: '#1FA463',
+    shadowColor: '#00B86B',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.22,
     shadowRadius: 14,
     elevation: 3,
   },
   replacementButtonText: {
-    color: '#FFFFFF',
+    color: '#FBFFF8',
     fontSize: 14,
     fontWeight: '900',
   },
   replacementCard: {
-    backgroundColor: '#F4FBF5',
+    backgroundColor: '#E9FBEF',
     borderRadius: 18,
     padding: 14,
     marginTop: 16,
     borderWidth: 1,
-    borderColor: '#CDE8D5',
+    borderColor: '#9FE7B9',
     gap: 10,
   },
   replacementCopy: {
@@ -463,32 +463,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 14,
-    backgroundColor: '#E7F7EC',
+    backgroundColor: '#D8FBE3',
   },
   replacementInput: {
     minHeight: 52,
-    backgroundColor: '#EAF7EE',
+    backgroundColor: '#DDF8E7',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#CDE8D5',
+    borderColor: '#9FE7B9',
     paddingHorizontal: 12,
     paddingVertical: 9,
-    color: '#123B2A',
+    color: '#064E2F',
     fontSize: 14,
     fontWeight: '700',
   },
   replacementMessage: {
-    color: '#1FA463',
+    color: '#00B86B',
     fontSize: 13,
     fontWeight: '800',
   },
   replacementSubtitle: {
-    color: '#5F7F6E',
+    color: '#2F7A4F',
     fontSize: 13,
     fontWeight: '700',
   },
   replacementTitle: {
-    color: '#123B2A',
+    color: '#064E2F',
     fontSize: 14,
     fontWeight: '900',
   },

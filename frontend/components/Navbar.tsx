@@ -150,7 +150,7 @@ export function Navbar({ state, descriptors, navigation }: BottomTabBarProps) {
             <View style={styles.sideHeader}>
               <Text style={styles.sideTitle}>Mas opciones</Text>
               <Pressable accessibilityRole="button" onPress={closeMenu} style={styles.closeButton}>
-                <MaterialCommunityIcons name="close" size={24} color="#123B2A" />
+                <MaterialCommunityIcons name="close" size={24} color="#064E2F" />
               </Pressable>
             </View>
 
@@ -166,30 +166,30 @@ export function Navbar({ state, descriptors, navigation }: BottomTabBarProps) {
                   {profileEmail}
                 </Text>
               </View>
-              <MaterialCommunityIcons name="chevron-right" size={22} color="#5F7F6E" />
+              <MaterialCommunityIcons name="chevron-right" size={22} color="#2F7A4F" />
             </Pressable>
 
             <View style={styles.optionsList}>
               <Pressable accessibilityRole="button" onPress={openList} style={styles.optionButton}>
                 <View style={styles.optionIcon}>
-                  <MaterialCommunityIcons name="clipboard-list-outline" size={22} color="#123B2A" />
+                  <MaterialCommunityIcons name="clipboard-list-outline" size={22} color="#064E2F" />
                 </View>
                 <View style={styles.optionCopy}>
                   <Text style={styles.optionText}>Test lista</Text>
                   <Text style={styles.optionDescription}>Ir a lista de compras</Text>
                 </View>
-                <MaterialCommunityIcons name="chevron-right" size={22} color="#5F7F6E" />
+                <MaterialCommunityIcons name="chevron-right" size={22} color="#2F7A4F" />
               </Pressable>
 
               <Pressable accessibilityRole="button" onPress={openConfig} style={styles.optionButton}>
                 <View style={styles.optionIcon}>
-                  <MaterialCommunityIcons name="cog-outline" size={22} color="#123B2A" />
+                  <MaterialCommunityIcons name="cog-outline" size={22} color="#064E2F" />
                 </View>
                 <View style={styles.optionCopy}>
                   <Text style={styles.optionText}>Configuracion</Text>
                   <Text style={styles.optionDescription}>Preferencias de la app</Text>
                 </View>
-                <MaterialCommunityIcons name="chevron-right" size={22} color="#5F7F6E" />
+                <MaterialCommunityIcons name="chevron-right" size={22} color="#2F7A4F" />
               </Pressable>
             </View>
           </Animated.View>
@@ -199,7 +199,7 @@ export function Navbar({ state, descriptors, navigation }: BottomTabBarProps) {
       <View style={[styles.wrapper, { paddingBottom: Math.max(insets.bottom + 10, 22) }]}>
         <BlurView
           experimentalBlurMethod="dimezisBlurView"
-          intensity={30}
+          intensity={10}
           tint="dark"
           style={styles.navbar}
           onLayout={(event) => setNavbarWidth(event.nativeEvent.layout.width)}>
@@ -244,7 +244,7 @@ export function Navbar({ state, descriptors, navigation }: BottomTabBarProps) {
               });
             };
 
-            const tabColor = isFocused ? '#1FA463' : '#7AA28A';
+            const tabColor = isFocused ? '#04c876' : '#3ca76b';
 
             return (
               <Pressable
@@ -264,7 +264,7 @@ export function Navbar({ state, descriptors, navigation }: BottomTabBarProps) {
             accessibilityRole="button"
             onPress={openMenu}
             style={styles.iconButton}>
-            <MaterialCommunityIcons name="menu" size={26} color="#168A50" />
+            <MaterialCommunityIcons name="menu" size={26} color="#3ca76b" />
           </Pressable>
         </BlurView>
       </View>
@@ -280,17 +280,17 @@ const styles = StyleSheet.create({
     height: 46,
     borderRadius: 23,
     borderWidth: 1,
-    borderColor: 'rgba(31, 164, 99, 0.42)',
-    backgroundColor: 'rgba(231, 247, 236, 0.86)',
-    shadowColor: '#1FA463',
+    borderColor: 'rgba(0, 184, 107, 0.48)',
+    backgroundColor: 'rgba(244, 250, 246, 0.95)',
+    shadowColor: '#00B86B',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.22,
-    shadowRadius: 18,
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
     elevation: 8,
   },
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(18, 59, 42, 0.18)',
+    backgroundColor: 'rgba(6, 78, 47, 0.16)',
     justifyContent: 'flex-start',
     alignItems: 'flex-end',
   },
@@ -303,10 +303,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 18,
-    backgroundColor: '#CDE8D5',
+    backgroundColor: '#74D997',
   },
   avatarText: {
-    color: '#123B2A',
+    color: '#0e6f45',
     fontSize: 22,
     fontWeight: '900',
   },
@@ -316,7 +316,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 14,
-    backgroundColor: '#CDE8D5',
+    backgroundColor: '#74D997',
   },
   iconButton: {
     flex: 1,
@@ -335,18 +335,18 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: 'rgba(31, 164, 99, 0.22)',
-    backgroundColor: 'rgba(255, 255, 255, 0.92)',
-    shadowColor: '#A9DDB8',
+    borderColor: 'rgba(0, 184, 107, 0.28)',
+    backgroundColor: 'rgba(255, 255, 255, 0.96)',
+    shadowColor: '#00B86B',
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.32,
-    shadowRadius: 28,
+    shadowOpacity: 0.26,
+    shadowRadius: 30,
     elevation: 10,
     overflow: 'hidden',
   },
   navbarTint: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255, 255, 255, 0.72)',
+    backgroundColor: 'rgba(225, 250, 240, 0.72)',
     borderRadius: 999,
   },
   optionButton: {
@@ -358,9 +358,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#CDE8D5',
-    backgroundColor: '#F4FBF5',
-    shadowColor: '#FFFFFF',
+    borderColor: '#74D997',
+    backgroundColor: '#E9FBEF',
+    shadowColor: '#74D997',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.2,
     shadowRadius: 12,
@@ -372,7 +372,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   optionDescription: {
-    color: '#5F7F6E',
+    color: '#45b174',
     fontSize: 13,
     fontWeight: '700',
   },
@@ -382,12 +382,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 14,
-    backgroundColor: '#CDE8D5',
+    backgroundColor: '#74D997',
   },
   optionText: {
     fontSize: 16,
     fontWeight: '900',
-    color: '#123B2A',
+    color: '#064E2F',
   },
   optionsList: {
     gap: 12,
@@ -400,10 +400,10 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 22,
     borderWidth: 1,
-    borderColor: '#CDE8D5',
-    backgroundColor: '#F4FBF5',
+    borderColor: '#74D997',
+    backgroundColor: '#E9FBEF',
     marginBottom: 18,
-    shadowColor: '#FFFFFF',
+    shadowColor: '#74D997',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.26,
     shadowRadius: 20,
@@ -415,12 +415,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   profileEmail: {
-    color: '#5F7F6E',
+    color: '#2F7A4F',
     fontSize: 13,
     fontWeight: '700',
   },
   profileName: {
-    color: '#123B2A',
+    color: '#064E2F',
     fontSize: 17,
     fontWeight: '900',
   },
@@ -438,8 +438,8 @@ const styles = StyleSheet.create({
     height: '100%',
     paddingHorizontal: 20,
     paddingBottom: 32,
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#FFFFFF',
+    backgroundColor: '#FBFFF8',
+    shadowColor: '#74D997',
     shadowOffset: { width: -8, height: 0 },
     shadowOpacity: 0.34,
     shadowRadius: 24,
@@ -448,7 +448,7 @@ const styles = StyleSheet.create({
   sideTitle: {
     fontSize: 22,
     fontWeight: '900',
-    color: '#123B2A',
+    color: '#064E2F',
   },
   wrapper: {
     position: 'absolute',

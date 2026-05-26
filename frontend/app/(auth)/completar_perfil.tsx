@@ -220,7 +220,7 @@ function MetricWheel({
           onChangeText={handleTextChange}
           onEndEditing={snapTypedValue}
           placeholder="0"
-          placeholderTextColor="#6F8C78"
+          placeholderTextColor="#43A66C"
           selectTextOnFocus
           style={styles.metricInput}
           value={value}
@@ -230,7 +230,7 @@ function MetricWheel({
 
       <View style={styles.wheelWrap}>
         <WheelPickerExpo
-          backgroundColor="#F4FBF5"
+          backgroundColor="#E9FBEF"
           height={210}
           haptics
           initialSelectedIndex={initialSelectedIndex}
@@ -300,7 +300,7 @@ function HeightRuler({
           onChangeText={handleTextChange}
           onEndEditing={snapHeightFromText}
           placeholder="0"
-          placeholderTextColor="#6F8C78"
+          placeholderTextColor="#43A66C"
           selectTextOnFocus
           style={styles.metricInput}
           value={value}
@@ -514,10 +514,10 @@ export default function CompleteProfileScreen() {
                 }}
                 style={[styles.optionRow, isSelected && styles.optionRowSelected]}>
                 <View style={styles.optionIcon}>
-                  <Ionicons name={item.icon} size={22} color={isSelected ? '#123B2A' : '#5F7F6E'} />
+                  <Ionicons name={item.icon} size={22} color={isSelected ? '#064E2F' : '#2F7A4F'} />
                 </View>
                 <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>{item.label}</Text>
-                {isSelected && <Ionicons name="checkmark-circle" size={22} color="#123B2A" />}
+                {isSelected && <Ionicons name="checkmark-circle" size={22} color="#064E2F" />}
               </Pressable>
             );
           })}
@@ -526,7 +526,7 @@ export default function CompleteProfileScreen() {
     }
 
     if (currentStep.id === 'objetivos') {
-      return <ChipSelector accentColor="#1FA463" onToggle={toggleObjetivo} options={OBJETIVOS_OPTIONS} selected={objetivos} />;
+      return <ChipSelector accentColor="#00B86B" onToggle={toggleObjetivo} options={OBJETIVOS_OPTIONS} selected={objetivos} />;
     }
 
     if (currentStep.id === 'restricciones') {
@@ -548,18 +548,18 @@ export default function CompleteProfileScreen() {
             onChangeText={setFavoritoInput}
             onSubmitEditing={addFavorito}
             placeholder="Agregar ingrediente"
-            placeholderTextColor="#5F7F6E"
+            placeholderTextColor="#2F7A4F"
             returnKeyType="done"
             style={styles.favoriteInput}
             value={favoritoInput}
           />
           <Pressable accessibilityRole="button" onPress={addFavorito} style={styles.addButton}>
-            <Ionicons name="add" size={22} color="#123B2A" />
+            <Ionicons name="add" size={22} color="#064E2F" />
           </Pressable>
         </View>
 
         <ChipSelector
-          accentColor="#1FA463"
+          accentColor="#00B86B"
           onToggle={toggleFavorito}
           options={[...FAVORITOS_SUGERIDOS, ...ingredientesFavoritos.filter((item) => !FAVORITOS_SUGERIDOS.includes(item))]}
           selected={ingredientesFavoritos}
@@ -587,7 +587,7 @@ export default function CompleteProfileScreen() {
 
           {msg !== '' && (
             <View style={[styles.messagePanel, error && styles.messagePanelError]}>
-              <Ionicons name={error ? 'alert-circle' : 'checkmark-circle'} size={20} color={error ? '#FF8A8A' : '#1FA463'} />
+              <Ionicons name={error ? 'alert-circle' : 'checkmark-circle'} size={20} color={error ? '#FF8A8A' : '#00B86B'} />
               <Text style={[styles.statusText, error && styles.errorText]}>{msg}</Text>
             </View>
           )}
@@ -595,7 +595,7 @@ export default function CompleteProfileScreen() {
           <View style={styles.stepPanel}>
             <View style={styles.stepHeader}>
               <View style={styles.stepIcon}>
-                <MaterialCommunityIcons name={currentStep.icon} size={30} color="#123B2A" />
+                <MaterialCommunityIcons name={currentStep.icon} size={30} color="#064E2F" />
               </View>
               <Text style={styles.title}>{currentStep.title}</Text>
             </View>
@@ -616,7 +616,7 @@ export default function CompleteProfileScreen() {
                 disabled={stepIndex === 0 || loading}
                 onPress={goBack}
                 style={[styles.navButton, styles.secondaryButton, stepIndex === 0 && styles.buttonDisabled]}>
-                <Ionicons name="chevron-back" size={20} color="#123B2A" />
+                <Ionicons name="chevron-back" size={20} color="#064E2F" />
                 <Text style={styles.secondaryButtonText}>Atrás</Text>
               </Pressable>
 
@@ -626,11 +626,11 @@ export default function CompleteProfileScreen() {
                 onPress={goNext}
                 style={[styles.navButton, styles.primaryButton, loading && styles.buttonDisabled]}>
                 {loading ? (
-                  <ActivityIndicator color="#FFFFFF" />
+                  <ActivityIndicator color="#FBFFF8" />
                 ) : (
                   <>
                     <Text style={styles.primaryButtonText}>{isLastStep ? 'Guardar' : 'Siguiente'}</Text>
-                    <Ionicons name={isLastStep ? 'checkmark' : 'chevron-forward'} size={20} color="#FFFFFF" />
+                    <Ionicons name={isLastStep ? 'checkmark' : 'chevron-forward'} size={20} color="#FBFFF8" />
                   </>
                 )}
               </Pressable>
@@ -651,8 +651,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#CDE8D5',
-    backgroundColor: '#EAF7EE',
+    borderColor: '#9FE7B9',
+    backgroundColor: '#DDF8E7',
   },
   addButton: {
     width: 38,
@@ -660,7 +660,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 14,
-    backgroundColor: '#CDE8D5',
+    backgroundColor: '#9FE7B9',
   },
   buttonDisabled: {
     opacity: 0.45,
@@ -670,16 +670,16 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#CDE8D5',
-    backgroundColor: '#F4FBF5',
+    borderColor: '#9FE7B9',
+    backgroundColor: '#E9FBEF',
   },
   categoryLabel: {
-    color: '#123B2A',
+    color: '#064E2F',
     fontSize: 15,
     fontWeight: '900',
   },
   categoryMeta: {
-    color: '#5F7F6E',
+    color: '#2F7A4F',
     fontSize: 13,
     fontWeight: '700',
   },
@@ -692,8 +692,8 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#CDE8D5',
-    backgroundColor: '#EAF7EE',
+    borderColor: '#9FE7B9',
+    backgroundColor: '#DDF8E7',
   },
   chipGrid: {
     flexDirection: 'row',
@@ -702,13 +702,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   chipText: {
-    color: '#5F7F6E',
+    color: '#2F7A4F',
     fontSize: 14,
     fontWeight: '800',
   },
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FBFFF8',
   },
   content: {
     flex: 1,
@@ -716,7 +716,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 24,
     paddingBottom: 18,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FBFFF8',
   },
   errorText: {
     color: '#FF8A8A',
@@ -724,7 +724,7 @@ const styles = StyleSheet.create({
   favoriteInput: {
     flex: 1,
     minWidth: 0,
-    color: '#123B2A',
+    color: '#064E2F',
     fontSize: 16,
     fontWeight: '800',
     paddingVertical: 12,
@@ -749,15 +749,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#A9DDB8',
-    backgroundColor: '#E7F7EC',
+    borderColor: '#74D997',
+    backgroundColor: '#D8FBE3',
   },
   messagePanelError: {
     borderColor: '#8D2B3D',
     backgroundColor: '#351928',
   },
   metricInput: {
-    color: '#123B2A',
+    color: '#064E2F',
     fontSize: 34,
     fontWeight: '900',
     minWidth: 62,
@@ -765,7 +765,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   metricUnit: {
-    color: '#5F7F6E',
+    color: '#2F7A4F',
     fontSize: 14,
     fontWeight: '800',
   },
@@ -801,7 +801,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 14,
-    backgroundColor: '#CDE8D5',
+    backgroundColor: '#9FE7B9',
   },
   optionRow: {
     minHeight: 68,
@@ -811,39 +811,39 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#CDE8D5',
-    backgroundColor: '#EAF7EE',
+    borderColor: '#9FE7B9',
+    backgroundColor: '#DDF8E7',
   },
   optionRowSelected: {
-    borderColor: '#1FA463',
+    borderColor: '#00B86B',
     backgroundColor: '#DFF2E6',
   },
   optionText: {
     flex: 1,
-    color: '#5F7F6E',
+    color: '#2F7A4F',
     fontSize: 16,
     fontWeight: '900',
   },
   optionTextSelected: {
-    color: '#123B2A',
+    color: '#064E2F',
   },
   primaryButton: {
-    backgroundColor: '#1FA463',
-    shadowColor: '#1FA463',
+    backgroundColor: '#00B86B',
+    shadowColor: '#00B86B',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.24,
     shadowRadius: 14,
     elevation: 3,
   },
   primaryButtonText: {
-    color: '#FFFFFF',
+    color: '#FBFFF8',
     fontSize: 16,
     fontWeight: '900',
   },
   progressFill: {
     height: '100%',
     borderRadius: 999,
-    backgroundColor: '#1FA463',
+    backgroundColor: '#00B86B',
   },
   progressHeader: {
     flexDirection: 'row',
@@ -852,7 +852,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   progressMeta: {
-    color: '#5F7F6E',
+    color: '#2F7A4F',
     fontSize: 13,
     fontWeight: '800',
   },
@@ -861,17 +861,17 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 22,
     borderWidth: 1,
-    borderColor: '#CDE8D5',
-    backgroundColor: '#F4FBF5',
+    borderColor: '#9FE7B9',
+    backgroundColor: '#E9FBEF',
   },
   progressShell: {
     height: 8,
     overflow: 'hidden',
     borderRadius: 999,
-    backgroundColor: '#CDE8D5',
+    backgroundColor: '#9FE7B9',
   },
   progressText: {
-    color: '#123B2A',
+    color: '#064E2F',
     fontSize: 16,
     fontWeight: '900',
   },
@@ -883,7 +883,7 @@ const styles = StyleSheet.create({
     width: 3,
     marginLeft: -1.5,
     borderRadius: 999,
-    backgroundColor: '#1FA463',
+    backgroundColor: '#00B86B',
   },
   rulerTick: {
     width: RULER_TICK_WIDTH,
@@ -895,7 +895,7 @@ const styles = StyleSheet.create({
   },
   rulerTickLabel: {
     marginTop: 12,
-    color: '#5F7F6E',
+    color: '#2F7A4F',
     fontSize: 12,
     fontWeight: '800',
   },
@@ -903,15 +903,15 @@ const styles = StyleSheet.create({
     width: 2,
     height: 22,
     borderRadius: 999,
-    backgroundColor: '#B7D7C4',
+    backgroundColor: '#86E0A6',
   },
   rulerTickLineMid: {
     height: 34,
-    backgroundColor: '#8BBE9B',
+    backgroundColor: '#5FD58B',
   },
   rulerTickLineTall: {
     height: 48,
-    backgroundColor: '#1FA463',
+    backgroundColor: '#00B86B',
   },
   rulerWrap: {
     height: 132,
@@ -920,21 +920,21 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FBFFF8',
   },
   secondaryButton: {
     borderWidth: 1,
-    borderColor: '#CDE8D5',
-    backgroundColor: '#F4FBF5',
+    borderColor: '#9FE7B9',
+    backgroundColor: '#E9FBEF',
   },
   secondaryButtonText: {
-    color: '#123B2A',
+    color: '#064E2F',
     fontSize: 16,
     fontWeight: '900',
   },
   statusText: {
     flex: 1,
-    color: '#1FA463',
+    color: '#00B86B',
     fontSize: 14,
     fontWeight: '800',
   },
@@ -954,7 +954,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 20,
-    backgroundColor: '#CDE8D5',
+    backgroundColor: '#9FE7B9',
   },
   stepPanel: {
     flex: 1,
@@ -963,28 +963,28 @@ const styles = StyleSheet.create({
     padding: 18,
     borderRadius: 26,
     borderWidth: 1,
-    borderColor: '#CDE8D5',
-    backgroundColor: '#F4FBF5',
+    borderColor: '#9FE7B9',
+    backgroundColor: '#E9FBEF',
   },
   subtitle: {
-    color: '#5F7F6E',
+    color: '#2F7A4F',
     fontSize: 15,
     fontWeight: '700',
     lineHeight: 21,
   },
   title: {
-    color: '#123B2A',
+    color: '#064E2F',
     fontSize: 34,
     fontWeight: '900',
     lineHeight: 38,
   },
   wheelItemText: {
-    color: '#123B2A',
+    color: '#064E2F',
     fontWeight: '900',
     textAlign: 'center',
   },
   wheelSelected: {
-    borderColor: '#1FA463',
+    borderColor: '#00B86B',
     borderWidth: 1,
   },
   wheelWrap: {

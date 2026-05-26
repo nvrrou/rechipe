@@ -12,7 +12,7 @@ export default function ProgressScreen() {
       </View>
 
       <View style={styles.panel}>
-        <MaterialCommunityIcons name="chart-line" size={42} color="#1FA463" />
+        <MaterialCommunityIcons name="chart-line" size={42} color="#00B86B" />
         <Text style={styles.panelTitle}>Work in progress</Text>
         <Text style={styles.panelText}>Los indicadores vivirán aquí sin meter ruido visual.</Text>
       </View>
@@ -27,10 +27,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 54,
     paddingBottom: 130,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FBFFF8',
   },
   description: {
-    color: '#5F7F6E',
+    color: '#2F7A4F',
     fontSize: 16,
     fontWeight: '700',
     lineHeight: 22,
@@ -47,25 +47,25 @@ const styles = StyleSheet.create({
     padding: 22,
     borderRadius: 22,
     borderWidth: 1,
-    borderColor: '#CDE8D5',
-    backgroundColor: '#F4FBF5',
+    borderColor: '#9FE7B9',
+    backgroundColor: '#E9FBEF',
   },
   panelText: {
     maxWidth: 260,
-    color: '#5F7F6E',
+    color: '#2F7A4F',
     fontSize: 15,
     fontWeight: '700',
     lineHeight: 21,
     textAlign: 'center',
   },
   panelTitle: {
-    color: '#123B2A',
+    color: '#064E2F',
     fontSize: 20,
     fontWeight: '900',
     textAlign: 'center',
   },
   title: {
-    color: '#123B2A',
+    color: '#064E2F',
     fontSize: 34,
     fontWeight: '900',
     lineHeight: 38,

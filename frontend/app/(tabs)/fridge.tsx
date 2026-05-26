@@ -192,7 +192,7 @@ function Field({
         keyboardType={keyboardType}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor="#6F8C78"
+        placeholderTextColor="#43A66C"
         style={[styles.fieldInput, hasError && styles.fieldInputError]}
         value={value}
       />
@@ -225,10 +225,10 @@ function CategoryDropdown({
       <Text style={styles.fieldLabel}>Categoria</Text>
       <Pressable accessibilityRole="button" onPress={onToggle} style={styles.dropdownButton}>
         <View style={styles.dropdownLeft}>
-          <View style={[styles.dropdownDot, { backgroundColor: selected?.color || '#6F8C78' }]} />
+          <View style={[styles.dropdownDot, { backgroundColor: selected?.color || '#43A66C' }]} />
           <Text style={styles.dropdownText}>{isCreating ? 'Crear categoria' : selected?.name || 'Seleccionar'}</Text>
         </View>
-        <MaterialCommunityIcons name={expanded ? 'chevron-up' : 'chevron-down'} size={22} color="#123B2A" />
+        <MaterialCommunityIcons name={expanded ? 'chevron-up' : 'chevron-down'} size={22} color="#064E2F" />
       </Pressable>
 
       {expanded && (
@@ -247,7 +247,7 @@ function CategoryDropdown({
             accessibilityRole="button"
             onPress={() => onSelect('__new__')}
             style={[styles.dropdownOption, isCreating && styles.dropdownOptionSelected]}>
-            <MaterialCommunityIcons name="plus-circle-outline" size={20} color="#123B2A" />
+            <MaterialCommunityIcons name="plus-circle-outline" size={20} color="#064E2F" />
             <Text style={styles.dropdownOptionText}>Crear categoria nueva</Text>
           </Pressable>
         </View>
@@ -258,7 +258,7 @@ function CategoryDropdown({
           autoCapitalize="words"
           onChangeText={onNewValueChange}
           placeholder="Nombre de la categoria"
-          placeholderTextColor="#6F8C78"
+          placeholderTextColor="#43A66C"
           style={styles.fieldInputStandalone}
           value={newValue}
         />
@@ -481,7 +481,7 @@ export default function FridgeScreen() {
             </View>
           )}
         </View>
-        <MaterialCommunityIcons name="pencil-outline" size={22} color="#5F7F6E" />
+        <MaterialCommunityIcons name="pencil-outline" size={22} color="#2F7A4F" />
       </Pressable>
     );
   }
@@ -609,7 +609,7 @@ export default function FridgeScreen() {
             </Pressable>
           )}
           <Pressable accessibilityRole="button" disabled={saving} onPress={() => saveIngredient(mode)} style={styles.primaryAction}>
-            {saving ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Text style={styles.primaryActionText}>Guardar</Text>}
+            {saving ? <ActivityIndicator size="small" color="#FBFFF8" /> : <Text style={styles.primaryActionText}>Guardar</Text>}
           </Pressable>
         </View>
       </View>
@@ -620,7 +620,7 @@ export default function FridgeScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#123B2A" />
+          <ActivityIndicator size="large" color="#064E2F" />
           <Text style={styles.loadingText}>Cargando tu despensa...</Text>
         </View>
       </View>
@@ -634,7 +634,7 @@ export default function FridgeScreen() {
           <View style={styles.titleRow}>
             {activeView !== 'categories' && (
               <Pressable accessibilityRole="button" onPress={closeToCategories} style={styles.inlineBackButton}>
-                <MaterialCommunityIcons name="chevron-left" size={24} color="#123B2A" />
+                <MaterialCommunityIcons name="chevron-left" size={24} color="#064E2F" />
               </Pressable>
             )}
             <Text style={styles.title}>
@@ -663,11 +663,11 @@ export default function FridgeScreen() {
         {activeView === 'categories' && (
           <View style={styles.addBar}>
             <Pressable accessibilityRole="button" onPress={() => openAddView()} style={styles.addButton}>
-              <MaterialCommunityIcons name="plus" size={22} color="#123B2A" />
+              <MaterialCommunityIcons name="plus" size={22} color="#064E2F" />
             </Pressable>
             <Text style={styles.addBarText}>Agregar ingrediente</Text>
             <Pressable accessibilityRole="button" onPress={() => setActiveView('search')} style={styles.searchButton}>
-              <MaterialCommunityIcons name="magnify" size={22} color="#123B2A" />
+              <MaterialCommunityIcons name="magnify" size={22} color="#064E2F" />
             </Pressable>
           </View>
         )}
@@ -675,18 +675,18 @@ export default function FridgeScreen() {
         {activeView === 'search' && (
           <View style={styles.addBar}>
             <View style={styles.searchIconStatic}>
-              <MaterialCommunityIcons name="magnify" size={22} color="#5F7F6E" />
+              <MaterialCommunityIcons name="magnify" size={22} color="#2F7A4F" />
             </View>
             <TextInput
               autoFocus
               onChangeText={handleSearch}
               placeholder="Buscar en tu despensa..."
-              placeholderTextColor="#5F7F6E"
+              placeholderTextColor="#2F7A4F"
               returnKeyType="search"
               style={styles.input}
               value={searchQuery}
             />
-            {searching && <ActivityIndicator size="small" color="#123B2A" />}
+            {searching && <ActivityIndicator size="small" color="#064E2F" />}
           </View>
         )}
 
@@ -717,7 +717,7 @@ export default function FridgeScreen() {
                         <Text style={styles.categoryName}>{category.name}</Text>
                         <Text style={styles.categoryCount}>{count} ingredientes</Text>
                       </View>
-                      <MaterialCommunityIcons name="chevron-right" size={22} color="#5F7F6E" />
+                      <MaterialCommunityIcons name="chevron-right" size={22} color="#2F7A4F" />
                     </View>
                   </Pressable>
                 );
@@ -739,13 +739,13 @@ export default function FridgeScreen() {
                 </Text>
               </View>
               <Pressable accessibilityRole="button" onPress={() => openAddView(selectedCategory.id)} style={styles.smallIconButton}>
-                <MaterialCommunityIcons name="plus" size={22} color="#123B2A" />
+                <MaterialCommunityIcons name="plus" size={22} color="#064E2F" />
               </Pressable>
             </View>
 
             {(itemsByCategory[selectedCategory.id] || []).length === 0 ? (
               <View style={styles.emptyState}>
-                <MaterialCommunityIcons name="food-off" size={40} color="#789684" />
+                <MaterialCommunityIcons name="food-off" size={40} color="#4F9F70" />
                 <Text style={styles.emptyText}>No hay ingredientes en esta categoría</Text>
                 <Pressable style={styles.emptyButton} onPress={() => openAddView(selectedCategory.id)}>
                   <Text style={styles.emptyButtonText}>Agregar uno</Text>
@@ -764,16 +764,16 @@ export default function FridgeScreen() {
           <View style={styles.detailPanel}>
             {searchQuery.trim() === '' ? (
               <View style={styles.emptyState}>
-                <MaterialCommunityIcons name="magnify" size={40} color="#789684" />
+                <MaterialCommunityIcons name="magnify" size={40} color="#4F9F70" />
                 <Text style={styles.emptyText}>Escribe para buscar ingredientes en tu despensa</Text>
               </View>
             ) : searching ? (
               <View style={styles.emptyState}>
-                <ActivityIndicator size="large" color="#123B2A" />
+                <ActivityIndicator size="large" color="#064E2F" />
               </View>
             ) : searchResults.length === 0 ? (
               <View style={styles.emptyState}>
-                <MaterialCommunityIcons name="emoticon-sad-outline" size={40} color="#789684" />
+                <MaterialCommunityIcons name="emoticon-sad-outline" size={40} color="#4F9F70" />
                 <Text style={styles.emptyText}>No se encontraron ingredientes con "{searchQuery}"</Text>
               </View>
             ) : (
@@ -795,9 +795,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#CDE8D5',
-    backgroundColor: '#F4FBF5',
-    shadowColor: '#FFFFFF',
+    borderColor: '#9FE7B9',
+    backgroundColor: '#E9FBEF',
+    shadowColor: '#74D997',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.28,
     shadowRadius: 22,
@@ -805,7 +805,7 @@ const styles = StyleSheet.create({
   },
   addBarText: {
     flex: 1,
-    color: '#123B2A',
+    color: '#064E2F',
     fontSize: 16,
     fontWeight: '800',
   },
@@ -815,8 +815,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 14,
-    backgroundColor: '#1FA463',
-    shadowColor: '#1FA463',
+    backgroundColor: '#00B86B',
+    shadowColor: '#00B86B',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.22,
     shadowRadius: 12,
@@ -830,9 +830,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#CDE8D5',
-    backgroundColor: '#F4FBF5',
-    shadowColor: '#FFFFFF',
+    borderColor: '#9FE7B9',
+    backgroundColor: '#E9FBEF',
+    shadowColor: '#74D997',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.24,
     shadowRadius: 18,
@@ -843,7 +843,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   categoryCount: {
-    color: '#5F7F6E',
+    color: '#2F7A4F',
     fontSize: 13,
     fontWeight: '600',
   },
@@ -860,7 +860,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 14,
-    backgroundColor: '#CDE8D5',
+    backgroundColor: '#9FE7B9',
   },
   categoryInfoRow: {
     width: '100%',
@@ -871,13 +871,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   categoryName: {
-    color: '#123B2A',
+    color: '#064E2F',
     fontSize: 16,
     fontWeight: '900',
   },
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FBFFF8',
   },
   content: {
     gap: 18,
@@ -919,28 +919,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 16,
-    backgroundColor: '#CDE8D5',
+    backgroundColor: '#9FE7B9',
   },
   detailPanel: {
     gap: 16,
     padding: 16,
     borderRadius: 22,
     borderWidth: 1,
-    borderColor: '#CDE8D5',
-    backgroundColor: '#F4FBF5',
-    shadowColor: '#FFFFFF',
+    borderColor: '#9FE7B9',
+    backgroundColor: '#E9FBEF',
+    shadowColor: '#74D997',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.3,
     shadowRadius: 24,
     elevation: 2,
   },
   detailSubtitle: {
-    color: '#5F7F6E',
+    color: '#2F7A4F',
     fontSize: 14,
     fontWeight: '600',
   },
   detailTitle: {
-    color: '#123B2A',
+    color: '#064E2F',
     fontSize: 20,
     fontWeight: '900',
   },
@@ -952,8 +952,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#CDE8D5',
-    backgroundColor: '#EAF7EE',
+    borderColor: '#9FE7B9',
+    backgroundColor: '#DDF8E7',
   },
   dropdownDot: {
     width: 12,
@@ -971,8 +971,8 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#CDE8D5',
-    backgroundColor: '#EAF7EE',
+    borderColor: '#9FE7B9',
+    backgroundColor: '#DDF8E7',
   },
   dropdownOption: {
     minHeight: 44,
@@ -984,15 +984,15 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   dropdownOptionSelected: {
-    backgroundColor: '#CDE8D5',
+    backgroundColor: '#9FE7B9',
   },
   dropdownOptionText: {
-    color: '#123B2A',
+    color: '#064E2F',
     fontSize: 14,
     fontWeight: '800',
   },
   dropdownText: {
-    color: '#123B2A',
+    color: '#064E2F',
     fontSize: 15,
     fontWeight: '900',
   },
@@ -1004,11 +1004,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 12,
-    backgroundColor: '#CDE8D5',
+    backgroundColor: '#9FE7B9',
     marginTop: 4,
   },
   emptyButtonText: {
-    color: '#123B2A',
+    color: '#064E2F',
     fontSize: 14,
     fontWeight: '700',
   },
@@ -1020,7 +1020,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   emptyText: {
-    color: '#5F7F6E',
+    color: '#2F7A4F',
     fontSize: 15,
     textAlign: 'center',
   },
@@ -1031,14 +1031,14 @@ const styles = StyleSheet.create({
   },
   fieldInput: {
     minHeight: 54,
-    color: '#123B2A',
+    color: '#064E2F',
     fontSize: 15,
     fontWeight: '800',
     paddingHorizontal: 14,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#CDE8D5',
-    backgroundColor: '#EAF7EE',
+    borderColor: '#9FE7B9',
+    backgroundColor: '#DDF8E7',
   },
   fieldInputError: {
     borderColor: '#FF8A8A',
@@ -1046,17 +1046,17 @@ const styles = StyleSheet.create({
   },
   fieldInputStandalone: {
     minHeight: 54,
-    color: '#123B2A',
+    color: '#064E2F',
     fontSize: 15,
     fontWeight: '800',
     paddingHorizontal: 14,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#CDE8D5',
-    backgroundColor: '#EAF7EE',
+    borderColor: '#9FE7B9',
+    backgroundColor: '#DDF8E7',
   },
   fieldLabel: {
-    color: '#5F7F6E',
+    color: '#2F7A4F',
     fontSize: 13,
     fontWeight: '900',
   },
@@ -1093,8 +1093,8 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 22,
     borderWidth: 1,
-    borderColor: '#CDE8D5',
-    backgroundColor: '#F4FBF5',
+    borderColor: '#9FE7B9',
+    backgroundColor: '#E9FBEF',
   },
   formSection: {
     gap: 12,
@@ -1102,7 +1102,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   formSectionTitle: {
-    color: '#123B2A',
+    color: '#064E2F',
     fontSize: 17,
     fontWeight: '900',
   },
@@ -1120,7 +1120,7 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 14,
-    backgroundColor: '#CDE8D5',
+    backgroundColor: '#9FE7B9',
   },
   ingredientInfo: {
     flex: 1,
@@ -1128,7 +1128,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   ingredientMeta: {
-    color: '#5F7F6E',
+    color: '#2F7A4F',
     fontSize: 13,
     fontWeight: '700',
   },
@@ -1140,12 +1140,12 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#CDE8D5',
-    backgroundColor: '#EAF7EE',
+    borderColor: '#9FE7B9',
+    backgroundColor: '#DDF8E7',
   },
   ingredientTitle: {
     flexShrink: 1,
-    color: '#123B2A',
+    color: '#064E2F',
     fontSize: 16,
     fontWeight: '900',
   },
@@ -1166,8 +1166,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 14,
-    backgroundColor: '#F4FBF5',
-    shadowColor: '#FFFFFF',
+    backgroundColor: '#E9FBEF',
+    shadowColor: '#74D997',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.24,
     shadowRadius: 14,
@@ -1176,7 +1176,7 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     minWidth: 0,
-    color: '#123B2A',
+    color: '#064E2F',
     fontSize: 16,
     fontWeight: '800',
     paddingVertical: 12,
@@ -1189,7 +1189,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   loadingText: {
-    color: '#5F7F6E',
+    color: '#2F7A4F',
     fontSize: 16,
     fontWeight: '700',
   },
@@ -1198,13 +1198,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   nutritionPill: {
-    color: '#123B2A',
+    color: '#064E2F',
     fontSize: 11,
     fontWeight: '800',
     paddingHorizontal: 8,
     paddingVertical: 5,
     borderRadius: 999,
-    backgroundColor: '#CDE8D5',
+    backgroundColor: '#9FE7B9',
     overflow: 'hidden',
   },
   nutritionPreview: {
@@ -1214,13 +1214,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   pricePill: {
-    color: '#1B7F4C',
+    color: '#008A50',
     fontSize: 11,
     fontWeight: '900',
     paddingHorizontal: 8,
     paddingVertical: 5,
     borderRadius: 999,
-    backgroundColor: '#1FA463',
+    backgroundColor: '#00B86B',
     overflow: 'hidden',
   },
   primaryAction: {
@@ -1229,15 +1229,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 16,
-    backgroundColor: '#1FA463',
-    shadowColor: '#1FA463',
+    backgroundColor: '#00B86B',
+    shadowColor: '#00B86B',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.24,
     shadowRadius: 14,
     elevation: 3,
   },
   primaryActionText: {
-    color: '#FFFFFF',
+    color: '#FBFFF8',
     fontSize: 15,
     fontWeight: '900',
   },
@@ -1247,8 +1247,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 14,
-    backgroundColor: '#F4FBF5',
-    shadowColor: '#FFFFFF',
+    backgroundColor: '#E9FBEF',
+    shadowColor: '#74D997',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.22,
     shadowRadius: 12,
@@ -1267,12 +1267,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   sectionMeta: {
-    color: '#5F7F6E',
+    color: '#2F7A4F',
     fontSize: 13,
     fontWeight: '800',
   },
   sectionTitle: {
-    color: '#123B2A',
+    color: '#064E2F',
     fontSize: 18,
     fontWeight: '900',
   },
@@ -1282,22 +1282,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 14,
-    backgroundColor: '#1FA463',
-    shadowColor: '#1FA463',
+    backgroundColor: '#00B86B',
+    shadowColor: '#00B86B',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.22,
     shadowRadius: 12,
     elevation: 3,
   },
   subtitle: {
-    color: '#5F7F6E',
+    color: '#2F7A4F',
     fontSize: 15,
     fontWeight: '700',
     lineHeight: 21,
   },
   title: {
     flexShrink: 1,
-    color: '#123B2A',
+    color: '#064E2F',
     fontSize: 34,
     fontWeight: '900',
     lineHeight: 38,
@@ -1319,20 +1319,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#CDE8D5',
-    backgroundColor: '#EAF7EE',
+    borderColor: '#9FE7B9',
+    backgroundColor: '#DDF8E7',
   },
   unitChipSelected: {
-    borderColor: '#1FA463',
-    backgroundColor: '#CDE8D5',
+    borderColor: '#00B86B',
+    backgroundColor: '#9FE7B9',
   },
   unitChipText: {
-    color: '#5F7F6E',
+    color: '#2F7A4F',
     fontSize: 13,
     fontWeight: '800',
   },
   unitChipTextSelected: {
-    color: '#123B2A',
+    color: '#064E2F',
   },
   unitRow: {
     gap: 8,
