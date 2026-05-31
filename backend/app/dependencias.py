@@ -1,12 +1,13 @@
 import httpx 
-from app.config import SUPABASE_URL, SUPABASE_KEY
+from app.config import SUPABASE_URL, SUPABASE_KEY, SUPABASE_SERVICE_ROLE_KEY
 
 
 #headers para todas las peticiones a supabase
+SUPABASE_REST_KEY = SUPABASE_SERVICE_ROLE_KEY or SUPABASE_KEY
 
 SUPABASE_HEADERS = {
-    "apikey": SUPABASE_KEY,
-    "Authorization": f"Bearer {SUPABASE_KEY}", # aca se manda el token de autenticacion para poder acceder a los datos protegidos
+    "apikey": SUPABASE_REST_KEY,
+    "Authorization": f"Bearer {SUPABASE_REST_KEY}", # aca se manda el token de autenticacion para poder acceder a los datos protegidos
     "Content-Type": "application/json", # esto es para que el servidor sepa que le estamos enviando un archivo json
     "Prefer": "return=representation", #esto es para que supabase devuelva el registro despues de hacer una peticion
 }
@@ -16,6 +17,5 @@ def get_supabase_client() -> httpx.AsyncClient:
 
     #el rest/v1 es para que supabase sepa que le estamos enviando una peticion a la base de datos
     return httpx.AsyncClient(base_url=f"{SUPABASE_URL}/rest/v1", headers=SUPABASE_HEADERS)
-
 
 

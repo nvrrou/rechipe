@@ -88,6 +88,8 @@ class DespensaAdd(pydantic.BaseModel):
     unidad: str | None = None
     precio_aprox: float | None = None
     fecha_vencimiento: str | None = None
+    generar_info_ia: bool = False
+    generar_imagen_ia: bool = False
 
 
 class DespensaUpdate(pydantic.BaseModel):
@@ -107,6 +109,8 @@ class DespensaUpdate(pydantic.BaseModel):
     unidad: str | None = None
     precio_aprox: float | None = None
     fecha_vencimiento: str | None = None
+    generar_info_ia: bool = False
+    generar_imagen_ia: bool = False
 
 class DespensaItem(pydantic.BaseModel):
     id: str

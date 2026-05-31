@@ -32,12 +32,11 @@ async def health():
     #el "try:" es para atrapar errores, 
     try: # esto sirve para atrapar errores y poder mandar un mensaje mas claro al usuario
         async with get_supabase_client() as client: # el async with es para que el cliente se conecte de forma segura y se desconecte automaticamente
-           response = await client.get("/productos_catalogo?select=id&limit=1") # esto es para probar la conexion a supabase
+           response = await client.get("/productos?select=id&limit=1") # esto es para probar la conexion a supabase
            if response.status_code == 200: # el igual a 200 significa que todo esta bien 
             return {"status":"healthy", "database": "connected"}
            else:
             return {"status":"unhealthy", "database": "error", "detail": response.text} # si no esta conectado a supabase
     except Exception as e:
         return {"status":"unhealthy", "database": "error", "detail": str(e)} # si hay un error al conectar a supabase
-
 

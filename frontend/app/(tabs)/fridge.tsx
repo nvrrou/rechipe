@@ -13,6 +13,7 @@ import {
   buscarIngredientes,
   eliminarIngrediente,
   fetchDespensa,
+  solicitarAutenticacionProducto,
 } from '@/services/despensa';
 
 type ActiveView = 'categories' | 'category' | 'add' | 'search' | 'edit';
@@ -282,6 +283,8 @@ export default function FridgeScreen() {
   const [searchResults, setSearchResults] = useState<DespensaItemData[]>([]);
   const [searching, setSearching] = useState(false);
   const [formError, setFormError] = useState('');
+  const [authenticating, setAuthenticating] = useState(false);
+  const [pendingSaveMode, setPendingSaveMode] = useState<FormMode | null>(null);
 
   const categories = useMemo(() => {
     const base = new Map(DEFAULT_CATEGORIES.map((category) => [category.id, category]));
@@ -333,6 +336,7 @@ export default function FridgeScreen() {
 
   function updateForm<K extends keyof IngredientFormState>(key: K, value: IngredientFormState[K]) {
     setFormError('');
+    setPendingSaveMode(null);
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
@@ -341,6 +345,7 @@ export default function FridgeScreen() {
     setFormError('');
     setSelectedItem(null);
     setDropdownOpen(false);
+    setPendingSaveMode(null);
     setActiveView('add');
   }
 
@@ -349,6 +354,7 @@ export default function FridgeScreen() {
     setForm(formFromItem(item));
     setFormError('');
     setDropdownOpen(false);
+    setPendingSaveMode(null);
     setActiveView('edit');
   }
 
@@ -359,6 +365,7 @@ export default function FridgeScreen() {
     setSelectedItem(null);
     setFormError('');
     setDropdownOpen(false);
+    setPendingSaveMode(null);
   }
 
   function getFormCategoryName() {
@@ -387,6 +394,46 @@ export default function FridgeScreen() {
     };
   }
 
+  function hasEmptyNutritionFields() {
+    return NUTRIENT_FIELDS.some((field) => form[field.key].trim() === '');
+  }
+
+  function hasEmptyAiFields() {
+    return hasEmptyNutritionFields() || form.imagen_url.trim() === '';
+  }
+
+  async function performSaveIngredient(mode: FormMode, userId: string, generateMissing = false) {
+    setSaving(true);
+    setPendingSaveMode(null);
+    const payload = {
+      ...buildPayload(),
+      generar_info_ia: generateMissing && hasEmptyNutritionFields(),
+      generar_imagen_ia: generateMissing && form.imagen_url.trim() === '',
+    };
+    const result =
+      mode === 'add'
+        ? await agregarIngrediente({ ...(payload as DespensaAddData), user_id: userId })
+        : selectedItem
+          ? await actualizarIngrediente(selectedItem.id, payload)
+          : ({ error: 'No hay ingrediente seleccionado' } as DespensaItemData & { error?: string });
+
+    try {
+      if (result.error) {
+        setFormError(result.error);
+      } else if (mode === 'add') {
+        setItems((prev) => [result, ...prev]);
+        setSelectedCategoryId(slugifyCategory(result.categoria));
+        setActiveView('category');
+      } else {
+        setItems((prev) => prev.map((item) => (item.id === result.id ? result : item)));
+        setSelectedCategoryId(slugifyCategory(result.categoria));
+        setActiveView('category');
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function saveIngredient(mode: FormMode) {
     if (!user?.id) return;
     if (!form.nombre_producto.trim()) {
@@ -398,27 +445,25 @@ export default function FridgeScreen() {
       return;
     }
 
-    setSaving(true);
-    const payload = buildPayload();
-    const result =
-      mode === 'add'
-        ? await agregarIngrediente({ ...(payload as DespensaAddData), user_id: user.id })
-        : selectedItem
-          ? await actualizarIngrediente(selectedItem.id, payload)
-          : ({ error: 'No hay ingrediente seleccionado' } as DespensaItemData & { error?: string });
+    if (hasEmptyAiFields()) {
+      setPendingSaveMode(mode);
+      return;
+    }
+
+    await performSaveIngredient(mode, user.id, false);
+  }
+
+  async function handleAuthenticateProduct() {
+    if (!user?.id || !selectedItem?.producto_id) return;
+    setAuthenticating(true);
+    const result = await solicitarAutenticacionProducto(selectedItem.producto_id, user.id);
+    setAuthenticating(false);
 
     if (result.error) {
       Alert.alert('Error', result.error);
-    } else if (mode === 'add') {
-      setItems((prev) => [result, ...prev]);
-      setSelectedCategoryId(slugifyCategory(result.categoria));
-      setActiveView('category');
     } else {
-      setItems((prev) => prev.map((item) => (item.id === result.id ? result : item)));
-      setSelectedCategoryId(slugifyCategory(result.categoria));
-      setActiveView('category');
+      Alert.alert('Solicitud enviada', result.msg || 'Tu producto quedó pendiente de revisión.');
     }
-    setSaving(false);
   }
 
   async function handleDeleteIngredient(itemId: string) {
@@ -598,6 +643,34 @@ export default function FridgeScreen() {
           </View>
         </View>
 
+        {pendingSaveMode === mode && (
+          <View style={styles.aiPromptPanel}>
+            <View style={styles.aiPromptHeader}>
+              <MaterialCommunityIcons name="auto-fix" size={20} color="#064E2F" />
+              <Text style={styles.aiPromptTitle}>Completar datos faltantes</Text>
+            </View>
+            <Text style={styles.aiPromptText}>
+              Faltan datos de nutricion o imagen. Puedes guardar igual o pedirle a la IA que complete lo que falta.
+            </Text>
+            <View style={styles.aiPromptActions}>
+              <Pressable
+                accessibilityRole="button"
+                disabled={saving}
+                onPress={() => user?.id && performSaveIngredient(mode, user.id, false)}
+                style={styles.aiPromptSecondary}>
+                <Text style={styles.aiPromptSecondaryText}>Guardar igual</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                disabled={saving}
+                onPress={() => user?.id && performSaveIngredient(mode, user.id, true)}
+                style={styles.aiPromptPrimary}>
+                {saving ? <ActivityIndicator size="small" color="#FBFFF8" /> : <Text style={styles.aiPromptPrimaryText}>Generar y guardar</Text>}
+              </Pressable>
+            </View>
+          </View>
+        )}
+
         <View style={styles.formActions}>
           {mode === 'edit' && selectedItem && (
             <Pressable
@@ -606,6 +679,22 @@ export default function FridgeScreen() {
               style={styles.deleteAction}>
               <MaterialCommunityIcons name="trash-can-outline" size={20} color="#FF8A8A" />
               <Text style={styles.deleteActionText}>Eliminar</Text>
+            </Pressable>
+          )}
+          {mode === 'edit' && selectedItem && (
+            <Pressable
+              accessibilityRole="button"
+              disabled={authenticating}
+              onPress={handleAuthenticateProduct}
+              style={styles.secondaryAction}>
+              {authenticating ? (
+                <ActivityIndicator size="small" color="#064E2F" />
+              ) : (
+                <>
+                  <MaterialCommunityIcons name="shield-check-outline" size={20} color="#064E2F" />
+                  <Text style={styles.secondaryActionText}>Autenticar</Text>
+                </>
+              )}
             </Pressable>
           )}
           <Pressable accessibilityRole="button" disabled={saving} onPress={() => saveIngredient(mode)} style={styles.primaryAction}>
@@ -821,6 +910,67 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.22,
     shadowRadius: 12,
     elevation: 3,
+  },
+  aiPromptActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    backgroundColor: 'transparent',
+  },
+  aiPromptHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'transparent',
+  },
+  aiPromptPanel: {
+    gap: 12,
+    padding: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#9FE7B9',
+    backgroundColor: '#DDF8E7',
+  },
+  aiPromptPrimary: {
+    minHeight: 46,
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    backgroundColor: '#00B86B',
+  },
+  aiPromptPrimaryText: {
+    color: '#FBFFF8',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  aiPromptSecondary: {
+    minHeight: 46,
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#9FE7B9',
+    backgroundColor: '#E9FBEF',
+  },
+  aiPromptSecondaryText: {
+    color: '#064E2F',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  aiPromptText: {
+    color: '#2F7A4F',
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 18,
+  },
+  aiPromptTitle: {
+    color: '#064E2F',
+    fontSize: 15,
+    fontWeight: '900',
   },
   categoryCard: {
     width: '48%',
@@ -1085,6 +1235,7 @@ const styles = StyleSheet.create({
   },
   formActions: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 10,
     backgroundColor: 'transparent',
   },
@@ -1259,6 +1410,23 @@ const styles = StyleSheet.create({
     height: 38,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  secondaryAction: {
+    minHeight: 52,
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#9FE7B9',
+    backgroundColor: '#DDF8E7',
+  },
+  secondaryActionText: {
+    color: '#064E2F',
+    fontSize: 15,
+    fontWeight: '900',
   },
   sectionHeader: {
     flexDirection: 'row',

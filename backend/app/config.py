@@ -8,4 +8,5 @@ load_dotenv()  # esto carga las variables del archivo .env
 # no se conocen las claves por seguridad, solo el nombre de la variable
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") # para cuando tengamos las claves

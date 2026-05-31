@@ -21,6 +21,8 @@ export interface DespensaAddData {
   unidad?: string;
   precio_aprox?: number;
   fecha_vencimiento?: string;
+  generar_info_ia?: boolean;
+  generar_imagen_ia?: boolean;
 }
 
 export interface DespensaUpdateData {
@@ -40,6 +42,8 @@ export interface DespensaUpdateData {
   unidad?: string;
   precio_aprox?: number;
   fecha_vencimiento?: string;
+  generar_info_ia?: boolean;
+  generar_imagen_ia?: boolean;
 }
 
 export interface DespensaItemData {
@@ -62,6 +66,8 @@ export interface DespensaItemData {
   precio_aprox?: number;
   fecha_vencimiento?: string;
   created_at?: string;
+  producto_catalogo_id?: string;
+  es_personalizado?: boolean;
 }
 
 // ---------- Funciones ----------
@@ -86,6 +92,9 @@ export async function agregarIngrediente(data: DespensaAddData): Promise<Despens
       body: JSON.stringify(data),
     });
     const responseData = await res.json();
+    if (!res.ok) {
+      return { error: responseData.detail || responseData.error || 'No se pudo agregar el ingrediente' } as any;
+    }
     return responseData;
   } catch (e: any) {
     return { error: `Error de conexión: ${e.message}` } as any;
@@ -115,6 +124,22 @@ export async function eliminarIngrediente(itemId: string): Promise<{ msg?: strin
   try {
     const res = await fetch(`${API_URL}/despensa/eliminar/${itemId}`, {
       method: 'DELETE',
+    });
+    const data = await res.json();
+    return data;
+  } catch (e: any) {
+    return { error: `Error de conexión: ${e.message}` };
+  }
+}
+
+/** Solicita revisión admin para autenticar un producto */
+export async function solicitarAutenticacionProducto(
+  productoId: string,
+  userId: string
+): Promise<{ msg?: string; error?: string }> {
+  try {
+    const res = await fetch(`${API_URL}/despensa/autenticar/${productoId}?user_id=${encodeURIComponent(userId)}`, {
+      method: 'POST',
     });
     const data = await res.json();
     return data;

@@ -40,24 +40,15 @@ async def analizar_alimento(
         if "error" in resultado_ia:
             raise HTTPException(status_code=500, detail=resultado_ia["error"])
             
-        # 3. Preparamos el payload con la estructura exacta de tu tabla en Supabase
-        nuevo_producto = {
+        # 3. Devolvemos el análisis sin escribir en productos_catalogo.
+        return {
             "nombre": datos.nombre.strip(),
             "energia_kcal": resultado_ia.get("energia_kcal", 0),
             "proteinas_g": resultado_ia.get("proteinas_g", 0),
             "carbohidratos_g": resultado_ia.get("carbohidratos_g", 0),
-            "grasas_totales_g": resultado_ia.get("grasas_totales_g", 0),
+            "grasas_g": resultado_ia.get("grasas_totales_g", 0),
             "sodio_mg": resultado_ia.get("sodio_mg", 0)
         }
-        
-        # 4. Insertamos el nuevo producto en Supabase mediante un POST
-        respuesta_insert = await client.post("/productos_catalogo", json=nuevo_producto)
-        respuesta_insert.raise_for_status()
-        
-        datos_insertados = respuesta_insert.json()
-        
-        # Como tu equipo configuró 'Prefer: return=representation', Supabase devuelve una lista con el registro creado
-        return datos_insertados[0] if isinstance(datos_insertados, list) else datos_insertados
 
     except httpx.HTTPStatusError as exc:
         # Captura errores de respuesta de la API de Supabase (ej. violación de restricciones en la BD)
@@ -71,22 +62,22 @@ async def analizar_alimento(
 
 @router.post("/asignar-imagen/{producto_id}")
 async def asignar_imagen_permanente(
-    producto_id: int,
+    producto_id: str,
     client: httpx.AsyncClient = Depends(get_supabase_client)
 ):
     """
     Genera una imagen con IA para un producto específico, la aloja permanentemente
-    en Supabase Storage y actualiza la columna 'imagen' en la tabla.
+    en Supabase Storage y actualiza la imagen del producto del usuario.
     """
     try:
-        # 1. Obtener el nombre del producto desde tu tabla 'productos_catalogo'
-        url_get_prod = f"/productos_catalogo?id=eq.{producto_id}&select=nombre"
+        # 1. Obtener el nombre del producto desde la tabla 'productos'
+        url_get_prod = f"/productos?id=eq.{producto_id}&select=nombre"
         res_prod = await client.get(url_get_prod)
         res_prod.raise_for_status()
         prod_data = res_prod.json()
 
         if not prod_data:
-            raise HTTPException(status_code=404, detail="El producto no existe en el catálogo")
+            raise HTTPException(status_code=404, detail="El producto no existe")
         
         nombre_producto = prod_data[0]["nombre"]
 
@@ -119,9 +110,9 @@ async def asignar_imagen_permanente(
         # 5. URL PERMANENTE: Construimos el enlace público definitivo de tu bucket
         url_publica_permanente = f"{supabase_url_base}/storage/v1/object/public/productos/{nombre_archivo}"
 
-        # 6. GUARDAR EN BD: Actualizamos la columna 'imagen' del producto usando el cliente de tu equipo
-        url_update_prod = f"/productos_catalogo?id=eq.{producto_id}"
-        res_update = await client.patch(url_update_prod, json={"imagen": url_publica_permanente})
+        # 6. GUARDAR EN BD: Actualizamos la imagen del producto del usuario
+        url_update_prod = f"/productos?id=eq.{producto_id}"
+        res_update = await client.patch(url_update_prod, json={"imagen_url": url_publica_permanente})
         res_update.raise_for_status()
 
         return {
@@ -171,7 +162,7 @@ async def generar_receta(
         # 2. Obtener ingredientes + MACROS desde Supabase
         url_despensa = (
             f"/despensa?user_id=eq.{request.user_id}"
-            f"&select=cantidad,unidad,productos_catalogo(nombre,energia_kcal,proteinas_g,carbohidratos_g,grasas_g)"
+            f"&select=cantidad,unidad,productos(nombre,energia_kcal,proteinas_g,carbohidratos_g,grasas_totales_g)"
         )
         res_despensa = await client.get(url_despensa)
         res_despensa.raise_for_status()
@@ -183,13 +174,13 @@ async def generar_receta(
         # 3. Formatear los ingredientes para la IA
         ingredientes_disponibles = []
         for item in despensa_data:
-            prod = item.get("productos_catalogo")
+            prod = item.get("productos")
             if prod:
                 texto = (
                     f"- {item['cantidad']} {item['unidad']} de {prod['nombre']} "
                     f"(Info base por 100g: {prod['energia_kcal'] or 0} kcal, "
                     f"{prod['proteinas_g'] or 0}g Prot, {prod['carbohidratos_g'] or 0}g Carb, "
-                    f"{prod['grasas_g'] or 0}g Grasas)"
+                    f"{prod['grasas_totales_g'] or 0}g Grasas)"
                 )
                 ingredientes_disponibles.append(texto)
 
