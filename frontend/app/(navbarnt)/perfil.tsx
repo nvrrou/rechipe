@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
     StyleSheet,
     Text,
@@ -60,7 +61,7 @@ function ChipSelector({
     options,
     selected,
     onToggle,
-    accentColor = '#4ade80',
+    accentColor = '#00B86B',
 }: {
     options: string[];
     selected: string[];
@@ -78,11 +79,11 @@ function ChipSelector({
                         style={[
                             styles.tag,
                             {
-                                borderColor: isSelected ? accentColor : '#333',
-                                backgroundColor: isSelected ? accentColor + '22' : '#0f0f0f',
+                                borderColor: isSelected ? accentColor : '#9FE7B9',
+                                backgroundColor: isSelected ? accentColor + '22' : '#DDF8E7',
                             },
                         ]}>
-                        <Text style={[styles.tagText, { color: isSelected ? accentColor : '#999' }]}>
+                        <Text style={[styles.tagText, { color: isSelected ? accentColor : '#2F7A4F' }]}>
                             {isSelected ? `✓ ${option}` : option}
                         </Text>
                     </Pressable>
@@ -160,12 +161,26 @@ export default function PerfilScreen() {
         router.replace('/(auth)/login');
     };
 
+    const goBack = () => {
+        if (router.canGoBack()) {
+            router.back();
+            return;
+        }
+
+        router.replace('/(tabs)');
+    };
+
     const generos = ['masculino', 'femenino', 'otro'];
 
     return (
         <SafeAreaView style={styles.safeArea}>
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                <Text style={styles.title}>Mi Perfil</Text>
+                <View style={styles.header}>
+                    <Pressable accessibilityRole="button" onPress={goBack} style={styles.backButton}>
+                        <MaterialCommunityIcons name="chevron-left" size={24} color="#064E2F" />
+                    </Pressable>
+                    <Text style={styles.title}>Mi Perfil</Text>
+                </View>
 
                 {msg !== '' && (
                     <Text style={[styles.msgText, msg.includes('Error') && styles.errorText]}>{msg}</Text>
@@ -184,7 +199,7 @@ export default function PerfilScreen() {
                                     value={editEdad}
                                     onChangeText={setEditEdad}
                                     keyboardType="numeric"
-                                    placeholderTextColor="#555"
+                                    placeholderTextColor="#4F9F70"
                                 />
                             </View>
                             <View style={styles.editRow}>
@@ -194,7 +209,7 @@ export default function PerfilScreen() {
                                     value={editPeso}
                                     onChangeText={setEditPeso}
                                     keyboardType="numeric"
-                                    placeholderTextColor="#555"
+                                    placeholderTextColor="#4F9F70"
                                 />
                             </View>
                             <View style={styles.editRow}>
@@ -204,7 +219,7 @@ export default function PerfilScreen() {
                                     value={editAltura}
                                     onChangeText={setEditAltura}
                                     keyboardType="numeric"
-                                    placeholderTextColor="#555"
+                                    placeholderTextColor="#4F9F70"
                                 />
                             </View>
                             <Text style={styles.label}>Género</Text>
@@ -267,10 +282,10 @@ export default function PerfilScreen() {
                             onToggle={(o) => setEditObjetivos(prev =>
                                 prev.includes(o) ? prev.filter(x => x !== o) : [...prev, o]
                             )}
-                            accentColor="#4ade80"
+                            accentColor="#00B86B"
                         />
                     ) : (
-                        <TagList items={user?.objetivos || []} color="#4ade80" />
+                        <TagList items={user?.objetivos || []} color="#00B86B" />
                     )}
                 </View>
 
@@ -301,7 +316,7 @@ export default function PerfilScreen() {
                                 value={editIngFavoritos}
                                 onChangeText={setEditIngFavoritos}
                                 placeholder="Ej: pollo, arroz, tomate"
-                                placeholderTextColor="#555"
+                                placeholderTextColor="#4F9F70"
                             />
                         </View>
                     ) : (
@@ -317,7 +332,7 @@ export default function PerfilScreen() {
                             onPress={handleSave}
                             disabled={saving}>
                             {saving ? (
-                                <ActivityIndicator color="#000" />
+                                <ActivityIndicator color="#FBFFF8" />
                             ) : (
                                 <Text style={styles.saveButtonText}>Guardar cambios</Text>
                             )}
@@ -343,7 +358,7 @@ export default function PerfilScreen() {
 const styles = StyleSheet.create({
     safeArea: {
         flex: 1,
-        backgroundColor: '#000',
+        backgroundColor: '#FBFFF8',
     },
     scrollContent: {
         padding: 24,
@@ -354,28 +369,47 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 28,
         fontWeight: 'bold',
-        color: '#fff',
+        color: '#064E2F',
+    },
+    backButton: {
+        width: 42,
+        height: 42,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: 14,
+        backgroundColor: '#E9FBEF',
+        shadowColor: '#74D997',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.24,
+        shadowRadius: 14,
+        elevation: 2,
+    },
+    header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        backgroundColor: 'transparent',
     },
     msgText: {
-        color: '#4ade80',
+        color: '#00B86B',
         fontSize: 13,
         textAlign: 'center',
     },
     errorText: {
-        color: '#f87171',
+        color: '#FF8A8A',
     },
     card: {
-        backgroundColor: '#0a0a0a',
+        backgroundColor: '#DDF8E7',
         borderRadius: 16,
         padding: 20,
         borderWidth: 1,
-        borderColor: '#1a1a1a',
+        borderColor: '#9FE7B9',
         gap: 14,
     },
     sectionTitle: {
         fontSize: 16,
         fontWeight: '700',
-        color: '#fff',
+        color: '#064E2F',
     },
     infoRow: {
         flexDirection: 'row',
@@ -384,11 +418,11 @@ const styles = StyleSheet.create({
     },
     label: {
         fontSize: 15,
-        color: '#888',
+        color: '#2F7A4F',
     },
     value: {
         fontSize: 15,
-        color: '#fff',
+        color: '#064E2F',
         fontWeight: '500',
     },
     tagsContainer: {
@@ -407,7 +441,7 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
     emptyTag: {
-        color: '#555',
+        color: '#4F9F70',
         fontSize: 14,
         fontStyle: 'italic',
     },
@@ -421,11 +455,11 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     editInput: {
-        backgroundColor: '#0f0f0f',
+        backgroundColor: '#DDF8E7',
         borderWidth: 1,
-        borderColor: '#222',
+        borderColor: '#9FE7B9',
         borderRadius: 10,
-        color: '#fff',
+        color: '#064E2F',
         fontSize: 15,
         paddingHorizontal: 14,
         paddingVertical: 10,
@@ -433,14 +467,14 @@ const styles = StyleSheet.create({
         textAlign: 'right',
     },
     editInputGroup: {
-        backgroundColor: '#0f0f0f',
+        backgroundColor: '#DDF8E7',
         borderRadius: 12,
         paddingHorizontal: 16,
         borderWidth: 1,
-        borderColor: '#222',
+        borderColor: '#9FE7B9',
     },
     editInputFull: {
-        color: '#fff',
+        color: '#064E2F',
         fontSize: 15,
         paddingVertical: 14,
     },
@@ -454,32 +488,37 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         borderRadius: 10,
         borderWidth: 1,
-        borderColor: '#333',
-        backgroundColor: '#0f0f0f',
+        borderColor: '#9FE7B9',
+        backgroundColor: '#DDF8E7',
     },
     genderChipSelected: {
-        borderColor: '#a78bfa',
-        backgroundColor: '#a78bfa22',
+        borderColor: '#00B86B',
+        backgroundColor: '#D8FBE3',
     },
     genderChipText: {
-        color: '#999',
+        color: '#2F7A4F',
         fontSize: 13,
         fontWeight: '600',
     },
     genderChipTextSelected: {
-        color: '#a78bfa',
+        color: '#00B86B',
     },
     // Botones
     editButton: {
-        backgroundColor: '#1a1a1a',
+        backgroundColor: '#E9FBEF',
         paddingVertical: 16,
         borderRadius: 12,
         alignItems: 'center',
         borderWidth: 1,
-        borderColor: '#333',
+        borderColor: '#9FE7B9',
+        shadowColor: '#74D997',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.22,
+        shadowRadius: 12,
+        elevation: 2,
     },
     editButtonText: {
-        color: '#fff',
+        color: '#064E2F',
         fontSize: 16,
         fontWeight: '600',
     },
@@ -487,13 +526,18 @@ const styles = StyleSheet.create({
         gap: 10,
     },
     saveButton: {
-        backgroundColor: '#fff',
+        backgroundColor: '#00B86B',
         paddingVertical: 16,
         borderRadius: 12,
         alignItems: 'center',
+        shadowColor: '#00B86B',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.24,
+        shadowRadius: 14,
+        elevation: 3,
     },
     saveButtonText: {
-        color: '#000',
+        color: '#FBFFF8',
         fontSize: 16,
         fontWeight: '600',
     },
@@ -502,10 +546,10 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         alignItems: 'center',
         borderWidth: 1,
-        borderColor: '#333',
+        borderColor: '#9FE7B9',
     },
     cancelButtonText: {
-        color: '#999',
+        color: '#2F7A4F',
         fontSize: 15,
         fontWeight: '500',
     },
@@ -513,15 +557,15 @@ const styles = StyleSheet.create({
         opacity: 0.6,
     },
     logoutButton: {
-        backgroundColor: '#1a1a1a',
+        backgroundColor: '#9FE7B9',
         paddingVertical: 16,
         borderRadius: 12,
         alignItems: 'center',
         borderWidth: 1,
-        borderColor: '#f87171',
+        borderColor: '#FF8A8A',
     },
     logoutText: {
-        color: '#f87171',
+        color: '#FF8A8A',
         fontSize: 16,
         fontWeight: '600',
     },

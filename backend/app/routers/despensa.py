@@ -1,9 +1,10 @@
 from fastapi import APIRouter
-
+import httpx
+import uuid
 from app.dependencias import get_supabase_client
 from app.models.schemas import DespensaAdd, DespensaUpdate
 # IMPORTAMOS NUESTRA IA
-from app.services.ai_service import obtener_info_nutricional
+from app.services.ai_service import obtener_info_nutricional, generar_url_temporal_dalle
 
 router = APIRouter(
     prefix="/despensa",
@@ -119,7 +120,6 @@ async def agregar_ingrediente(data: DespensaAdd):
                     "azucar_g": data.azucar_g,
                 })
                 
-                # Solo hacemos la petición PATCH si hay datos que actualizar
                 if product_payload:
                     actualizar_producto = await client.patch(
                         f"/productos_catalogo?id=eq.{producto_id}",
@@ -128,25 +128,69 @@ async def agregar_ingrediente(data: DespensaAdd):
                     if actualizar_producto.status_code not in (200, 204):
                         return {"error": f"No se pudo actualizar el producto. Detalle: {actualizar_producto.text}"}
             else:
-                # SI EL PRODUCTO NO EXISTE: ¡Magia de la IA!
+                # SI EL PRODUCTO NO EXISTE: ¡Magia de la IA Nutricional y Visual!
                 print(f"Producto '{data.nombre_producto}' nuevo. Consultando IA para valores nutricionales...")
                 resultado_ia = await obtener_info_nutricional(data.nombre_producto)
                 
                 if "error" in resultado_ia:
                     return {"error": f"Error de la IA al calcular nutrición: {resultado_ia['error']}"}
 
+                # --- 🎨 NUEVA LÓGICA: GENERACIÓN Y GUARDADO DE IMAGEN ---
+                imagen_permanente_url = data.imagen_url # Respetamos si el usuario ya mandó una imagen
+                
+                if not imagen_permanente_url:
+                    print(f"Generando imagen de catálogo para '{data.nombre_producto}'...")
+                    try:
+                        # 1. Generamos la imagen (puede venir como URL o como texto Base64)
+                        resultado_imagen = await generar_url_temporal_dalle(data.nombre_producto)
+                        
+                        if not resultado_imagen:
+                            raise Exception("La IA no devolvió ningún dato de imagen.")
+                            
+                        # 2. Procesamos el resultado para obtener los bytes reales de la imagen
+                        if resultado_imagen.startswith("http"):
+                            # Si es un enlace web, descargamos la imagen normalmente
+                            async with httpx.AsyncClient() as dl_client:
+                                res_img = await dl_client.get(resultado_imagen)
+                                bytes_imagen = res_img.content
+                        else:
+                            # Si es el muro de texto (Base64), lo decodificamos directamente en memoria
+                            import base64
+                            bytes_imagen = base64.b64decode(resultado_imagen)
+                                
+                        # 3. Extraemos el dominio base y armamos las URLs de Storage
+                        supabase_url_base = str(client.base_url).split("/rest/v1")[0]
+                        nombre_archivo = f"prod_{uuid.uuid4().hex[:10]}.png"
+                        url_storage_upload = f"{supabase_url_base}/storage/v1/object/productos/{nombre_archivo}"
+                        
+                        # 4. Copiamos los tokens de autenticación
+                        headers_auth = {k: v for k, v in client.headers.items() if k.lower() in ["authorization", "apikey"]}
+                        headers_upload = {**headers_auth, "Content-Type": "image/png"}
+                        
+                        # 5. Subimos los bytes a tu Supabase Storage
+                        async with httpx.AsyncClient() as storage_client:
+                            res_upload = await storage_client.post(url_storage_upload, headers=headers_upload, content=bytes_imagen)
+                            if res_upload.status_code in (200, 201):
+                                # Si el upload fue exitoso, asignamos la URL pública definitiva de TU Supabase
+                                imagen_permanente_url = f"{supabase_url_base}/storage/v1/object/public/productos/{nombre_archivo}"
+                                print("¡Imagen generada, decodificada y alojada con éxito en Supabase!")
+                            else:
+                                print(f"Fallo al subir a Storage: {res_upload.text}")
+                    except Exception as e_img:
+                        # Si DALL-E falla por cualquier otra razón, el producto igual se guarda sin foto
+                        print(f"Error generando imagen visual, pero el proceso continuará: {e_img}")
+                # --- FIN LÓGICA DE IMAGEN ---
+
                 # Combinamos lo que haya mandado el usuario con lo que calculó la IA
-                # Priorizamos lo del usuario por si lo ingresó manualmente
                 product_payload = _clean_payload({
                     "nombre": data.nombre_producto.strip(),
                     "codigo_barra": data.codigo_barra,
                     "categoria": data.categoria,
                     "marca": data.marca,
-                    "imagen_url": data.imagen_url,
+                    "imagen_url": imagen_permanente_url, # <--- ¡Aquí inyectamos la URL permanente de DALL-E!
                     "energia_kcal": data.energia_kcal if data.energia_kcal is not None else resultado_ia.get("energia_kcal"),
                     "proteinas_g": data.proteinas_g if data.proteinas_g is not None else resultado_ia.get("proteinas_g"),
                     "carbohidratos_g": data.carbohidratos_g if data.carbohidratos_g is not None else resultado_ia.get("carbohidratos_g"),
-                    # Ojo aquí: Mapeamos 'grasas_totales_g' de la IA a 'grasas_g' de la DB
                     "grasas_g": data.grasas_g if data.grasas_g is not None else resultado_ia.get("grasas_totales_g"),
                     "sodio_mg": data.sodio_mg if data.sodio_mg is not None else resultado_ia.get("sodio_mg"),
                     "fibra_g": data.fibra_g,
@@ -160,7 +204,7 @@ async def agregar_ingrediente(data: DespensaAdd):
 
                 producto_id = crear_resp.json()[0]["id"]
 
-            # Ahora procedemos a guardar en la despensa del usuario usando el producto_id (ya sea el nuevo o el existente)
+            # Ahora procedemos a guardar en la despensa del usuario usando el producto_id
             ya_existe = await client.get(
                 "/despensa",
                 params={

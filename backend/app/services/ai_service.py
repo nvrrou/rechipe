@@ -11,6 +11,13 @@ load_dotenv()
 client = AsyncOpenAI()
 
 
+NUTRIENT_KEYS = ("energia_kcal", "proteinas_g", "carbohidratos_g", "grasas_totales_g", "sodio_mg")
+
+
+def _nutrientes_en_cero(datos: dict) -> bool:
+    return all(float(datos.get(key) or 0) == 0 for key in NUTRIENT_KEYS)
+
+
 async def obtener_info_nutricional(nombre_producto: str):
     """
     Toma el nombre de un producto y devuelve su perfil nutricional estándar por 100g en JSON.
@@ -34,25 +41,72 @@ async def obtener_info_nutricional(nombre_producto: str):
     }}
     """
 
-    try:
+    async def consultar_nutricion(instrucciones_extra: str = ""):
         response = await client.chat.completions.create(
             model="gpt-4o-mini", # Excelente y barato para extraer datos fijos
             messages=[
-                {"role": "system", "content": instrucciones}
+                {"role": "system", "content": instrucciones + instrucciones_extra}
             ],
             temperature=0.1 # Muy baja para que sea preciso y no "invente" variaciones
         )
-        
-        contenido = response.choices[0].message.content
-        
-        # Convertimos el texto (String) a un diccionario real de Python (JSON)
+        return response.choices[0].message.content
+
+    try:
+        contenido = await consultar_nutricion()
         datos_nutricionales = json.loads(contenido)
+
+        if _nutrientes_en_cero(datos_nutricionales):
+            contenido = await consultar_nutricion(
+                """
+
+                ATENCIÓN: La respuesta anterior quedó con todos los nutrientes en 0.
+                Vuelve a estimar el perfil nutricional estándar del alimento.
+                Solo usa todos los valores en 0 si el producto realmente no es un alimento reconocible.
+                """
+            )
+            datos_nutricionales = json.loads(contenido)
+
         return datos_nutricionales
-        
+
     except json.JSONDecodeError:
         return {"error": "La IA no devolvió un JSON válido", "texto_crudo": contenido}
     except Exception as e:
         return {"error": str(e)}
+
+async def generar_url_temporal_dalle(nombre_producto: str) -> str:
+    """
+    Llama a la API de OpenAI para generar la imagen de un producto.
+    Soporta tanto URLs públicas como respuestas en formato Base64.
+    """
+    try:
+        prompt_estandar = f"""
+        A high-resolution, professional studio photograph of a single {nombre_producto}, 
+        fresh and appetizing, centered on a pristine, solid white background. 
+        Natural, soft lighting. Overhead or slightly elevated angle, suitable for a clean grocery catalogue. 
+        No packaging, no text, no logos, no surrounding clutter.
+        """
+
+        respuesta = await client.images.generate(
+            model="gpt-image-1-mini", 
+            prompt=prompt_estandar,
+            n=1,
+            size="1024x1024"
+        )
+        
+        # 1. Intentamos sacar la URL clásica (por si acaso)
+        url_generada = getattr(respuesta.data[0], 'url', None)
+        if url_generada:
+            return url_generada
+            
+        # 2. Si no hay URL, extraemos el contenido Base64 (el muro de texto)
+        b64_generado = getattr(respuesta.data[0], 'b64_json', None)
+        if b64_generado:
+            return b64_generado
+            
+        raise Exception("La API de imágenes no devolvió ni una URL ni datos en Base64.")
+        
+    except Exception as e:
+        raise Exception(f"Error al procesar la imagen de {nombre_producto}: {str(e)}")
 
 async def generar_receta_con_ia(ingredientes: list, objetivo_nutricional: str, tipo_comida: str, ingredientes_obligatorios: list = None):
     """
