@@ -26,7 +26,7 @@ CREATE TABLE public.despensa (
   CONSTRAINT despensa_pkey PRIMARY KEY (id),
   CONSTRAINT fk_despensa_grupo FOREIGN KEY (grupo_id) REFERENCES public.grupos(id),
   CONSTRAINT despensa_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id),
-  CONSTRAINT despensa_producto_id_fkey FOREIGN KEY (producto_id) REFERENCES public.productos_catalogo(id)
+  CONSTRAINT despensa_producto_id_fkey FOREIGN KEY (producto_id) REFERENCES public.productos(id)
 );
 CREATE TABLE public.grupo_miembros (
   grupo_id uuid NOT NULL,
@@ -112,9 +112,9 @@ CREATE TABLE public.precios_productos (
   created_at timestamp with time zone DEFAULT now(),
   updated_at timestamp with time zone DEFAULT now(),
   CONSTRAINT precios_productos_pkey PRIMARY KEY (id),
-  CONSTRAINT precios_productos_producto_id_fkey FOREIGN KEY (producto_id) REFERENCES public.productos_catalogo(id),
   CONSTRAINT precios_productos_supermercado_id_fkey FOREIGN KEY (supermercado_id) REFERENCES public.supermercados(id),
-  CONSTRAINT precios_productos_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id)
+  CONSTRAINT precios_productos_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id),
+  CONSTRAINT precios_productos_producto_id_fkey FOREIGN KEY (producto_id) REFERENCES public.productos(id)
 );
 CREATE TABLE public.presupuestos (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -127,6 +127,43 @@ CREATE TABLE public.presupuestos (
   updated_at timestamp with time zone DEFAULT now(),
   CONSTRAINT presupuestos_pkey PRIMARY KEY (id),
   CONSTRAINT presupuestos_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.productos (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  producto_catalogo_id uuid,
+  nombre text NOT NULL,
+  codigo_barra text,
+  categoria text,
+  marca text,
+  imagen_url text,
+  energia_kcal text,
+  proteinas_g numeric,
+  carbohidratos_g numeric,
+  grasas_totales_g numeric,
+  fibra_g numeric,
+  sodio_mg numeric,
+  azucares_totales_g numeric,
+  es_personalizado boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT productos_pkey PRIMARY KEY (id),
+  CONSTRAINT productos_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id),
+  CONSTRAINT productos_producto_catalogo_id_fkey FOREIGN KEY (producto_catalogo_id) REFERENCES public.productos_catalogo(id)
+);
+CREATE TABLE public.productos_auth (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  producto_id uuid NOT NULL,
+  solicitado_por uuid NOT NULL,
+  estado text NOT NULL DEFAULT 'pendiente'::text CHECK (estado = ANY (ARRAY['pendiente'::text, 'aprobado'::text, 'rechazado'::text])),
+  comentario_revision text,
+  created_at timestamp with time zone DEFAULT now(),
+  reviewed_at timestamp with time zone,
+  reviewed_by uuid,
+  CONSTRAINT productos_auth_pkey PRIMARY KEY (id),
+  CONSTRAINT productos_auth_producto_id_fkey FOREIGN KEY (producto_id) REFERENCES public.productos(id),
+  CONSTRAINT productos_auth_solicitado_por_fkey FOREIGN KEY (solicitado_por) REFERENCES auth.users(id),
+  CONSTRAINT productos_auth_reviewed_by_fkey FOREIGN KEY (reviewed_by) REFERENCES auth.users(id)
 );
 CREATE TABLE public.productos_catalogo (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
