@@ -283,7 +283,7 @@ export default function FridgeScreen() {
   const [searchResults, setSearchResults] = useState<DespensaItemData[]>([]);
   const [searching, setSearching] = useState(false);
   const [formError, setFormError] = useState('');
-  const [authenticating, setAuthenticating] = useState(false);
+  const [authenticatingProductId, setAuthenticatingProductId] = useState<string | null>(null);
   const [pendingSaveMode, setPendingSaveMode] = useState<FormMode | null>(null);
 
   const categories = useMemo(() => {
@@ -453,11 +453,11 @@ export default function FridgeScreen() {
     await performSaveIngredient(mode, user.id, false);
   }
 
-  async function handleAuthenticateProduct() {
-    if (!user?.id || !selectedItem?.producto_id) return;
-    setAuthenticating(true);
-    const result = await solicitarAutenticacionProducto(selectedItem.producto_id, user.id);
-    setAuthenticating(false);
+  async function handleAuthenticateProduct(item = selectedItem) {
+    if (!user?.id || !item?.producto_id || authenticatingProductId) return;
+    setAuthenticatingProductId(item.producto_id);
+    const result = await solicitarAutenticacionProducto(item.producto_id, user.id);
+    setAuthenticatingProductId(null);
 
     if (result.error) {
       Alert.alert('Error', result.error);
@@ -526,7 +526,33 @@ export default function FridgeScreen() {
             </View>
           )}
         </View>
-        <MaterialCommunityIcons name="pencil-outline" size={22} color="#2F7A4F" />
+        <View style={styles.ingredientActions}>
+          <Pressable
+            accessibilityLabel="Editar ingrediente"
+            accessibilityRole="button"
+            onPress={(event) => {
+              event.stopPropagation();
+              openEditView(item);
+            }}
+            style={styles.ingredientEditButton}>
+            <MaterialCommunityIcons name="pencil-outline" size={21} color="#2F7A4F" />
+          </Pressable>
+          <Pressable
+            accessibilityLabel="Solicitar autenticacion"
+            accessibilityRole="button"
+            disabled={authenticatingProductId === item.producto_id}
+            onPress={(event) => {
+              event.stopPropagation();
+              handleAuthenticateProduct(item);
+            }}
+            style={styles.ingredientAuthButton}>
+            {authenticatingProductId === item.producto_id ? (
+              <ActivityIndicator size="small" color="#0369A1" />
+            ) : (
+              <MaterialCommunityIcons name="shield-check-outline" size={21} color="#0369A1" />
+            )}
+          </Pressable>
+        </View>
       </Pressable>
     );
   }
@@ -684,14 +710,14 @@ export default function FridgeScreen() {
           {mode === 'edit' && selectedItem && (
             <Pressable
               accessibilityRole="button"
-              disabled={authenticating}
-              onPress={handleAuthenticateProduct}
+              disabled={!!authenticatingProductId}
+              onPress={() => handleAuthenticateProduct()}
               style={styles.secondaryAction}>
-              {authenticating ? (
-                <ActivityIndicator size="small" color="#064E2F" />
+              {selectedItem && authenticatingProductId === selectedItem.producto_id ? (
+                <ActivityIndicator size="small" color="#0369A1" />
               ) : (
                 <>
-                  <MaterialCommunityIcons name="shield-check-outline" size={20} color="#064E2F" />
+                  <MaterialCommunityIcons name="shield-check-outline" size={20} color="#0369A1" />
                   <Text style={styles.secondaryActionText}>Autenticar</Text>
                 </>
               )}
@@ -1273,6 +1299,32 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     backgroundColor: '#9FE7B9',
   },
+  ingredientActions: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: 'transparent',
+  },
+  ingredientAuthButton: {
+    width: 34,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#7DD3FC',
+    backgroundColor: '#E0F2FE',
+  },
+  ingredientEditButton: {
+    width: 34,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#9FE7B9',
+    backgroundColor: '#DDF8E7',
+  },
   ingredientInfo: {
     flex: 1,
     gap: 5,
@@ -1420,11 +1472,11 @@ const styles = StyleSheet.create({
     gap: 8,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#9FE7B9',
-    backgroundColor: '#DDF8E7',
+    borderColor: '#7DD3FC',
+    backgroundColor: '#E0F2FE',
   },
   secondaryActionText: {
-    color: '#064E2F',
+    color: '#0369A1',
     fontSize: 15,
     fontWeight: '900',
   },
