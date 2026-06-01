@@ -3,8 +3,9 @@ import base64
 import httpx
 import uuid
 from app.dependencias import get_supabase_client
-from app.models.schemas import DespensaAdd, DespensaUpdate
-from app.services.ai_service import obtener_info_nutricional, generar_url_temporal_dalle
+from app.models.schemas import CategoriaProductoCheck, DespensaAdd, DespensaUpdate
+from app.routers.supermarkets import guardar_precio_supermercado
+from app.services.ai_service import obtener_info_nutricional, generar_url_temporal_dalle, verificar_categoria_producto
 
 router = APIRouter(
     prefix="/despensa",
@@ -57,6 +58,7 @@ def _first_value(*values):
 
 def _format_item(item: dict, producto: dict | None = None) -> dict:
     producto = producto or {}
+    precio_info = item.get("precio_info") or {}
     return {
         "id": item["id"],
         "producto_id": item["producto_id"],
@@ -77,6 +79,10 @@ def _format_item(item: dict, producto: dict | None = None) -> dict:
         "cantidad": item.get("cantidad"),
         "unidad": item.get("unidad"),
         "precio_aprox": item.get("precio_aprox"),
+        "precio_supermercado": precio_info.get("precio"),
+        "precio_unidad": precio_info.get("unidad"),
+        "supermercado_id": precio_info.get("supermercado_id"),
+        "supermercado_nombre": precio_info.get("supermercado_nombre"),
         "fecha_vencimiento": item.get("fecha_vencimiento"),
         "created_at": item.get("created_at"),
     }
@@ -98,7 +104,12 @@ async def _get_item(client, item_id: str):
     if error:
         return None, error
 
-    return _format_item(items[0], product), None
+    price_info, price_error = await _get_price_info(client, items[0].get("producto_id"))
+    if price_error:
+        return None, price_error
+
+    item = {**items[0], "precio_info": price_info}
+    return _format_item(item, product), None
 
 
 async def _get_product(client, producto_id: str | None):
@@ -132,6 +143,89 @@ async def _get_products_by_ids(client, product_ids: list[str]):
         return None, {"error": f"Error al obtener productos. Detalle: {response.text}"}
 
     return {product["id"]: product for product in response.json()}, None
+
+
+async def _get_price_info(client, producto_id: str | None):
+    if not producto_id:
+        return {}, None
+
+    response = await client.get(
+        "/precios_productos",
+        params={
+            "producto_id": f"eq.{producto_id}",
+            "select": "id,producto_id,supermercado_id,precio,unidad",
+            "order": "precio.asc",
+            "limit": "1",
+        },
+    )
+    if response.status_code != 200:
+        return {}, None
+
+    prices = response.json()
+    if not prices:
+        return {}, None
+
+    price = prices[0]
+    supermarket_name = None
+    if price.get("supermercado_id"):
+        supermarket_response = await client.get(
+            "/supermercados",
+            params={"id": f"eq.{price['supermercado_id']}", "select": "nombre", "limit": "1"},
+        )
+        if supermarket_response.status_code == 200 and supermarket_response.json():
+            supermarket_name = supermarket_response.json()[0].get("nombre")
+
+    return {
+        "precio": price.get("precio"),
+        "supermercado_id": price.get("supermercado_id"),
+        "supermercado_nombre": supermarket_name,
+        "unidad": price.get("unidad"),
+    }, None
+
+
+async def _get_prices_by_product_ids(client, product_ids: list[str]):
+    clean_ids = [product_id for product_id in product_ids if product_id]
+    if not clean_ids:
+        return {}, None
+
+    response = await client.get(
+        "/precios_productos",
+        params={
+            "producto_id": f"in.({','.join(clean_ids)})",
+            "select": "id,producto_id,supermercado_id,precio,unidad",
+            "order": "precio.asc",
+        },
+    )
+    if response.status_code != 200:
+        return {}, None
+
+    best_by_product = {}
+    supermarket_ids = set()
+    for price in response.json():
+        product_id = price.get("producto_id")
+        if product_id and product_id not in best_by_product:
+            best_by_product[product_id] = price
+            if price.get("supermercado_id"):
+                supermarket_ids.add(price["supermercado_id"])
+
+    supermarkets = {}
+    if supermarket_ids:
+        supermarket_response = await client.get(
+            "/supermercados",
+            params={"id": f"in.({','.join(supermarket_ids)})", "select": "id,nombre"},
+        )
+        if supermarket_response.status_code == 200:
+            supermarkets = {item["id"]: item.get("nombre") for item in supermarket_response.json()}
+
+    return {
+        product_id: {
+            "precio": price.get("precio"),
+            "unidad": price.get("unidad"),
+            "supermercado_id": price.get("supermercado_id"),
+            "supermercado_nombre": supermarkets.get(price.get("supermercado_id")),
+        }
+        for product_id, price in best_by_product.items()
+    }, None
 
 
 async def _find_catalog_product(client, data: DespensaAdd):
@@ -246,6 +340,27 @@ async def _build_product_payload(client, data, catalog_product=None, current_pro
     return payload, None
 
 
+@router.post("/verificar-categoria")
+async def verificar_categoria(data: CategoriaProductoCheck):
+    """Usa IA para recomendar otra categoria si la actual no calza con el producto."""
+    try:
+        if not data.nombre_producto.strip() or not data.categoria_actual.strip():
+            return {"requiere_cambio": False, "categoria_sugerida": None, "razon": ""}
+
+        resultado = await verificar_categoria_producto(
+            data.nombre_producto.strip(),
+            data.categoria_actual.strip(),
+            data.categorias_disponibles,
+        )
+
+        if "error" in resultado:
+            return {"requiere_cambio": False, "categoria_sugerida": None, "razon": resultado["error"]}
+
+        return resultado
+    except Exception as e:
+        return {"requiere_cambio": False, "categoria_sugerida": None, "razon": str(e)}
+
+
 @router.post("/agregar")
 async def agregar_ingrediente(data: DespensaAdd):
     """Agrega un ingrediente a la despensa creando un producto del usuario."""
@@ -278,6 +393,17 @@ async def agregar_ingrediente(data: DespensaAdd):
             if insertar.status_code != 201:
                 return {"error": f"No se pudo agregar a la despensa. Detalle: {insertar.text}"}
 
+            price_error = await guardar_precio_supermercado(
+                client,
+                producto_id,
+                data.supermercado_id,
+                data.precio_supermercado,
+                data.precio_unidad,
+                data.user_id,
+            )
+            if price_error:
+                return price_error
+
             item_id = insertar.json()[0]["id"]
             item, error = await _get_item(client, item_id)
             return error or item
@@ -305,8 +431,17 @@ async def listar_despensa(user_id: str):
             )
             if error:
                 return error
+            prices_by_id, _ = await _get_prices_by_product_ids(
+                client,
+                [item.get("producto_id") for item in pantry_items],
+            )
 
-            return {"items": [_format_item(item, products_by_id.get(item.get("producto_id"))) for item in pantry_items]}
+            return {
+                "items": [
+                    _format_item({**item, "precio_info": prices_by_id.get(item.get("producto_id"))}, products_by_id.get(item.get("producto_id")))
+                    for item in pantry_items
+                ]
+            }
     except Exception as e:
         return {"error": str(e)}
 
@@ -365,6 +500,16 @@ async def actualizar_ingrediente(item_id: str, data: DespensaUpdate):
                 response = await client.patch(f"/despensa?id=eq.{item_id}", json=pantry_payload)
                 if response.status_code not in (200, 204):
                     return {"error": f"No se pudo actualizar la despensa. Detalle: {response.text}"}
+
+            price_error = await guardar_precio_supermercado(
+                client,
+                current_item["producto_id"],
+                values.get("supermercado_id"),
+                values.get("precio_supermercado"),
+                values.get("precio_unidad"),
+            )
+            if price_error:
+                return price_error
 
             item, error = await _get_item(client, item_id)
             return error or item
@@ -451,13 +596,17 @@ async def buscar_ingredientes(user_id: str, q: str = ""):
             )
             if error:
                 return error
+            prices_by_id, _ = await _get_prices_by_product_ids(
+                client,
+                [item.get("producto_id") for item in pantry_items],
+            )
 
             items = []
             normalized_query = q.strip().lower()
             for item in pantry_items:
                 producto = products_by_id.get(item.get("producto_id")) or {}
                 if normalized_query in (producto.get("nombre") or "").lower():
-                    items.append(_format_item(item, producto))
+                    items.append(_format_item({**item, "precio_info": prices_by_id.get(item.get("producto_id"))}, producto))
 
             return {"items": items}
     except Exception as e:

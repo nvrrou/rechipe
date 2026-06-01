@@ -6,7 +6,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput } from 
 import { Text, View } from '@/components/Themed';
 import { useAuth } from '@/contexts/AuthContext';
 import { DespensaItemData, fetchDespensa } from '@/services/despensa';
-import { GeneratedRecipe, generateRecipes } from '@/services/recipes';
+import { BudgetPurchaseSuggestion, GeneratedRecipe, generateBudgetRecipe, generateRecipes } from '@/services/recipes';
 import { appendShoppingItems, createShoppingItem } from '@/services/shoppingList';
 
 type MealType = {
@@ -38,99 +38,6 @@ const MEAL_TYPES: MealType[] = [
 ];
 
 const QUICK_OBJECTIVES = ['Alto en proteínas', 'Bajo en calorías', 'Barato', 'Rápido', 'Sin azúcar', 'Equilibrado'];
-
-const PURCHASE_CATALOG: PurchaseSuggestion[] = [
-  {
-    id: 'pollo-filete',
-    nombre: 'Pechuga de pollo',
-    categoria: 'Carnes',
-    cantidad: '500 g',
-    precio: 4200,
-    mealTypes: ['Almuerzo', 'Cena', 'Meal prep'],
-    reason: 'Suma proteína y combina con casi cualquier base de la despensa.',
-  },
-  {
-    id: 'huevos',
-    nombre: 'Huevos',
-    categoria: 'Proteínas',
-    cantidad: '12 unidades',
-    precio: 3600,
-    mealTypes: ['Desayuno', 'Cena', 'Snack'],
-    reason: 'Baratos, rápidos y útiles para completar comidas simples.',
-  },
-  {
-    id: 'yogurt-natural',
-    nombre: 'Yogurt natural',
-    categoria: 'Lácteos',
-    cantidad: '1 kg',
-    precio: 2990,
-    mealTypes: ['Desayuno', 'Snack', 'Postre'],
-    reason: 'Sirve para desayunos, salsas y snacks con fruta o avena.',
-  },
-  {
-    id: 'avena',
-    nombre: 'Avena',
-    categoria: 'Cereales',
-    cantidad: '1 kg',
-    precio: 1990,
-    mealTypes: ['Desayuno', 'Snack', 'Postre'],
-    reason: 'Rinde mucho y sube saciedad con poco presupuesto.',
-  },
-  {
-    id: 'verduras-surtidas',
-    nombre: 'Verduras surtidas',
-    categoria: 'Verduras',
-    cantidad: '1 bolsa',
-    precio: 2500,
-    mealTypes: ['Almuerzo', 'Cena', 'Meal prep'],
-    reason: 'Completa platos con volumen, fibra y color.',
-  },
-  {
-    id: 'atun',
-    nombre: 'Atún',
-    categoria: 'Proteínas',
-    cantidad: '2 latas',
-    precio: 3200,
-    mealTypes: ['Almuerzo', 'Cena', 'Snack'],
-    reason: 'Proteína lista para usar cuando falta tiempo.',
-  },
-  {
-    id: 'legumbres',
-    nombre: 'Lentejas',
-    categoria: 'Legumbres',
-    cantidad: '1 kg',
-    precio: 2400,
-    mealTypes: ['Almuerzo', 'Cena', 'Meal prep'],
-    reason: 'Base barata para porciones grandes y nutritivas.',
-  },
-  {
-    id: 'platano',
-    nombre: 'Plátano',
-    categoria: 'Frutas',
-    cantidad: '1 kg',
-    precio: 1800,
-    mealTypes: ['Desayuno', 'Snack', 'Postre'],
-    reason: 'Aporta energía rápida y combina bien con avena o yogurt.',
-  },
-  {
-    id: 'palta',
-    nombre: 'Palta',
-    categoria: 'Verduras',
-    cantidad: '2 unidades',
-    precio: 2600,
-    mealTypes: ['Desayuno', 'Almuerzo', 'Cena'],
-    reason: 'Mejora textura y grasas saludables en platos simples.',
-  },
-  {
-    id: 'quesillo',
-    nombre: 'Quesillo',
-    categoria: 'Lácteos',
-    cantidad: '300 g',
-    precio: 2800,
-    mealTypes: ['Desayuno', 'Snack', 'Cena'],
-    reason: 'Proteína ligera para acompañar pan, ensaladas o bowls.',
-  },
-];
 
 function itemSubtitle(item: DespensaItemData) {
   return [item.categoria, item.cantidad ? `${item.cantidad} ${item.unidad || ''}`.trim() : undefined]
@@ -260,49 +167,53 @@ export default function RecipeScreen() {
     setError('');
   }
 
-  function buildPurchaseSuggestions() {
+  async function buildPurchaseSuggestions() {
     const budget = parseBudget(budgetInput);
     if (budget <= 0) {
       setError('Ingresa un presupuesto para recomendar compras.');
       return;
     }
 
-    const pantryNames = new Set(items.map((item) => item.nombre_producto?.toLowerCase()).filter(Boolean));
-    const pantryCategories = new Set(items.map((item) => item.categoria?.toLowerCase()).filter(Boolean));
-
-    const scoredSuggestions = PURCHASE_CATALOG.filter((item) => !pantryNames.has(item.nombre.toLowerCase()))
-      .map((item) => {
-        let score = item.mealTypes.includes(selectedMeal) ? 4 : 0;
-        if (!pantryCategories.has(item.categoria.toLowerCase())) score += 2;
-        if (objective === 'Barato' && item.precio <= 2800) score += 2;
-        if (objective === 'Alto en proteínas' && ['Carnes', 'Proteínas', 'Lácteos'].includes(item.categoria)) score += 2;
-        if (objective === 'Rápido' && ['Huevos', 'Atún', 'Yogurt natural'].includes(item.nombre)) score += 2;
-        return { item, score };
-      })
-      .sort((a, b) => b.score - a.score || a.item.precio - b.item.precio)
-      .map(({ item }) => item);
-
-    const nextSuggestions: PurchaseSuggestion[] = [];
-    let remainingBudget = budget;
-
-    scoredSuggestions.forEach((item) => {
-      if (nextSuggestions.length >= 6) return;
-      if (item.precio <= remainingBudget) {
-        nextSuggestions.push(item);
-        remainingBudget -= item.precio;
-      }
-    });
-
-    if (nextSuggestions.length === 0) {
-      setPurchaseSuggestions([]);
-      setSelectedPurchaseIds([]);
-      setError('No encontré compras que calcen con ese presupuesto.');
+    if (!user?.id) {
+      setError('No hay usuario activo para generar receta presupuestada.');
       return;
     }
 
-    setPurchaseSuggestions(nextSuggestions);
-    setSelectedPurchaseIds(nextSuggestions.map((item) => item.id));
+    setGenerating(true);
     setError('');
+    setRecipes([]);
+    setPurchaseSuggestions([]);
+    setSelectedPurchaseIds([]);
+
+    const result = await generateBudgetRecipe({
+      user_id: user.id,
+      tipo_comida: selectedMeal,
+      presupuesto: budget,
+      objetivo_nutricional: objective.trim(),
+    });
+
+    if (result.error) {
+      setError(result.error);
+    } else {
+      const suggestions = (result.compras_sugeridas || []).map((item: BudgetPurchaseSuggestion, index) => ({
+        id: `${item.nombre}-${index}`,
+        nombre: item.nombre,
+        categoria: item.categoria,
+        cantidad: item.cantidad,
+        precio: item.precio,
+        mealTypes: [selectedMeal],
+        reason: item.reason || 'Complementa tu despensa para esta receta.',
+      }));
+      setPurchaseSuggestions(suggestions);
+      setSelectedPurchaseIds(suggestions.map((item) => item.id));
+      setRecipes(result.recetas?.slice(0, 1) || []);
+
+      if (!result.recetas?.length) {
+        setError('No llegó receta desde el backend.');
+      }
+    }
+
+    setGenerating(false);
   }
 
   function togglePurchaseSuggestion(itemId: string) {
@@ -546,8 +457,12 @@ export default function RecipeScreen() {
                   value={budgetInput}
                 />
               </View>
-              <Pressable accessibilityRole="button" onPress={buildPurchaseSuggestions} style={styles.budgetGenerateButton}>
-                <MaterialCommunityIcons name="lightbulb-on-outline" size={20} color="#FBFFF8" />
+              <Pressable accessibilityRole="button" disabled={generating} onPress={buildPurchaseSuggestions} style={styles.budgetGenerateButton}>
+                {generating ? (
+                  <ActivityIndicator size="small" color="#FBFFF8" />
+                ) : (
+                  <MaterialCommunityIcons name="creation" size={20} color="#FBFFF8" />
+                )}
               </Pressable>
             </View>
 
@@ -559,9 +474,9 @@ export default function RecipeScreen() {
             {purchaseSuggestions.length === 0 ? (
               <View style={styles.budgetBox}>
                 <MaterialCommunityIcons name="cart-plus" size={38} color="#00B86B" />
-                <Text style={styles.budgetTitle}>Genera opciones de compra</Text>
+                <Text style={styles.budgetTitle}>Genera receta y compras</Text>
                 <Text style={styles.budgetText}>
-                  Te sugeriré productos que complementan lo que ya tienes, respetando el presupuesto ingresado.
+                  Usaré tu despensa y sugeriré compras dentro del presupuesto. Si no hay precio en la base, lo estimo para Chile.
                 </Text>
               </View>
             ) : (

@@ -108,6 +108,54 @@ async def generar_url_temporal_dalle(nombre_producto: str) -> str:
     except Exception as e:
         raise Exception(f"Error al procesar la imagen de {nombre_producto}: {str(e)}")
 
+
+async def verificar_categoria_producto(nombre_producto: str, categoria_actual: str, categorias_disponibles: list[str]):
+    """
+    Revisa si la categoria elegida calza con el producto y sugiere otra si corresponde.
+    """
+    categorias = [categoria for categoria in categorias_disponibles if categoria]
+    instrucciones = f"""
+    Eres un clasificador de alimentos para una app de despensa.
+    Producto: "{nombre_producto}"
+    Categoria elegida: "{categoria_actual}"
+    Categorias disponibles: {categorias}
+
+    Decide si la categoria elegida es suficientemente correcta.
+    Reglas:
+    1. Si la categoria elegida es correcta o razonable, responde requiere_cambio=false.
+    2. Si claramente hay una mejor categoria disponible, responde requiere_cambio=true.
+    3. La categoria_sugerida DEBE ser exactamente una de las categorias disponibles.
+    4. No recomiendes cambios por detalles menores.
+    5. Responde solo JSON valido, sin markdown.
+
+    Formato:
+    {{
+      "requiere_cambio": boolean,
+      "categoria_sugerida": string | null,
+      "razon": string
+    }}
+    """
+
+    try:
+        response = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "system", "content": instrucciones}],
+            temperature=0.1,
+        )
+        contenido = response.choices[0].message.content
+        resultado = json.loads(contenido)
+        sugerida = resultado.get("categoria_sugerida")
+
+        if sugerida not in categorias:
+            resultado["requiere_cambio"] = False
+            resultado["categoria_sugerida"] = None
+
+        return resultado
+    except json.JSONDecodeError:
+        return {"error": "La IA no devolvió un JSON válido", "texto_crudo": contenido}
+    except Exception as e:
+        return {"error": str(e)}
+
 async def generar_receta_con_ia(ingredientes: list, objetivo_nutricional: str, tipo_comida: str, ingredientes_obligatorios: list = None):
     """
     Toma una lista de ingredientes (con sus macros), un objetivo (combinado) y un tipo de comida,
@@ -208,3 +256,112 @@ async def generar_receta_con_ia(ingredientes: list, objetivo_nutricional: str, t
             
     except Exception as e:
         return {"error": f"Ups, hubo un error al generar la receta: {str(e)}"}
+
+
+async def estimar_precio_producto_chile(nombre_producto: str, categoria: str = ""):
+    """
+    Estima un precio minorista chileno para un producto cuando no hay precio en BD.
+    """
+    instrucciones = f"""
+    Estima un precio de supermercado en Chile para el producto "{nombre_producto}".
+    Categoria: "{categoria}".
+
+    Usa precios realistas en pesos chilenos para una compra domestica común.
+    Responde solo JSON valido, sin markdown.
+
+    Formato:
+    {{
+      "nombre": "{nombre_producto}",
+      "categoria": "{categoria}",
+      "cantidad": "ej: 1 kg, 500 g, 12 unidades",
+      "precio": numero_entero_en_CLP,
+      "razon": "breve motivo de la estimacion"
+    }}
+    """
+    try:
+      response = await client.chat.completions.create(
+          model="gpt-4o-mini",
+          messages=[{"role": "system", "content": instrucciones}],
+          temperature=0.2,
+      )
+      contenido = response.choices[0].message.content.strip()
+      if contenido.startswith("```json"):
+          contenido = contenido.replace("```json", "", 1)
+      elif contenido.startswith("```"):
+          contenido = contenido.replace("```", "", 1)
+      if contenido.endswith("```"):
+          contenido = contenido.rsplit("```", 1)[0]
+      return json.loads(contenido.strip())
+    except json.JSONDecodeError:
+      return {"error": "La IA no devolvió un JSON válido", "texto_crudo": contenido}
+    except Exception as e:
+      return {"error": str(e)}
+
+
+async def generar_receta_presupuestada_con_ia(ingredientes_despensa: list, compras_posibles: list, presupuesto: float, objetivo_nutricional: str, tipo_comida: str):
+    """
+    Genera receta usando despensa y compras posibles dentro de presupuesto.
+    """
+    lista_despensa = "\n".join(ingredientes_despensa)
+    lista_compras = "\n".join(compras_posibles)
+    instrucciones = f"""
+    Eres chef y planificador de compras en Chile.
+    Genera 1 receta para {tipo_comida} usando los ingredientes disponibles en despensa y, si conviene, algunas compras.
+
+    Presupuesto máximo para compras adicionales: CLP {int(presupuesto)}.
+    Objetivo del usuario: {objetivo_nutricional or "sin objetivo específico"}.
+
+    DESPENSA DISPONIBLE:
+    {lista_despensa}
+
+    COMPRAS POSIBLES CON PRECIO:
+    {lista_compras}
+
+    Reglas:
+    1. La receta puede usar libremente ingredientes de despensa.
+    2. Las compras adicionales deben sumar como máximo CLP {int(presupuesto)}.
+    3. Prefiere compras que complementen lo que falta en despensa.
+    4. Devuelve una lista "compras_sugeridas" con precio y cantidad.
+    5. Responde solo JSON valido, sin markdown.
+
+    Formato:
+    {{
+      "recetas": [
+        {{
+          "titulo": "Nombre",
+          "tiempo_preparacion": "Ej: 25 min",
+          "dificultad": "Fácil",
+          "por_que_funciona": "Por qué cumple presupuesto y objetivo",
+          "costo_estimado": numero,
+          "macros_totales": {{"calorias": numero, "proteinas": numero, "carbohidratos": numero, "grasas": numero}},
+          "ingredientes": ["..."],
+          "pasos": ["..."]
+        }}
+      ],
+      "compras_sugeridas": [
+        {{"nombre": "Producto", "categoria": "Categoria", "cantidad": "1 kg", "precio": numero, "reason": "Motivo"}}
+      ],
+      "costo_total": numero
+    }}
+    """
+    try:
+      response = await client.chat.completions.create(
+          model="gpt-4o-mini",
+          messages=[
+              {"role": "system", "content": "Eres un asistente de cocina y presupuesto para supermercados chilenos."},
+              {"role": "user", "content": instrucciones},
+          ],
+          temperature=0.35,
+      )
+      contenido = response.choices[0].message.content.strip()
+      if contenido.startswith("```json"):
+          contenido = contenido.replace("```json", "", 1)
+      elif contenido.startswith("```"):
+          contenido = contenido.replace("```", "", 1)
+      if contenido.endswith("```"):
+          contenido = contenido.rsplit("```", 1)[0]
+      return json.loads(contenido.strip())
+    except json.JSONDecodeError:
+      return {"error": "La IA no devolvió un JSON válido", "texto_crudo": contenido}
+    except Exception as e:
+      return {"error": str(e)}

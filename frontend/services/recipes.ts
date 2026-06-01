@@ -17,6 +17,8 @@ export interface GeneratedRecipe {
 
 export interface GenerateRecipeResponse {
   recetas?: GeneratedRecipe[];
+  compras_sugeridas?: BudgetPurchaseSuggestion[];
+  costo_total?: number;
   error?: string;
   texto_crudo?: string;
 }
@@ -25,6 +27,21 @@ export interface GenerateRecipeData {
   user_id: string;
   tipo_comida: string;
   ingredientes: string[];
+  objetivo_nutricional?: string;
+}
+
+export interface BudgetPurchaseSuggestion {
+  nombre: string;
+  categoria: string;
+  cantidad: string;
+  precio: number;
+  reason?: string;
+}
+
+export interface GenerateBudgetRecipeData {
+  user_id: string;
+  tipo_comida: string;
+  presupuesto: number;
   objetivo_nutricional?: string;
 }
 
@@ -40,6 +57,30 @@ export async function generateRecipes(data: GenerateRecipeData): Promise<Generat
 
     if (typeof responseData === 'string') {
       return { error: responseData };
+    }
+
+    return responseData;
+  } catch (e: any) {
+    return { error: `Error de conexión: ${e.message}` };
+  }
+}
+
+export async function generateBudgetRecipe(data: GenerateBudgetRecipeData): Promise<GenerateRecipeResponse> {
+  try {
+    const res = await fetch(`${API_URL}/recipes/generar-presupuestada`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+
+    const responseData = await res.json();
+
+    if (typeof responseData === 'string') {
+      return { error: responseData };
+    }
+
+    if (!res.ok) {
+      return { error: responseData.detail || responseData.error || 'No se pudo generar receta presupuestada' };
     }
 
     return responseData;

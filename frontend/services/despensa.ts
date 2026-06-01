@@ -20,6 +20,9 @@ export interface DespensaAddData {
   cantidad?: number;
   unidad?: string;
   precio_aprox?: number;
+  supermercado_id?: string;
+  precio_supermercado?: number;
+  precio_unidad?: string;
   fecha_vencimiento?: string;
   generar_info_ia?: boolean;
   generar_imagen_ia?: boolean;
@@ -41,6 +44,9 @@ export interface DespensaUpdateData {
   cantidad?: number;
   unidad?: string;
   precio_aprox?: number;
+  supermercado_id?: string;
+  precio_supermercado?: number;
+  precio_unidad?: string;
   fecha_vencimiento?: string;
   generar_info_ia?: boolean;
   generar_imagen_ia?: boolean;
@@ -64,10 +70,28 @@ export interface DespensaItemData {
   cantidad?: number;
   unidad?: string;
   precio_aprox?: number;
+  precio_supermercado?: number;
+  supermercado_id?: string;
+  precio_unidad?: string;
+  supermercado_nombre?: string;
   fecha_vencimiento?: string;
   created_at?: string;
   producto_catalogo_id?: string;
   es_personalizado?: boolean;
+}
+
+export interface CategoriaCheckResult {
+  requiere_cambio?: boolean;
+  categoria_sugerida?: string | null;
+  razon?: string;
+  error?: string;
+}
+
+export interface SupermarketData {
+  id: string;
+  nombre: string;
+  cadena?: string;
+  direccion?: string;
 }
 
 // ---------- Funciones ----------
@@ -98,6 +122,35 @@ export async function agregarIngrediente(data: DespensaAddData): Promise<Despens
     return responseData;
   } catch (e: any) {
     return { error: `Error de conexión: ${e.message}` } as any;
+  }
+}
+
+export async function fetchSupermarkets(): Promise<{ items?: SupermarketData[]; error?: string }> {
+  try {
+    const res = await fetch(`${API_URL}/supermarkets/listar`);
+    const data = await res.json();
+    return data;
+  } catch (e: any) {
+    return { error: `Error de conexión: ${e.message}` };
+  }
+}
+
+/** Verifica si la categoria elegida calza con el producto */
+export async function verificarCategoriaProducto(data: {
+  nombre_producto: string;
+  categoria_actual: string;
+  categorias_disponibles: string[];
+}): Promise<CategoriaCheckResult> {
+  try {
+    const res = await fetch(`${API_URL}/despensa/verificar-categoria`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    const responseData = await res.json();
+    return responseData;
+  } catch (e: any) {
+    return { error: `Error de conexión: ${e.message}` };
   }
 }
 

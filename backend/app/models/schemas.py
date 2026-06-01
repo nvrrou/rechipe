@@ -65,8 +65,21 @@ class RecipeRequest(BaseModel):
     ingredientes: List[str] = []         # Lista de nombres de ingredientes obligatorios
     objetivo_nutricional: Optional[str] = "" # El objetivo que manda el frontend
 
+
+class BudgetRecipeRequest(BaseModel):
+    user_id: str
+    tipo_comida: str
+    presupuesto: float
+    objetivo_nutricional: Optional[str] = ""
+
 class EsquemaAlimento(BaseModel):
     nombre: str
+
+
+class CategoriaProductoCheck(BaseModel):
+    nombre_producto: str
+    categoria_actual: str
+    categorias_disponibles: list[str]
 
 # DESPENSA
 
@@ -87,6 +100,9 @@ class DespensaAdd(pydantic.BaseModel):
     cantidad: float | None = None
     unidad: str | None = None
     precio_aprox: float | None = None
+    supermercado_id: str | None = None
+    precio_supermercado: float | None = None
+    precio_unidad: str | None = None
     fecha_vencimiento: str | None = None
     generar_info_ia: bool = False
     generar_imagen_ia: bool = False
@@ -108,6 +124,9 @@ class DespensaUpdate(pydantic.BaseModel):
     cantidad: float | None = None
     unidad: str | None = None
     precio_aprox: float | None = None
+    supermercado_id: str | None = None
+    precio_supermercado: float | None = None
+    precio_unidad: str | None = None
     fecha_vencimiento: str | None = None
     generar_info_ia: bool = False
     generar_imagen_ia: bool = False
@@ -130,5 +149,8 @@ class DespensaItem(pydantic.BaseModel):
     cantidad: float | None = None
     unidad: str | None = None
     precio_aprox: float | None = None
+    supermercado_id: str | None = None
+    precio_supermercado: float | None = None
+    precio_unidad: str | None = None
     fecha_vencimiento: str | None = None
     created_at: str | None = None

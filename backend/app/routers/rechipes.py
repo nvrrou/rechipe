@@ -1,6 +1,12 @@
 from fastapi import APIRouter, HTTPException, Depends
-from app.models.schemas import RecipeRequest, EsquemaAlimento
-from app.services.ai_service import generar_receta_con_ia, obtener_info_nutricional, generar_url_temporal_dalle
+from app.models.schemas import BudgetRecipeRequest, RecipeRequest, EsquemaAlimento
+from app.services.ai_service import (
+    estimar_precio_producto_chile,
+    generar_receta_con_ia,
+    generar_receta_presupuestada_con_ia,
+    obtener_info_nutricional,
+    generar_url_temporal_dalle,
+)
 from app.dependencias import get_supabase_client
 import httpx
 import uuid
@@ -10,6 +16,126 @@ router = APIRouter(
     prefix="/recipes",
     tags=["Recetas"]
 )
+
+PRODUCT_SELECT = "id,nombre,categoria,energia_kcal,proteinas_g,carbohidratos_g,grasas_totales_g"
+
+
+async def _get_user_pantry(client: httpx.AsyncClient, user_id: str):
+    pantry_response = await client.get(
+        "/despensa",
+        params={"user_id": f"eq.{user_id}", "select": "cantidad,unidad,producto_id"},
+    )
+    pantry_response.raise_for_status()
+    pantry_items = pantry_response.json()
+    product_ids = [item.get("producto_id") for item in pantry_items if item.get("producto_id")]
+
+    if not product_ids:
+        return []
+
+    products_response = await client.get(
+        "/productos",
+        params={"id": f"in.({','.join(product_ids)})", "select": PRODUCT_SELECT},
+    )
+    products_response.raise_for_status()
+    products_by_id = {product["id"]: product for product in products_response.json()}
+
+    return [
+        {**item, "producto": products_by_id.get(item.get("producto_id"))}
+        for item in pantry_items
+        if products_by_id.get(item.get("producto_id"))
+    ]
+
+
+async def _get_best_price(client: httpx.AsyncClient, producto_id: str):
+    price_response = await client.get(
+        "/precios_productos",
+        params={
+            "producto_id": f"eq.{producto_id}",
+            "select": "precio,unidad,supermercado_id",
+            "order": "precio.asc",
+            "limit": "1",
+        },
+    )
+    if price_response.status_code != 200 or not price_response.json():
+        return None
+
+    price = price_response.json()[0]
+    supermercado_nombre = None
+    if price.get("supermercado_id"):
+        supermarket_response = await client.get(
+            "/supermercados",
+            params={"id": f"eq.{price['supermercado_id']}", "select": "nombre", "limit": "1"},
+        )
+        if supermarket_response.status_code == 200 and supermarket_response.json():
+            supermercado_nombre = supermarket_response.json()[0].get("nombre")
+
+    return {
+        "precio": price.get("precio"),
+        "unidad": price.get("unidad"),
+        "supermercado_nombre": supermercado_nombre,
+    }
+
+
+async def _find_purchase_candidates(client: httpx.AsyncClient, pantry_names: set[str], limit: int = 8):
+    products_response = await client.get(
+        "/productos",
+        params={"select": PRODUCT_SELECT, "limit": "80"},
+    )
+    products_response.raise_for_status()
+
+    candidates = []
+    for product in products_response.json():
+        name = (product.get("nombre") or "").lower()
+        if not name or name in pantry_names:
+            continue
+
+        price = await _get_best_price(client, product["id"])
+        if not price:
+            continue
+
+        candidates.append({
+            "nombre": product.get("nombre"),
+            "categoria": product.get("categoria") or "Otros",
+            "cantidad": price.get("unidad") or "1 unidad",
+            "precio": price.get("precio"),
+            "reason": f"Precio encontrado en {price.get('supermercado_nombre') or 'supermercado'}",
+        })
+
+        if len(candidates) >= limit:
+            break
+
+    return candidates
+
+
+async def _build_estimated_candidates(existing_names: set[str], needed_count: int = 6):
+    fallback_products = [
+        ("Huevos", "Proteínas"),
+        ("Avena", "Cereales"),
+        ("Lentejas", "Legumbres"),
+        ("Atún", "Proteínas"),
+        ("Verduras surtidas", "Vegetales"),
+        ("Yogurt natural", "Lácteos"),
+        ("Pechuga de pollo", "Carnes"),
+        ("Arroz", "Cereales"),
+    ]
+
+    candidates = []
+    for name, category in fallback_products:
+        if name.lower() in existing_names:
+            continue
+        estimate = await estimar_precio_producto_chile(name, category)
+        if "error" in estimate:
+            continue
+        candidates.append({
+            "nombre": estimate.get("nombre") or name,
+            "categoria": estimate.get("categoria") or category,
+            "cantidad": estimate.get("cantidad") or "1 unidad",
+            "precio": estimate.get("precio") or 0,
+            "reason": estimate.get("razon") or "Precio estimado para Chile",
+        })
+        if len(candidates) >= needed_count:
+            break
+    return candidates
 
 @router.post("/analizar-alimento")
 async def analizar_alimento(
@@ -193,6 +319,95 @@ async def generar_receta(
         )
         
         return receta_generada
+
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=exc.response.status_code, detail=f"Error en BD: {exc.response.text}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
+
+
+@router.post("/generar-presupuestada")
+async def generar_receta_presupuestada(
+    request: BudgetRecipeRequest,
+    client: httpx.AsyncClient = Depends(get_supabase_client)
+):
+    try:
+        if request.presupuesto <= 0:
+            raise HTTPException(status_code=400, detail="El presupuesto debe ser mayor a 0")
+
+        pantry_items = await _get_user_pantry(client, request.user_id)
+        if not pantry_items:
+            raise HTTPException(status_code=400, detail="La despensa del usuario está vacía")
+
+        pantry_names = {
+            (item["producto"].get("nombre") or "").lower()
+            for item in pantry_items
+            if item.get("producto")
+        }
+
+        ingredientes_despensa = []
+        for item in pantry_items:
+            prod = item["producto"]
+            ingredientes_despensa.append(
+                f"- {item.get('cantidad') or ''} {item.get('unidad') or ''} de {prod.get('nombre')} "
+                f"(Info base por 100g: {prod.get('energia_kcal') or 0} kcal, "
+                f"{prod.get('proteinas_g') or 0}g Prot, {prod.get('carbohidratos_g') or 0}g Carb, "
+                f"{prod.get('grasas_totales_g') or 0}g Grasas)"
+            )
+
+        db_candidates = await _find_purchase_candidates(client, pantry_names)
+        estimated_candidates = []
+        if len(db_candidates) < 5:
+            used_names = pantry_names.union({candidate["nombre"].lower() for candidate in db_candidates if candidate.get("nombre")})
+            estimated_candidates = await _build_estimated_candidates(used_names, 6 - len(db_candidates))
+
+        all_candidates = [*db_candidates, *estimated_candidates]
+        affordable_candidates = [
+            candidate for candidate in all_candidates
+            if float(candidate.get("precio") or 0) <= request.presupuesto
+        ][:8]
+
+        if not affordable_candidates:
+            affordable_candidates = sorted(all_candidates, key=lambda item: item.get("precio") or 0)[:4]
+
+        compras_posibles = [
+            f"- {item['nombre']} ({item['cantidad']}): CLP {int(item.get('precio') or 0)}. {item.get('reason') or ''}"
+            for item in affordable_candidates
+        ]
+
+        receta = await generar_receta_presupuestada_con_ia(
+            ingredientes_despensa=ingredientes_despensa,
+            compras_posibles=compras_posibles,
+            presupuesto=request.presupuesto,
+            objetivo_nutricional=request.objetivo_nutricional or "",
+            tipo_comida=request.tipo_comida,
+        )
+
+        if "error" in receta:
+            return receta
+
+        compras_ia = receta.get("compras_sugeridas") or []
+        costo_total = sum(float(item.get("precio") or 0) for item in compras_ia)
+
+        if costo_total > request.presupuesto:
+            compras_ia = sorted(compras_ia, key=lambda item: item.get("precio") or 0)
+            filtradas = []
+            acumulado = 0
+            for item in compras_ia:
+                precio = float(item.get("precio") or 0)
+                if acumulado + precio <= request.presupuesto:
+                    filtradas.append(item)
+                    acumulado += precio
+            receta["compras_sugeridas"] = filtradas
+            receta["costo_total"] = acumulado
+        else:
+            receta["costo_total"] = costo_total
+
+        if not receta.get("compras_sugeridas"):
+            receta["compras_sugeridas"] = affordable_candidates[:3]
+            receta["costo_total"] = sum(float(item.get("precio") or 0) for item in receta["compras_sugeridas"])
+
+        return receta
 
     except httpx.HTTPStatusError as exc:
         raise HTTPException(status_code=exc.response.status_code, detail=f"Error en BD: {exc.response.text}")

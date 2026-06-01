@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, TextInput } from 'react-native';
+import { ActivityIndicator, Alert, Image, Modal, Pressable, ScrollView, StyleSheet, TextInput } from 'react-native';
 
 import { Text, View } from '@/components/Themed';
 import { useAuth } from '@/contexts/AuthContext';
@@ -8,12 +8,15 @@ import {
   DespensaAddData,
   DespensaItemData,
   DespensaUpdateData,
+  SupermarketData,
   actualizarIngrediente,
   agregarIngrediente,
   buscarIngredientes,
   eliminarIngrediente,
   fetchDespensa,
+  fetchSupermarkets,
   solicitarAutenticacionProducto,
+  verificarCategoriaProducto,
 } from '@/services/despensa';
 
 type ActiveView = 'categories' | 'category' | 'add' | 'search' | 'edit';
@@ -36,6 +39,9 @@ type IngredientFormState = {
   cantidad: string;
   unidad: string;
   precio_aprox: string;
+  supermercado_id: string;
+  precio_supermercado: string;
+  precio_unidad: string;
   fecha_vencimiento: string;
   energia_kcal: string;
   proteinas_g: string;
@@ -71,6 +77,9 @@ const EMPTY_FORM: IngredientFormState = {
   cantidad: '',
   unidad: '',
   precio_aprox: '',
+  supermercado_id: '',
+  precio_supermercado: '',
+  precio_unidad: '',
   fecha_vencimiento: '',
   energia_kcal: '',
   proteinas_g: '',
@@ -151,6 +160,9 @@ function formFromItem(item: DespensaItemData): IngredientFormState {
     cantidad: numberToInput(item.cantidad),
     unidad: item.unidad || '',
     precio_aprox: numberToInput(item.precio_aprox),
+    supermercado_id: item.supermercado_id || '',
+    precio_supermercado: numberToInput(item.precio_supermercado),
+    precio_unidad: item.precio_unidad || '',
     fecha_vencimiento: item.fecha_vencimiento || '',
     energia_kcal: numberToInput(item.energia_kcal),
     proteinas_g: numberToInput(item.proteinas_g),
@@ -272,8 +284,10 @@ export default function FridgeScreen() {
   const { user } = useAuth();
 
   const [items, setItems] = useState<DespensaItemData[]>([]);
+  const [supermarkets, setSupermarkets] = useState<SupermarketData[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [generatingImage, setGeneratingImage] = useState(false);
   const [activeView, setActiveView] = useState<ActiveView>('categories');
   const [selectedCategoryId, setSelectedCategoryId] = useState(DEFAULT_CATEGORIES[0].id);
   const [selectedItem, setSelectedItem] = useState<DespensaItemData | null>(null);
@@ -284,7 +298,19 @@ export default function FridgeScreen() {
   const [searching, setSearching] = useState(false);
   const [formError, setFormError] = useState('');
   const [authenticatingProductId, setAuthenticatingProductId] = useState<string | null>(null);
+  const [authPromptItem, setAuthPromptItem] = useState<DespensaItemData | null>(null);
+  const [authMessage, setAuthMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [pendingSaveMode, setPendingSaveMode] = useState<FormMode | null>(null);
+  const [includeImageInGeneration, setIncludeImageInGeneration] = useState(false);
+  const [pendingCategoryOverride, setPendingCategoryOverride] = useState<string | undefined>();
+  const [categorySuggestion, setCategorySuggestion] = useState<{
+    mode: FormMode;
+    current: string;
+    suggested: string;
+    reason?: string;
+  } | null>(null);
+  const [checkingCategory, setCheckingCategory] = useState(false);
+  const [supermarketDropdownOpen, setSupermarketDropdownOpen] = useState(false);
 
   const categories = useMemo(() => {
     const base = new Map(DEFAULT_CATEGORIES.map((category) => [category.id, category]));
@@ -334,9 +360,21 @@ export default function FridgeScreen() {
     loadDespensa();
   }, [loadDespensa]);
 
+  useEffect(() => {
+    async function loadSupermarkets() {
+      const result = await fetchSupermarkets();
+      if (result.items) setSupermarkets(result.items);
+      if (result.error) setFormError(result.error);
+    }
+    loadSupermarkets();
+  }, []);
+
   function updateForm<K extends keyof IngredientFormState>(key: K, value: IngredientFormState[K]) {
     setFormError('');
     setPendingSaveMode(null);
+    setIncludeImageInGeneration(false);
+    setCategorySuggestion(null);
+    setPendingCategoryOverride(undefined);
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
@@ -346,6 +384,9 @@ export default function FridgeScreen() {
     setSelectedItem(null);
     setDropdownOpen(false);
     setPendingSaveMode(null);
+    setIncludeImageInGeneration(false);
+    setCategorySuggestion(null);
+    setPendingCategoryOverride(undefined);
     setActiveView('add');
   }
 
@@ -355,6 +396,9 @@ export default function FridgeScreen() {
     setFormError('');
     setDropdownOpen(false);
     setPendingSaveMode(null);
+    setIncludeImageInGeneration(false);
+    setCategorySuggestion(null);
+    setPendingCategoryOverride(undefined);
     setActiveView('edit');
   }
 
@@ -366,6 +410,11 @@ export default function FridgeScreen() {
     setFormError('');
     setDropdownOpen(false);
     setPendingSaveMode(null);
+    setIncludeImageInGeneration(false);
+    setCategorySuggestion(null);
+    setPendingCategoryOverride(undefined);
+    setAuthPromptItem(null);
+    setAuthMessage(null);
   }
 
   function getFormCategoryName() {
@@ -373,16 +422,19 @@ export default function FridgeScreen() {
     return categories.find((category) => category.id === form.categoria)?.name || form.categoria;
   }
 
-  function buildPayload(): DespensaUpdateData {
+  function buildPayload(categoryOverride?: string): DespensaUpdateData {
     return {
       nombre_producto: form.nombre_producto.trim(),
-      categoria: getFormCategoryName(),
+      categoria: categoryOverride || getFormCategoryName(),
       codigo_barra: cleanText(form.codigo_barra),
       marca: cleanText(form.marca),
       imagen_url: cleanText(form.imagen_url),
       cantidad: parseInputNumber(form.cantidad),
       unidad: cleanText(form.unidad),
       precio_aprox: parseInputNumber(form.precio_aprox),
+      supermercado_id: cleanText(form.supermercado_id),
+      precio_supermercado: parseInputNumber(form.precio_supermercado),
+      precio_unidad: cleanText(form.precio_unidad),
       fecha_vencimiento: cleanText(form.fecha_vencimiento),
       energia_kcal: parseInputNumber(form.energia_kcal),
       proteinas_g: parseInputNumber(form.proteinas_g),
@@ -398,17 +450,14 @@ export default function FridgeScreen() {
     return NUTRIENT_FIELDS.some((field) => form[field.key].trim() === '');
   }
 
-  function hasEmptyAiFields() {
-    return hasEmptyNutritionFields() || form.imagen_url.trim() === '';
-  }
-
-  async function performSaveIngredient(mode: FormMode, userId: string, generateMissing = false) {
+  async function performSaveIngredient(mode: FormMode, userId: string, generateMissing = false, categoryOverride?: string) {
     setSaving(true);
     setPendingSaveMode(null);
+    setPendingCategoryOverride(undefined);
     const payload = {
-      ...buildPayload(),
+      ...buildPayload(categoryOverride),
       generar_info_ia: generateMissing && hasEmptyNutritionFields(),
-      generar_imagen_ia: generateMissing && form.imagen_url.trim() === '',
+      generar_imagen_ia: generateMissing && includeImageInGeneration && form.imagen_url.trim() === '',
     };
     const result =
       mode === 'add'
@@ -434,7 +483,18 @@ export default function FridgeScreen() {
     }
   }
 
-  async function saveIngredient(mode: FormMode) {
+  async function continueSaveIngredient(mode: FormMode, userId: string, categoryOverride?: string) {
+    if (hasEmptyNutritionFields()) {
+      setPendingSaveMode(mode);
+      setPendingCategoryOverride(categoryOverride);
+      setIncludeImageInGeneration(false);
+      return;
+    }
+
+    await performSaveIngredient(mode, userId, false, categoryOverride);
+  }
+
+  async function saveIngredient(mode: FormMode, skipCategoryCheck = false, categoryOverride?: string) {
     if (!user?.id) return;
     if (!form.nombre_producto.trim()) {
       setFormError('Agrega el nombre del ingrediente.');
@@ -445,24 +505,103 @@ export default function FridgeScreen() {
       return;
     }
 
-    if (hasEmptyAiFields()) {
-      setPendingSaveMode(mode);
+    const currentCategory = categoryOverride || getFormCategoryName();
+
+    if (!skipCategoryCheck) {
+      setCheckingCategory(true);
+      const result = await verificarCategoriaProducto({
+        nombre_producto: form.nombre_producto.trim(),
+        categoria_actual: currentCategory,
+        categorias_disponibles: categories.map((category) => category.name),
+      });
+      setCheckingCategory(false);
+
+      if (result.requiere_cambio && result.categoria_sugerida && result.categoria_sugerida !== currentCategory) {
+        setCategorySuggestion({
+          mode,
+          current: currentCategory,
+          suggested: result.categoria_sugerida,
+          reason: result.razon,
+        });
+        return;
+      }
+    }
+
+    await continueSaveIngredient(mode, user.id, categoryOverride);
+  }
+
+  async function resolveCategorySuggestion(useSuggested: boolean) {
+    if (!user?.id || !categorySuggestion) return;
+    const suggestion = categorySuggestion;
+    const categoryOverride = useSuggested ? suggestion.suggested : suggestion.current;
+
+    setCategorySuggestion(null);
+
+    if (useSuggested) {
+      const matchingCategory = categories.find((category) => category.name === suggestion.suggested);
+      setForm((prev) => ({
+        ...prev,
+        categoria: matchingCategory?.id || '__new__',
+        newCategoria: matchingCategory ? '' : suggestion.suggested,
+      }));
+    }
+
+    await continueSaveIngredient(suggestion.mode, user.id, categoryOverride);
+  }
+
+  async function saveWithPendingGeneration(mode: FormMode, generateMissing: boolean) {
+    if (!user?.id) return;
+    await performSaveIngredient(mode, user.id, generateMissing, pendingCategoryOverride);
+  }
+
+  async function handleGenerateImageForEdit() {
+    if (!user?.id || !selectedItem || form.imagen_url.trim() || generatingImage) return;
+    if (!form.nombre_producto.trim()) {
+      setFormError('Agrega el nombre del ingrediente antes de generar imagen.');
       return;
     }
 
-    await performSaveIngredient(mode, user.id, false);
+    setFormError('');
+    setGeneratingImage(true);
+    const result = await actualizarIngrediente(selectedItem.id, {
+      ...buildPayload(),
+      generar_imagen_ia: true,
+    });
+    setGeneratingImage(false);
+
+    if (result.error) {
+      setFormError(result.error);
+      return;
+    }
+
+    setSelectedItem(result);
+    setItems((prev) => prev.map((item) => (item.id === result.id ? result : item)));
+    setForm((prev) => ({ ...prev, imagen_url: result.imagen_url || '' }));
+    setSelectedCategoryId(slugifyCategory(result.categoria));
+    setActiveView('category');
   }
 
-  async function handleAuthenticateProduct(item = selectedItem) {
+  function openAuthPrompt(item: DespensaItemData) {
+    setAuthPromptItem(item);
+    setAuthMessage(null);
+  }
+
+  function closeAuthPrompt() {
+    setAuthPromptItem(null);
+    setAuthMessage(null);
+  }
+
+  async function handleAuthenticateProduct(item = authPromptItem || selectedItem) {
     if (!user?.id || !item?.producto_id || authenticatingProductId) return;
+    setAuthMessage(null);
     setAuthenticatingProductId(item.producto_id);
     const result = await solicitarAutenticacionProducto(item.producto_id, user.id);
     setAuthenticatingProductId(null);
 
     if (result.error) {
-      Alert.alert('Error', result.error);
+      setAuthMessage({ type: 'error', text: result.error });
     } else {
-      Alert.alert('Solicitud enviada', result.msg || 'Tu producto quedó pendiente de revisión.');
+      setAuthMessage({ type: 'success', text: result.msg || 'Tu producto quedó pendiente de revisión.' });
     }
   }
 
@@ -512,6 +651,11 @@ export default function FridgeScreen() {
             </Text>
             <Text style={styles.pricePill}>{formatPrice(item.precio_aprox)}</Text>
           </View>
+          {item.supermercado_nombre && (
+            <Text style={styles.supermarketMeta} numberOfLines={1}>
+              {item.supermercado_nombre}
+            </Text>
+          )}
           <Text style={styles.ingredientMeta} numberOfLines={1}>
             {[item.marca, item.cantidad ? `${item.cantidad} ${item.unidad || ''}`.trim() : undefined]
               .filter(Boolean)
@@ -543,7 +687,7 @@ export default function FridgeScreen() {
             disabled={authenticatingProductId === item.producto_id}
             onPress={(event) => {
               event.stopPropagation();
-              handleAuthenticateProduct(item);
+              openAuthPrompt(item);
             }}
             style={styles.ingredientAuthButton}>
             {authenticatingProductId === item.producto_id ? (
@@ -607,6 +751,22 @@ export default function FridgeScreen() {
             placeholder="https://..."
             value={form.imagen_url}
           />
+          {mode === 'edit' && selectedItem && form.imagen_url.trim() === '' && (
+            <Pressable
+              accessibilityRole="button"
+              disabled={generatingImage}
+              onPress={handleGenerateImageForEdit}
+              style={styles.generateImageAction}>
+              {generatingImage ? (
+                <ActivityIndicator size="small" color="#0369A1" />
+              ) : (
+                <>
+                  <MaterialCommunityIcons name="image-auto-adjust" size={19} color="#0369A1" />
+                  <Text style={styles.generateImageActionText}>Generar imagen</Text>
+                </>
+              )}
+            </Pressable>
+          )}
         </View>
 
         <View style={styles.formSection}>
@@ -651,6 +811,65 @@ export default function FridgeScreen() {
               value={form.fecha_vencimiento}
             />
           </View>
+          <View style={styles.supermarketPricePanel}>
+            <View style={styles.supermarketPriceHeader}>
+              <MaterialCommunityIcons name="store-outline" size={19} color="#0369A1" />
+              <View style={styles.supermarketPriceCopy}>
+                <Text style={styles.supermarketPriceTitle}>Precio de supermercado</Text>
+                <Text style={styles.supermarketPriceText}>Opcional: guarda este precio en la base de precios.</Text>
+              </View>
+            </View>
+
+            <View style={styles.dropdownWrap}>
+              <Text style={styles.fieldLabel}>Supermercado</Text>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setSupermarketDropdownOpen((prev) => !prev)}
+                style={styles.dropdownButton}>
+                <View style={styles.dropdownLeft}>
+                  <View style={[styles.dropdownDot, { backgroundColor: '#7DD3FC' }]} />
+                  <Text style={styles.dropdownText}>
+                    {supermarkets.find((market) => market.id === form.supermercado_id)?.nombre || 'Seleccionar supermercado'}
+                  </Text>
+                </View>
+                <MaterialCommunityIcons name={supermarketDropdownOpen ? 'chevron-up' : 'chevron-down'} size={22} color="#064E2F" />
+              </Pressable>
+
+              {supermarketDropdownOpen && (
+                <View style={styles.dropdownMenu}>
+                  {supermarkets.map((market) => (
+                    <Pressable
+                      accessibilityRole="button"
+                      key={market.id}
+                      onPress={() => {
+                        updateForm('supermercado_id', market.id);
+                        setSupermarketDropdownOpen(false);
+                      }}
+                      style={[styles.dropdownOption, form.supermercado_id === market.id && styles.dropdownOptionSelected]}>
+                      <MaterialCommunityIcons name="store-outline" size={20} color="#0369A1" />
+                      <Text style={styles.dropdownOptionText}>{market.nombre}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+            </View>
+
+            <View style={styles.twoColumn}>
+              <Field
+                keyboardType="decimal-pad"
+                label="Precio super"
+                onChangeText={(value) => updateForm('precio_supermercado', value)}
+                placeholder="CLP"
+                value={form.precio_supermercado}
+              />
+              <Field
+                label="Cantidad precio"
+                onChangeText={(value) => updateForm('precio_unidad', value)}
+                placeholder="Ej: 1 kg, 500 g"
+                value={form.precio_unidad}
+              />
+            </View>
+          </View>
         </View>
 
         <View style={styles.formSection}>
@@ -669,6 +888,27 @@ export default function FridgeScreen() {
           </View>
         </View>
 
+        {categorySuggestion?.mode === mode && (
+          <View style={styles.categorySuggestionPanel}>
+            <View style={styles.categorySuggestionHeader}>
+              <MaterialCommunityIcons name="tag-search-outline" size={20} color="#0369A1" />
+              <Text style={styles.categorySuggestionTitle}>Revisar categoria</Text>
+            </View>
+            <Text style={styles.categorySuggestionText}>
+              La IA cree que "{form.nombre_producto.trim()}" calza mejor en "{categorySuggestion.suggested}" que en "{categorySuggestion.current}".
+            </Text>
+            {categorySuggestion.reason ? <Text style={styles.categorySuggestionReason}>{categorySuggestion.reason}</Text> : null}
+            <View style={styles.categorySuggestionActions}>
+              <Pressable accessibilityRole="button" disabled={saving} onPress={() => resolveCategorySuggestion(false)} style={styles.categorySuggestionSecondary}>
+                <Text style={styles.categorySuggestionSecondaryText}>Mantener {categorySuggestion.current}</Text>
+              </Pressable>
+              <Pressable accessibilityRole="button" disabled={saving} onPress={() => resolveCategorySuggestion(true)} style={styles.categorySuggestionPrimary}>
+                <Text style={styles.categorySuggestionPrimaryText}>Usar {categorySuggestion.suggested}</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
+
         {pendingSaveMode === mode && (
           <View style={styles.aiPromptPanel}>
             <View style={styles.aiPromptHeader}>
@@ -676,20 +916,37 @@ export default function FridgeScreen() {
               <Text style={styles.aiPromptTitle}>Completar datos faltantes</Text>
             </View>
             <Text style={styles.aiPromptText}>
-              Faltan datos de nutricion o imagen. Puedes guardar igual o pedirle a la IA que complete lo que falta.
+              Faltan datos de nutricion. Puedes guardar igual o pedirle a la IA que complete los nutrientes.
             </Text>
+            {form.imagen_url.trim() === '' && (
+              <Pressable
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: includeImageInGeneration }}
+                onPress={() => setIncludeImageInGeneration((prev) => !prev)}
+                style={[styles.imageOptionRow, includeImageInGeneration && styles.imageOptionRowSelected]}>
+                <MaterialCommunityIcons
+                  name={includeImageInGeneration ? 'checkbox-marked-circle-outline' : 'checkbox-blank-circle-outline'}
+                  size={21}
+                  color="#0369A1"
+                />
+                <View style={styles.imageOptionCopy}>
+                  <Text style={styles.imageOptionTitle}>Incluir imagen</Text>
+                  <Text style={styles.imageOptionText}>Opcional: tambien genera una imagen para este producto.</Text>
+                </View>
+              </Pressable>
+            )}
             <View style={styles.aiPromptActions}>
               <Pressable
                 accessibilityRole="button"
                 disabled={saving}
-                onPress={() => user?.id && performSaveIngredient(mode, user.id, false)}
+                onPress={() => saveWithPendingGeneration(mode, false)}
                 style={styles.aiPromptSecondary}>
                 <Text style={styles.aiPromptSecondaryText}>Guardar igual</Text>
               </Pressable>
               <Pressable
                 accessibilityRole="button"
                 disabled={saving}
-                onPress={() => user?.id && performSaveIngredient(mode, user.id, true)}
+                onPress={() => saveWithPendingGeneration(mode, true)}
                 style={styles.aiPromptPrimary}>
                 {saving ? <ActivityIndicator size="small" color="#FBFFF8" /> : <Text style={styles.aiPromptPrimaryText}>Generar y guardar</Text>}
               </Pressable>
@@ -711,7 +968,7 @@ export default function FridgeScreen() {
             <Pressable
               accessibilityRole="button"
               disabled={!!authenticatingProductId}
-              onPress={() => handleAuthenticateProduct()}
+              onPress={() => selectedItem && openAuthPrompt(selectedItem)}
               style={styles.secondaryAction}>
               {selectedItem && authenticatingProductId === selectedItem.producto_id ? (
                 <ActivityIndicator size="small" color="#0369A1" />
@@ -723,8 +980,12 @@ export default function FridgeScreen() {
               )}
             </Pressable>
           )}
-          <Pressable accessibilityRole="button" disabled={saving} onPress={() => saveIngredient(mode)} style={styles.primaryAction}>
-            {saving ? <ActivityIndicator size="small" color="#FBFFF8" /> : <Text style={styles.primaryActionText}>Guardar</Text>}
+          <Pressable accessibilityRole="button" disabled={saving || checkingCategory} onPress={() => saveIngredient(mode)} style={styles.primaryAction}>
+            {saving || checkingCategory ? (
+              <ActivityIndicator size="small" color="#FBFFF8" />
+            ) : (
+              <Text style={styles.primaryActionText}>Guardar</Text>
+            )}
           </Pressable>
         </View>
       </View>
@@ -897,6 +1158,61 @@ export default function FridgeScreen() {
           </View>
         )}
       </ScrollView>
+
+      <Modal animationType="fade" transparent visible={!!authPromptItem} onRequestClose={closeAuthPrompt}>
+        <View style={styles.authModalBackdrop}>
+          <View style={styles.authModalCard}>
+            <View style={styles.authModalHeader}>
+              <View style={styles.authModalIcon}>
+                <MaterialCommunityIcons name="shield-check-outline" size={24} color="#0369A1" />
+              </View>
+              <View style={styles.authModalTitleWrap}>
+                <Text style={styles.authModalTitle}>Autenticar producto</Text>
+                <Text style={styles.authModalSubtitle} numberOfLines={1}>
+                  {authPromptItem?.nombre_producto}
+                </Text>
+              </View>
+            </View>
+
+            <Text style={styles.authModalText}>
+              La autenticacion envia este producto a revision para que, si se aprueba, pueda actualizar el catalogo base. Asi nuevos usuarios
+              pueden encontrarlo con datos mas completos y Rechipe puede usarlo mejor en recomendaciones y recetas.
+            </Text>
+
+            {authMessage && (
+              <View style={[styles.authMessagePanel, authMessage.type === 'error' ? styles.authMessageError : styles.authMessageSuccess]}>
+                <MaterialCommunityIcons
+                  name={authMessage.type === 'error' ? 'alert-circle-outline' : 'check-circle-outline'}
+                  size={19}
+                  color={authMessage.type === 'error' ? '#FF8A8A' : '#0369A1'}
+                />
+                <Text style={[styles.authMessageText, authMessage.type === 'error' ? styles.authMessageTextError : styles.authMessageTextSuccess]}>
+                  {authMessage.text}
+                </Text>
+              </View>
+            )}
+
+            <View style={styles.authModalActions}>
+              <Pressable accessibilityRole="button" onPress={closeAuthPrompt} style={styles.authModalSecondary}>
+                <Text style={styles.authModalSecondaryText}>{authMessage?.type === 'success' ? 'Cerrar' : 'Cancelar'}</Text>
+              </Pressable>
+              {authMessage?.type !== 'success' && (
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={!authPromptItem || authenticatingProductId === authPromptItem.producto_id}
+                  onPress={() => handleAuthenticateProduct()}
+                  style={styles.authModalPrimary}>
+                  {authPromptItem && authenticatingProductId === authPromptItem.producto_id ? (
+                    <ActivityIndicator size="small" color="#FBFFF8" />
+                  ) : (
+                    <Text style={styles.authModalPrimaryText}>Enviar solicitud</Text>
+                  )}
+                </Pressable>
+              )}
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -998,6 +1314,124 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '900',
   },
+  authMessageError: {
+    borderColor: '#8D2B3D',
+    backgroundColor: '#351928',
+  },
+  authMessagePanel: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  authMessageSuccess: {
+    borderColor: '#7DD3FC',
+    backgroundColor: '#E0F2FE',
+  },
+  authMessageText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '800',
+    lineHeight: 18,
+  },
+  authMessageTextError: {
+    color: '#FF8A8A',
+  },
+  authMessageTextSuccess: {
+    color: '#0369A1',
+  },
+  authModalActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    backgroundColor: 'transparent',
+  },
+  authModalBackdrop: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+    backgroundColor: 'rgba(6, 78, 47, 0.28)',
+  },
+  authModalCard: {
+    width: '100%',
+    maxWidth: 430,
+    gap: 14,
+    padding: 18,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: '#7DD3FC',
+    backgroundColor: '#F0F9FF',
+  },
+  authModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: 'transparent',
+  },
+  authModalIcon: {
+    width: 46,
+    height: 46,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 16,
+    backgroundColor: '#E0F2FE',
+  },
+  authModalPrimary: {
+    minHeight: 48,
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    backgroundColor: '#0284C7',
+  },
+  authModalPrimaryText: {
+    color: '#FBFFF8',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  authModalSecondary: {
+    minHeight: 48,
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#7DD3FC',
+    backgroundColor: '#E0F2FE',
+  },
+  authModalSecondaryText: {
+    color: '#0369A1',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  authModalSubtitle: {
+    color: '#0369A1',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  authModalText: {
+    color: '#075985',
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 20,
+  },
+  authModalTitle: {
+    color: '#075985',
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  authModalTitleWrap: {
+    flex: 1,
+    gap: 2,
+    backgroundColor: 'transparent',
+  },
   categoryCard: {
     width: '48%',
     minHeight: 118,
@@ -1049,6 +1483,73 @@ const styles = StyleSheet.create({
   categoryName: {
     color: '#064E2F',
     fontSize: 16,
+    fontWeight: '900',
+  },
+  categorySuggestionActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    backgroundColor: 'transparent',
+  },
+  categorySuggestionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'transparent',
+  },
+  categorySuggestionPanel: {
+    gap: 12,
+    padding: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#7DD3FC',
+    backgroundColor: '#F0F9FF',
+  },
+  categorySuggestionPrimary: {
+    minHeight: 46,
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    backgroundColor: '#0284C7',
+  },
+  categorySuggestionPrimaryText: {
+    color: '#FBFFF8',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  categorySuggestionReason: {
+    color: '#0369A1',
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 17,
+  },
+  categorySuggestionSecondary: {
+    minHeight: 46,
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#7DD3FC',
+    backgroundColor: '#E0F2FE',
+  },
+  categorySuggestionSecondaryText: {
+    color: '#0369A1',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  categorySuggestionText: {
+    color: '#075985',
+    fontSize: 14,
+    fontWeight: '800',
+    lineHeight: 19,
+  },
+  categorySuggestionTitle: {
+    color: '#075985',
+    fontSize: 15,
     fontWeight: '900',
   },
   container: {
@@ -1283,6 +1784,23 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '900',
   },
+  generateImageAction: {
+    minHeight: 46,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#7DD3FC',
+    backgroundColor: '#E0F2FE',
+  },
+  generateImageActionText: {
+    color: '#0369A1',
+    fontSize: 14,
+    fontWeight: '900',
+  },
   requiredMark: {
     color: '#FF8A8A',
     fontSize: 15,
@@ -1362,6 +1880,37 @@ const styles = StyleSheet.create({
   ingredientsList: {
     gap: 10,
     backgroundColor: 'transparent',
+  },
+  imageOptionCopy: {
+    flex: 1,
+    gap: 2,
+    backgroundColor: 'transparent',
+  },
+  imageOptionRow: {
+    minHeight: 58,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#7DD3FC',
+    backgroundColor: '#E0F2FE',
+  },
+  imageOptionRowSelected: {
+    backgroundColor: '#BAE6FD',
+  },
+  imageOptionText: {
+    color: '#0369A1',
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 16,
+  },
+  imageOptionTitle: {
+    color: '#075985',
+    fontSize: 14,
+    fontWeight: '900',
   },
   inlineBackButton: {
     width: 42,
@@ -1514,6 +2063,40 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     lineHeight: 21,
+  },
+  supermarketMeta: {
+    color: '#0369A1',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  supermarketPriceCopy: {
+    flex: 1,
+    gap: 2,
+    backgroundColor: 'transparent',
+  },
+  supermarketPriceHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    backgroundColor: 'transparent',
+  },
+  supermarketPricePanel: {
+    gap: 12,
+    padding: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#7DD3FC',
+    backgroundColor: '#F0F9FF',
+  },
+  supermarketPriceText: {
+    color: '#0369A1',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  supermarketPriceTitle: {
+    color: '#075985',
+    fontSize: 14,
+    fontWeight: '900',
   },
   title: {
     flexShrink: 1,
