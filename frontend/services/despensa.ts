@@ -5,6 +5,7 @@ import { API_URL } from './api';
 
 export interface DespensaAddData {
   user_id: string;
+  producto_catalogo_id?: string;
   nombre_producto: string;
   categoria: string;
   codigo_barra?: string;
@@ -20,6 +21,8 @@ export interface DespensaAddData {
   cantidad?: number;
   unidad?: string;
   precio_aprox?: number;
+  cantidad_precio?: number;
+  unidad_precio?: string;
   supermercado_id?: string;
   precio_supermercado?: number;
   precio_unidad?: string;
@@ -29,6 +32,7 @@ export interface DespensaAddData {
 }
 
 export interface DespensaUpdateData {
+  producto_catalogo_id?: string;
   nombre_producto?: string;
   categoria?: string;
   codigo_barra?: string;
@@ -44,6 +48,8 @@ export interface DespensaUpdateData {
   cantidad?: number;
   unidad?: string;
   precio_aprox?: number;
+  cantidad_precio?: number;
+  unidad_precio?: string;
   supermercado_id?: string;
   precio_supermercado?: number;
   precio_unidad?: string;
@@ -70,6 +76,8 @@ export interface DespensaItemData {
   cantidad?: number;
   unidad?: string;
   precio_aprox?: number;
+  cantidad_precio?: number;
+  unidad_precio?: string;
   precio_supermercado?: number;
   supermercado_id?: string;
   precio_unidad?: string;
@@ -92,6 +100,22 @@ export interface SupermarketData {
   nombre: string;
   cadena?: string;
   direccion?: string;
+}
+
+export interface CatalogProductData {
+  id: string;
+  nombre_producto: string;
+  categoria?: string;
+  codigo_barra?: string;
+  marca?: string;
+  imagen_url?: string;
+  energia_kcal?: number;
+  proteinas_g?: number;
+  carbohidratos_g?: number;
+  grasas_g?: number;
+  fibra_g?: number;
+  sodio_mg?: number;
+  azucar_g?: number;
 }
 
 // ---------- Funciones ----------
@@ -130,6 +154,29 @@ export async function fetchSupermarkets(): Promise<{ items?: SupermarketData[]; 
     const res = await fetch(`${API_URL}/supermarkets/listar`);
     const data = await res.json();
     return data;
+  } catch (e: any) {
+    return { error: `Error de conexión: ${e.message}` };
+  }
+}
+
+/** Recomienda productos del catálogo base por nombre o código de barra */
+export async function fetchCatalogProductSuggestions(data: {
+  nombre_producto?: string;
+  codigo_barra?: string;
+  categoria_actual?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<{ items?: CatalogProductData[]; has_more?: boolean; error?: string }> {
+  try {
+    const params = new URLSearchParams();
+    if (data.nombre_producto) params.set('nombre_producto', data.nombre_producto);
+    if (data.codigo_barra) params.set('codigo_barra', data.codigo_barra);
+    if (data.categoria_actual) params.set('categoria_actual', data.categoria_actual);
+    if (data.limit !== undefined) params.set('limit', String(data.limit));
+    if (data.offset !== undefined) params.set('offset', String(data.offset));
+    const res = await fetch(`${API_URL}/despensa/catalogo/recomendaciones?${params.toString()}`);
+    const responseData = await res.json();
+    return responseData;
   } catch (e: any) {
     return { error: `Error de conexión: ${e.message}` };
   }

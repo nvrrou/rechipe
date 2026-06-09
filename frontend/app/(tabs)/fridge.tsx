@@ -1,10 +1,13 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Modal, Pressable, ScrollView, StyleSheet, TextInput } from 'react-native';
+import { BarcodeScanningResult, CameraView, useCameraPermissions } from 'expo-camera';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, Animated, Easing, Image, Modal, Pressable, ScrollView, StyleSheet, TextInput } from 'react-native';
 
 import { Text, View } from '@/components/Themed';
 import { useAuth } from '@/contexts/AuthContext';
 import {
+  CatalogProductData,
   DespensaAddData,
   DespensaItemData,
   DespensaUpdateData,
@@ -13,6 +16,7 @@ import {
   agregarIngrediente,
   buscarIngredientes,
   eliminarIngrediente,
+  fetchCatalogProductSuggestions,
   fetchDespensa,
   fetchSupermarkets,
   solicitarAutenticacionProducto,
@@ -30,6 +34,7 @@ type CategoryDef = {
 };
 
 type IngredientFormState = {
+  producto_catalogo_id: string;
   nombre_producto: string;
   categoria: string;
   newCategoria: string;
@@ -39,6 +44,8 @@ type IngredientFormState = {
   cantidad: string;
   unidad: string;
   precio_aprox: string;
+  cantidad_precio: string;
+  unidad_precio: string;
   supermercado_id: string;
   precio_supermercado: string;
   precio_unidad: string;
@@ -62,12 +69,16 @@ const DEFAULT_CATEGORIES: CategoryDef[] = [
   { id: 'aderezos', name: 'Aderezos', icon: 'bottle-tonic-outline', color: '#F97316' },
   { id: 'cereales', name: 'Cereales', icon: 'barley', color: '#CA8A04' },
   { id: 'lacteos', name: 'Lácteos', icon: 'cup', color: '#7C3AED' },
+  { id: 'jugos', name: 'Jugos', icon: 'cup-water', color: '#EA580C' },
+  { id: 'bebidas', name: 'Bebidas', icon: 'bottle-soda-classic-outline', color: '#0284C7' },
   { id: 'otros', name: 'Otros', icon: 'dots-horizontal', color: '#6B7280' },
 ];
 
 const UNIT_OPTIONS = ['unidad', 'g', 'kg', 'ml', 'l', 'taza', 'cda'];
+const CATALOG_SUGGESTION_LIMIT = 5;
 
 const EMPTY_FORM: IngredientFormState = {
+  producto_catalogo_id: '',
   nombre_producto: '',
   categoria: DEFAULT_CATEGORIES[0].id,
   newCategoria: '',
@@ -77,6 +88,8 @@ const EMPTY_FORM: IngredientFormState = {
   cantidad: '',
   unidad: '',
   precio_aprox: '',
+  cantidad_precio: '',
+  unidad_precio: '',
   supermercado_id: '',
   precio_supermercado: '',
   precio_unidad: '',
@@ -152,6 +165,7 @@ function cleanText(value: string) {
 function formFromItem(item: DespensaItemData): IngredientFormState {
   return {
     nombre_producto: item.nombre_producto || '',
+    producto_catalogo_id: item.producto_catalogo_id || '',
     categoria: slugifyCategory(item.categoria || 'otros'),
     newCategoria: '',
     codigo_barra: item.codigo_barra || '',
@@ -160,6 +174,8 @@ function formFromItem(item: DespensaItemData): IngredientFormState {
     cantidad: numberToInput(item.cantidad),
     unidad: item.unidad || '',
     precio_aprox: numberToInput(item.precio_aprox),
+    cantidad_precio: numberToInput(item.cantidad_precio),
+    unidad_precio: item.unidad_precio || '',
     supermercado_id: item.supermercado_id || '',
     precio_supermercado: numberToInput(item.precio_supermercado),
     precio_unidad: item.precio_unidad || '',
@@ -280,8 +296,70 @@ function CategoryDropdown({
   );
 }
 
+function SlidingMetaText({ text }: { text: string }) {
+  const translateX = useRef(new Animated.Value(0)).current;
+  const [viewportWidth, setViewportWidth] = useState(0);
+  const [textWidth, setTextWidth] = useState(0);
+
+  useEffect(() => {
+    translateX.stopAnimation();
+    translateX.setValue(0);
+
+    if (!viewportWidth || textWidth <= viewportWidth + 2) {
+      return;
+    }
+
+    const distance = textWidth - viewportWidth + 18;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.delay(700),
+        Animated.timing(translateX, {
+          toValue: -distance,
+          duration: Math.max(2200, distance * 36),
+          easing: Easing.linear,
+          useNativeDriver: true,
+        }),
+        Animated.delay(500),
+        Animated.timing(translateX, {
+          toValue: 0,
+          duration: 320,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    loop.start();
+    return () => loop.stop();
+  }, [text, textWidth, translateX, viewportWidth]);
+
+  return (
+    <View
+      onLayout={(event) => setViewportWidth(event.nativeEvent.layout.width)}
+      style={styles.slidingMetaViewport}>
+      <Animated.Text
+        style={[
+          styles.catalogSuggestionMeta,
+          styles.slidingMetaText,
+          {
+            width: textWidth || undefined,
+            transform: [{ translateX }],
+          },
+        ]}>
+        {text}
+      </Animated.Text>
+      <Text
+        onLayout={(event) => setTextWidth(event.nativeEvent.layout.width)}
+        style={[styles.catalogSuggestionMeta, styles.slidingMetaMeasure]}>
+        {text}
+      </Text>
+    </View>
+  );
+}
+
 export default function FridgeScreen() {
   const { user } = useAuth();
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
 
   const [items, setItems] = useState<DespensaItemData[]>([]);
   const [supermarkets, setSupermarkets] = useState<SupermarketData[]>([]);
@@ -293,6 +371,7 @@ export default function FridgeScreen() {
   const [selectedItem, setSelectedItem] = useState<DespensaItemData | null>(null);
   const [form, setForm] = useState<IngredientFormState>(EMPTY_FORM);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [unitDropdownOpen, setUnitDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<DespensaItemData[]>([]);
   const [searching, setSearching] = useState(false);
@@ -300,6 +379,7 @@ export default function FridgeScreen() {
   const [authenticatingProductId, setAuthenticatingProductId] = useState<string | null>(null);
   const [authPromptItem, setAuthPromptItem] = useState<DespensaItemData | null>(null);
   const [authMessage, setAuthMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [catalogHelpVisible, setCatalogHelpVisible] = useState(false);
   const [pendingSaveMode, setPendingSaveMode] = useState<FormMode | null>(null);
   const [includeImageInGeneration, setIncludeImageInGeneration] = useState(false);
   const [pendingCategoryOverride, setPendingCategoryOverride] = useState<string | undefined>();
@@ -311,6 +391,18 @@ export default function FridgeScreen() {
   } | null>(null);
   const [checkingCategory, setCheckingCategory] = useState(false);
   const [supermarketDropdownOpen, setSupermarketDropdownOpen] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [scannerLocked, setScannerLocked] = useState(false);
+  const [scannedCode, setScannedCode] = useState('');
+  const [catalogSuggestions, setCatalogSuggestions] = useState<CatalogProductData[]>([]);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogHasMore, setCatalogHasMore] = useState(false);
+  const [catalogLoadingMore, setCatalogLoadingMore] = useState(false);
+  const catalogItemAnimations = useRef(new Map<string, Animated.Value>()).current;
+  const catalogAnimatedIds = useRef(new Set<string>()).current;
+  const catalogAnimationQueryKey = useRef('');
+  const scrollRef = useRef<ScrollView | null>(null);
+  const formLayoutPositions = useRef<Record<string, number>>({});
 
   const categories = useMemo(() => {
     const base = new Map(DEFAULT_CATEGORIES.map((category) => [category.id, category]));
@@ -369,13 +461,147 @@ export default function FridgeScreen() {
     loadSupermarkets();
   }, []);
 
+  useEffect(() => {
+    const isEditingProduct = activeView === 'add' || activeView === 'edit';
+    const nombre = form.nombre_producto.trim();
+    const codigoBarra = form.codigo_barra.trim();
+
+    if (!isEditingProduct || (!codigoBarra && nombre.length < 2)) {
+      setCatalogSuggestions([]);
+      setCatalogLoading(false);
+      setCatalogHasMore(false);
+      setCatalogLoadingMore(false);
+      return;
+    }
+
+    let isActive = true;
+    setCatalogLoading(true);
+
+    const timeout = setTimeout(async () => {
+      const result = await fetchCatalogProductSuggestions({
+        nombre_producto: nombre,
+        codigo_barra: codigoBarra,
+        categoria_actual: getFormCategoryName(),
+        limit: CATALOG_SUGGESTION_LIMIT,
+        offset: 0,
+      });
+
+      if (!isActive) return;
+
+      if (result.items) {
+        setCatalogSuggestions(result.items);
+        setCatalogHasMore(!!result.has_more);
+      } else {
+        setCatalogSuggestions([]);
+        setCatalogHasMore(false);
+      }
+      setCatalogLoading(false);
+    }, 450);
+
+    return () => {
+      isActive = false;
+      clearTimeout(timeout);
+    };
+  }, [activeView, form.categoria, form.codigo_barra, form.nombre_producto, form.newCategoria]);
+
+  useEffect(() => {
+    const queryKey = `${activeView}:${form.nombre_producto.trim()}:${form.codigo_barra.trim()}`;
+    const isNewQuery = queryKey !== catalogAnimationQueryKey.current;
+    const animations: Animated.CompositeAnimation[] = [];
+    let staggerIndex = 0;
+
+    if (isNewQuery) {
+      catalogAnimationQueryKey.current = queryKey;
+      catalogAnimatedIds.clear();
+    }
+
+    for (const product of catalogSuggestions) {
+      let animation = catalogItemAnimations.get(product.id);
+      if (!animation) {
+        animation = new Animated.Value(0);
+        catalogItemAnimations.set(product.id, animation);
+      }
+
+      if (isNewQuery || !catalogAnimatedIds.has(product.id)) {
+        animation.setValue(0);
+        catalogAnimatedIds.add(product.id);
+        animations.push(
+          Animated.timing(animation, {
+            toValue: 1,
+            duration: 280,
+            delay: staggerIndex * 70,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          })
+        );
+        staggerIndex += 1;
+      }
+    }
+
+    if (animations.length > 0) {
+      Animated.parallel(animations).start();
+    }
+  }, [activeView, catalogAnimatedIds, catalogAnimationQueryKey, catalogItemAnimations, catalogSuggestions, form.codigo_barra, form.nombre_producto]);
+
   function updateForm<K extends keyof IngredientFormState>(key: K, value: IngredientFormState[K]) {
     setFormError('');
     setPendingSaveMode(null);
     setIncludeImageInGeneration(false);
     setCategorySuggestion(null);
     setPendingCategoryOverride(undefined);
-    setForm((prev) => ({ ...prev, [key]: value }));
+    setForm((prev) => ({
+      ...prev,
+      [key]: value,
+      producto_catalogo_id:
+        key === 'nombre_producto' || key === 'codigo_barra'
+          ? ''
+          : prev.producto_catalogo_id,
+    }));
+  }
+
+  function registerFormPosition(key: string, y: number, relativeToForm = false) {
+    formLayoutPositions.current[key] = y + (relativeToForm ? formLayoutPositions.current.form || 0 : 0);
+  }
+
+  function scrollToFirstFormPosition(keys: string[]) {
+    setTimeout(() => {
+      const positions = keys
+        .map((key) => formLayoutPositions.current[key])
+        .filter((position): position is number => typeof position === 'number');
+      if (positions.length === 0) return;
+      scrollRef.current?.scrollTo({ y: Math.max(Math.min(...positions) - 24, 0), animated: true });
+    }, 80);
+  }
+
+  async function openBarcodeScanner() {
+    setFormError('');
+    setScannedCode('');
+    setScannerLocked(false);
+
+    if (!cameraPermission?.granted) {
+      const permission = await requestCameraPermission();
+      if (!permission.granted) {
+        setFormError('Necesito permiso de camara para escanear codigos de barra.');
+        return;
+      }
+    }
+
+    setScannerOpen(true);
+  }
+
+  function handleBarcodeScanned(result: BarcodeScanningResult) {
+    if (scannerLocked) return;
+    const digits = result.data.replace(/\D/g, '');
+    if (!digits) return;
+
+    setScannerLocked(true);
+    setScannedCode(digits);
+    setForm((prev) => ({ ...prev, codigo_barra: digits, producto_catalogo_id: '' }));
+  }
+
+  function scanFromCurrentCategory() {
+    openAddView(selectedCategoryId);
+    openBarcodeScanner();
   }
 
   function openAddView(categoryId = selectedCategoryId) {
@@ -383,10 +609,12 @@ export default function FridgeScreen() {
     setFormError('');
     setSelectedItem(null);
     setDropdownOpen(false);
+    setUnitDropdownOpen(false);
     setPendingSaveMode(null);
     setIncludeImageInGeneration(false);
     setCategorySuggestion(null);
     setPendingCategoryOverride(undefined);
+    setCatalogHelpVisible(false);
     setActiveView('add');
   }
 
@@ -395,10 +623,12 @@ export default function FridgeScreen() {
     setForm(formFromItem(item));
     setFormError('');
     setDropdownOpen(false);
+    setUnitDropdownOpen(false);
     setPendingSaveMode(null);
     setIncludeImageInGeneration(false);
     setCategorySuggestion(null);
     setPendingCategoryOverride(undefined);
+    setCatalogHelpVisible(false);
     setActiveView('edit');
   }
 
@@ -409,12 +639,14 @@ export default function FridgeScreen() {
     setSelectedItem(null);
     setFormError('');
     setDropdownOpen(false);
+    setUnitDropdownOpen(false);
     setPendingSaveMode(null);
     setIncludeImageInGeneration(false);
     setCategorySuggestion(null);
     setPendingCategoryOverride(undefined);
     setAuthPromptItem(null);
     setAuthMessage(null);
+    setCatalogHelpVisible(false);
   }
 
   function getFormCategoryName() {
@@ -422,8 +654,74 @@ export default function FridgeScreen() {
     return categories.find((category) => category.id === form.categoria)?.name || form.categoria;
   }
 
+  function getCategorySelection(categoryName?: string) {
+    if (!categoryName) {
+      return { categoria: form.categoria, newCategoria: form.newCategoria };
+    }
+
+    const categoryId = slugifyCategory(categoryName);
+    const matchingCategory = categories.find((category) => category.id === categoryId || category.name === categoryName);
+
+    return matchingCategory
+      ? { categoria: matchingCategory.id, newCategoria: '' }
+      : { categoria: '__new__', newCategoria: categoryName };
+  }
+
+  function applyCatalogSuggestion(product: CatalogProductData) {
+    setFormError('');
+    setPendingSaveMode(null);
+    setIncludeImageInGeneration(false);
+    setCategorySuggestion(null);
+    setPendingCategoryOverride(undefined);
+    setForm((prev) => ({
+      ...prev,
+      producto_catalogo_id: product.id,
+      nombre_producto: product.nombre_producto || prev.nombre_producto,
+      codigo_barra: product.codigo_barra || prev.codigo_barra,
+      marca: product.marca || prev.marca,
+      imagen_url: product.imagen_url || prev.imagen_url,
+      energia_kcal: numberToInput(product.energia_kcal) || prev.energia_kcal,
+      proteinas_g: numberToInput(product.proteinas_g) || prev.proteinas_g,
+      carbohidratos_g: numberToInput(product.carbohidratos_g) || prev.carbohidratos_g,
+      grasas_g: numberToInput(product.grasas_g) || prev.grasas_g,
+      fibra_g: numberToInput(product.fibra_g) || prev.fibra_g,
+      sodio_mg: numberToInput(product.sodio_mg) || prev.sodio_mg,
+      azucar_g: numberToInput(product.azucar_g) || prev.azucar_g,
+    }));
+  }
+
+  async function loadMoreCatalogSuggestions() {
+    if (catalogLoading || catalogLoadingMore || !catalogHasMore) return;
+
+    const nombre = form.nombre_producto.trim();
+    const codigoBarra = form.codigo_barra.trim();
+    if (!codigoBarra && nombre.length < 2) return;
+
+    setCatalogLoadingMore(true);
+    const result = await fetchCatalogProductSuggestions({
+      nombre_producto: nombre,
+      codigo_barra: codigoBarra,
+      categoria_actual: getFormCategoryName(),
+      limit: CATALOG_SUGGESTION_LIMIT,
+      offset: catalogSuggestions.length,
+    });
+    setCatalogLoadingMore(false);
+
+    if (result.items) {
+      setCatalogSuggestions((prev) => {
+        const existingIds = new Set(prev.map((product) => product.id));
+        const nextItems = result.items!.filter((product) => !existingIds.has(product.id));
+        return [...prev, ...nextItems];
+      });
+      setCatalogHasMore(!!result.has_more);
+    } else {
+      setCatalogHasMore(false);
+    }
+  }
+
   function buildPayload(categoryOverride?: string): DespensaUpdateData {
     return {
+      producto_catalogo_id: cleanText(form.producto_catalogo_id),
       nombre_producto: form.nombre_producto.trim(),
       categoria: categoryOverride || getFormCategoryName(),
       codigo_barra: cleanText(form.codigo_barra),
@@ -432,6 +730,8 @@ export default function FridgeScreen() {
       cantidad: parseInputNumber(form.cantidad),
       unidad: cleanText(form.unidad),
       precio_aprox: parseInputNumber(form.precio_aprox),
+      cantidad_precio: parseInputNumber(form.cantidad_precio),
+      unidad_precio: cleanText(form.unidad_precio),
       supermercado_id: cleanText(form.supermercado_id),
       precio_supermercado: parseInputNumber(form.precio_supermercado),
       precio_unidad: cleanText(form.precio_unidad),
@@ -469,6 +769,7 @@ export default function FridgeScreen() {
     try {
       if (result.error) {
         setFormError(result.error);
+        scrollToFirstFormPosition(['form']);
       } else if (mode === 'add') {
         setItems((prev) => [result, ...prev]);
         setSelectedCategoryId(slugifyCategory(result.categoria));
@@ -488,6 +789,7 @@ export default function FridgeScreen() {
       setPendingSaveMode(mode);
       setPendingCategoryOverride(categoryOverride);
       setIncludeImageInGeneration(false);
+      scrollToFirstFormPosition(['nutritionPrompt']);
       return;
     }
 
@@ -496,12 +798,16 @@ export default function FridgeScreen() {
 
   async function saveIngredient(mode: FormMode, skipCategoryCheck = false, categoryOverride?: string) {
     if (!user?.id) return;
-    if (!form.nombre_producto.trim()) {
+    const validationErrorKeys = [];
+    if (!form.nombre_producto.trim()) validationErrorKeys.push('name');
+    if (mode === 'add' && parseInputNumber(form.cantidad) === undefined) validationErrorKeys.push('quantity');
+
+    if (validationErrorKeys.length > 0) {
       setFormError('Agrega el nombre del ingrediente.');
-      return;
-    }
-    if (mode === 'add' && parseInputNumber(form.cantidad) === undefined) {
-      setFormError('Agrega la cantidad del ingrediente.');
+      if (form.nombre_producto.trim()) {
+        setFormError('Agrega la cantidad del ingrediente.');
+      }
+      scrollToFirstFormPosition(validationErrorKeys);
       return;
     }
 
@@ -523,6 +829,7 @@ export default function FridgeScreen() {
           suggested: result.categoria_sugerida,
           reason: result.razon,
         });
+        scrollToFirstFormPosition(['categorySuggestion']);
         return;
       }
     }
@@ -701,12 +1008,112 @@ export default function FridgeScreen() {
     );
   }
 
+  function getCatalogItemAnimation(productId: string) {
+    let animation = catalogItemAnimations.get(productId);
+    if (!animation) {
+      animation = new Animated.Value(0);
+      catalogItemAnimations.set(productId, animation);
+    }
+    return animation;
+  }
+
+  function renderCatalogSuggestions() {
+    if (!catalogLoading && catalogSuggestions.length === 0) return null;
+
+    return (
+      <LinearGradient
+        colors={['#064E2F', '#00B86B', '#B9FFD1']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.catalogSuggestionPanel}>
+        <View style={styles.catalogSuggestionHeader}>
+          <MaterialCommunityIcons name="database-search-outline" size={20} color="#d8fbec" />
+          <View style={styles.catalogSuggestionCopy}>
+            <Text style={styles.catalogSuggestionTitle}>Productos sugeridos</Text>
+            <Text style={styles.catalogSuggestionText}>Usa datos del catalogo sin cambiar tu categoria.</Text>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setCatalogHelpVisible((prev) => !prev)}
+            style={styles.catalogHelpButton}>
+            <Text style={styles.catalogHelpButtonText}>?</Text>
+          </Pressable>
+          {catalogLoading && <ActivityIndicator size="small" color="#064E2F" />}
+        </View>
+
+        {catalogHelpVisible && (
+          <View style={styles.catalogHelpPanel}>
+            <Text style={styles.catalogHelpText}>
+              Estas sugerencias se usan principalmente para tomar datos del catalogo, sobre todo codigo de barra, marca e informacion nutricional.
+              La categoria de tu despensa no se cambia porque las categorias de supermercados pueden ser distintas.
+            </Text>
+          </View>
+        )}
+
+        {catalogSuggestions.map((product) => {
+          const isSelected = form.producto_catalogo_id === product.id;
+          const imageUri = product.imagen_url || getPlaceholderUri(product.nombre_producto);
+          const metaText = [
+            product.marca ? `Marca: ${product.marca}` : undefined,
+            product.categoria ? `Categoria: ${product.categoria}` : undefined,
+          ].filter(Boolean).join(' · ') || 'Producto de catalogo';
+          const entryAnimation = getCatalogItemAnimation(product.id);
+          const translateX = entryAnimation.interpolate({
+            inputRange: [0, 1],
+            outputRange: [34, 0],
+          });
+
+          return (
+            <Animated.View
+              key={product.id}
+              style={{
+                opacity: entryAnimation,
+                transform: [{ translateX }],
+              }}>
+              <View style={[styles.catalogSuggestionItem, isSelected && styles.catalogSuggestionItemSelected]}>
+                <Image source={{ uri: imageUri }} style={styles.catalogSuggestionImage} />
+                <View style={styles.catalogSuggestionInfo}>
+                  <Text style={styles.catalogSuggestionName} numberOfLines={1}>
+                    {product.nombre_producto}
+                  </Text>
+                  <SlidingMetaText text={metaText} />
+                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => applyCatalogSuggestion(product)}
+                  style={[styles.catalogSuggestionAction, isSelected && styles.catalogSuggestionActionSelected]}>
+                  <Text style={[styles.catalogSuggestionActionText, isSelected && styles.catalogSuggestionActionTextSelected]}>
+                    {isSelected ? 'Usado' : 'Usar'}
+                  </Text>
+                </Pressable>
+              </View>
+            </Animated.View>
+          );
+        })}
+
+        {catalogHasMore && (
+          <Pressable
+            accessibilityRole="button"
+            disabled={catalogLoadingMore}
+            onPress={loadMoreCatalogSuggestions}
+            style={styles.catalogLoadMoreAction}>
+            {catalogLoadingMore ? (
+              <ActivityIndicator size="small" color="#064E2F" />
+            ) : (
+              <Text style={styles.catalogLoadMoreText}>Cargar mas</Text>
+            )}
+          </Pressable>
+        )}
+      </LinearGradient>
+    );
+  }
+
   function renderIngredientForm(mode: FormMode) {
     const nameHasError = !!formError && !form.nombre_producto.trim();
     const quantityHasError = mode === 'add' && !!formError && parseInputNumber(form.cantidad) === undefined;
 
     return (
-      <View style={styles.formPanel}>
+      <View style={styles.formPanel} onLayout={(event) => registerFormPosition('form', event.nativeEvent.layout.y)}>
         {formError !== '' && (
           <View style={styles.formErrorPanel}>
             <MaterialCommunityIcons name="alert-circle-outline" size={20} color="#FF8A8A" />
@@ -716,14 +1123,17 @@ export default function FridgeScreen() {
 
         <View style={styles.formSection}>
           <Text style={styles.formSectionTitle}>Identificacion</Text>
-          <Field
-            hasError={nameHasError}
-            label="Nombre"
-            onChangeText={(value) => updateForm('nombre_producto', value)}
-            placeholder="Ej: pollo, arroz, tomate"
-            required
-            value={form.nombre_producto}
-          />
+          <View onLayout={(event) => registerFormPosition('name', event.nativeEvent.layout.y, true)} style={styles.fieldAnchor}>
+            <Field
+              hasError={nameHasError}
+              label="Nombre"
+              onChangeText={(value) => updateForm('nombre_producto', value)}
+              placeholder="Ej: pollo, arroz, tomate"
+              required
+              value={form.nombre_producto}
+            />
+          </View>
+          {renderCatalogSuggestions()}
           <CategoryDropdown
             categories={categories}
             expanded={dropdownOpen}
@@ -745,6 +1155,13 @@ export default function FridgeScreen() {
               value={form.codigo_barra}
             />
           </View>
+          <Pressable accessibilityRole="button" onPress={openBarcodeScanner} style={styles.scanCodeAction}>
+            <MaterialCommunityIcons name="barcode-scan" size={20} color="#064E2F" />
+            <View style={styles.scanCodeCopy}>
+              <Text style={styles.scanCodeActionText}>Escanear codigo</Text>
+              {form.codigo_barra ? <Text style={styles.scanCodeValue}>{form.codigo_barra}</Text> : null}
+            </View>
+          </Pressable>
           <Field
             label="Imagen URL"
             onChangeText={(value) => updateForm('imagen_url', value)}
@@ -772,31 +1189,57 @@ export default function FridgeScreen() {
         <View style={styles.formSection}>
           <Text style={styles.formSectionTitle}>Despensa</Text>
           <View style={styles.twoColumn}>
-            <Field
-              hasError={quantityHasError}
-              keyboardType="decimal-pad"
-              label="Cantidad"
-              onChangeText={(value) => updateForm('cantidad', value)}
-              placeholder="1,5"
-              required={mode === 'add'}
-              value={form.cantidad}
-            />
+            <View onLayout={(event) => registerFormPosition('quantity', event.nativeEvent.layout.y, true)} style={styles.fieldAnchor}>
+              <Field
+                hasError={quantityHasError}
+                keyboardType="decimal-pad"
+                label="Cantidad"
+                onChangeText={(value) => updateForm('cantidad', value)}
+                placeholder="1,5"
+                required={mode === 'add'}
+                value={form.cantidad}
+              />
+            </View>
             <View style={styles.field}>
               <Text style={styles.fieldLabel}>Unidad</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.unitRow}>
-                {UNIT_OPTIONS.map((unit) => (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setUnitDropdownOpen((prev) => !prev)}
+                style={styles.dropdownButton}>
+                <View style={styles.dropdownLeft}>
+                  <View style={[styles.dropdownDot, { backgroundColor: '#00B86B' }]} />
+                  <Text style={styles.dropdownText}>{form.unidad || 'Seleccionar unidad'}</Text>
+                </View>
+                <MaterialCommunityIcons name={unitDropdownOpen ? 'chevron-up' : 'chevron-down'} size={22} color="#064E2F" />
+              </Pressable>
+
+              {unitDropdownOpen && (
+                <View style={styles.dropdownMenu}>
+                  {UNIT_OPTIONS.map((unit) => (
                   <Pressable
                     accessibilityRole="button"
                     key={unit}
-                    onPress={() => updateForm('unidad', unit)}
-                    style={[styles.unitChip, form.unidad === unit && styles.unitChipSelected]}>
-                    <Text style={[styles.unitChipText, form.unidad === unit && styles.unitChipTextSelected]}>{unit}</Text>
+                    onPress={() => {
+                      updateForm('unidad', unit);
+                      setUnitDropdownOpen(false);
+                    }}
+                    style={[styles.dropdownOption, form.unidad === unit && styles.dropdownOptionSelected]}>
+                    <MaterialCommunityIcons name="scale-balance" size={20} color="#064E2F" />
+                    <Text style={styles.dropdownOptionText}>{unit}</Text>
                   </Pressable>
-                ))}
-              </ScrollView>
+                  ))}
+                </View>
+              )}
             </View>
           </View>
-          <View style={styles.twoColumn}>
+          <View style={styles.priceReferencePanel}>
+            <View style={styles.supermarketPriceHeader}>
+              <MaterialCommunityIcons name="cash" size={19} color="#064E2F" />
+              <View style={styles.supermarketPriceCopy}>
+                <Text style={styles.priceReferenceTitle}>Precio aproximado</Text>
+                <Text style={styles.priceReferenceText}>Indica a que cantidad corresponde ese precio.</Text>
+              </View>
+            </View>
             <Field
               keyboardType="decimal-pad"
               label="Precio aprox"
@@ -804,13 +1247,28 @@ export default function FridgeScreen() {
               placeholder="CLP"
               value={form.precio_aprox}
             />
-            <Field
-              label="Vencimiento"
-              onChangeText={(value) => updateForm('fecha_vencimiento', value)}
-              placeholder="YYYY-MM-DD"
-              value={form.fecha_vencimiento}
-            />
+            <View style={styles.twoColumn}>
+              <Field
+                keyboardType="decimal-pad"
+                label="Cantidad precio"
+                onChangeText={(value) => updateForm('cantidad_precio', value)}
+                placeholder="Ej: 1"
+                value={form.cantidad_precio}
+              />
+              <Field
+                label="Unidad precio"
+                onChangeText={(value) => updateForm('unidad_precio', value)}
+                placeholder="Ej: kg, unidad"
+                value={form.unidad_precio}
+              />
+            </View>
           </View>
+          <Field
+            label="Vencimiento"
+            onChangeText={(value) => updateForm('fecha_vencimiento', value)}
+            placeholder="YYYY-MM-DD"
+            value={form.fecha_vencimiento}
+          />
           <View style={styles.supermarketPricePanel}>
             <View style={styles.supermarketPriceHeader}>
               <MaterialCommunityIcons name="store-outline" size={19} color="#0369A1" />
@@ -889,7 +1347,9 @@ export default function FridgeScreen() {
         </View>
 
         {categorySuggestion?.mode === mode && (
-          <View style={styles.categorySuggestionPanel}>
+          <View
+            onLayout={(event) => registerFormPosition('categorySuggestion', event.nativeEvent.layout.y, true)}
+            style={styles.categorySuggestionPanel}>
             <View style={styles.categorySuggestionHeader}>
               <MaterialCommunityIcons name="tag-search-outline" size={20} color="#0369A1" />
               <Text style={styles.categorySuggestionTitle}>Revisar categoria</Text>
@@ -910,7 +1370,9 @@ export default function FridgeScreen() {
         )}
 
         {pendingSaveMode === mode && (
-          <View style={styles.aiPromptPanel}>
+          <View
+            onLayout={(event) => registerFormPosition('nutritionPrompt', event.nativeEvent.layout.y, true)}
+            style={styles.aiPromptPanel}>
             <View style={styles.aiPromptHeader}>
               <MaterialCommunityIcons name="auto-fix" size={20} color="#064E2F" />
               <Text style={styles.aiPromptTitle}>Completar datos faltantes</Text>
@@ -1005,7 +1467,11 @@ export default function FridgeScreen() {
 
   return (
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+      <ScrollView
+        ref={scrollRef}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}>
         <View style={styles.hero}>
           <View style={styles.titleRow}>
             {activeView !== 'categories' && (
@@ -1042,6 +1508,9 @@ export default function FridgeScreen() {
               <MaterialCommunityIcons name="plus" size={22} color="#064E2F" />
             </Pressable>
             <Text style={styles.addBarText}>Agregar ingrediente</Text>
+            <Pressable accessibilityRole="button" onPress={scanFromCurrentCategory} style={styles.scanButton}>
+              <MaterialCommunityIcons name="barcode-scan" size={22} color="#064E2F" />
+            </Pressable>
             <Pressable accessibilityRole="button" onPress={() => setActiveView('search')} style={styles.searchButton}>
               <MaterialCommunityIcons name="magnify" size={22} color="#064E2F" />
             </Pressable>
@@ -1116,6 +1585,9 @@ export default function FridgeScreen() {
               </View>
               <Pressable accessibilityRole="button" onPress={() => openAddView(selectedCategory.id)} style={styles.smallIconButton}>
                 <MaterialCommunityIcons name="plus" size={22} color="#064E2F" />
+              </Pressable>
+              <Pressable accessibilityRole="button" onPress={scanFromCurrentCategory} style={styles.smallScanButton}>
+                <MaterialCommunityIcons name="barcode-scan" size={21} color="#064E2F" />
               </Pressable>
             </View>
 
@@ -1209,6 +1681,67 @@ export default function FridgeScreen() {
                   )}
                 </Pressable>
               )}
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal animationType="slide" transparent visible={scannerOpen} onRequestClose={() => setScannerOpen(false)}>
+        <View style={styles.scannerBackdrop}>
+          <View style={styles.scannerCard}>
+            <View style={styles.scannerHeader}>
+              <View style={styles.scannerIcon}>
+                <MaterialCommunityIcons name="barcode-scan" size={24} color="#064E2F" />
+              </View>
+              <View style={styles.scannerTitleWrap}>
+                <Text style={styles.scannerTitle}>Escanear codigo</Text>
+                <Text style={styles.scannerSubtitle}>Apunta la camara al codigo de barras.</Text>
+              </View>
+            </View>
+
+            {cameraPermission?.granted ? (
+              <View style={styles.cameraFrame}>
+                <CameraView
+                  barcodeScannerSettings={{
+                    barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e', 'code128', 'code39', 'itf14'],
+                  }}
+                  facing="back"
+                  onBarcodeScanned={scannerLocked ? undefined : handleBarcodeScanned}
+                  style={styles.cameraView}
+                />
+                <View style={styles.scanGuide} />
+              </View>
+            ) : (
+              <View style={styles.scannerPermissionPanel}>
+                <MaterialCommunityIcons name="camera-lock-outline" size={28} color="#2F7A4F" />
+                <Text style={styles.scannerPermissionText}>Activa el permiso de camara para leer codigos.</Text>
+              </View>
+            )}
+
+            {scannedCode ? (
+              <View style={styles.scannedCodePanel}>
+                <Text style={styles.scannedCodeLabel}>Codigo leido</Text>
+                <Text style={styles.scannedCodeText}>{scannedCode}</Text>
+              </View>
+            ) : (
+              <Text style={styles.scannerHint}>Por ahora solo mostramos el numero detectado y lo copiamos al campo Codigo barra.</Text>
+            )}
+
+            <View style={styles.scannerActions}>
+              <Pressable accessibilityRole="button" onPress={() => setScannerOpen(false)} style={styles.scannerSecondary}>
+                <Text style={styles.scannerSecondaryText}>{scannedCode ? 'Usar codigo' : 'Cerrar'}</Text>
+              </Pressable>
+              {scannedCode ? (
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => {
+                    setScannedCode('');
+                    setScannerLocked(false);
+                  }}
+                  style={styles.scannerPrimary}>
+                  <Text style={styles.scannerPrimaryText}>Escanear otro</Text>
+                </Pressable>
+              ) : null}
             </View>
           </View>
         </View>
@@ -1485,6 +2018,141 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '900',
   },
+  catalogSuggestionAction: {
+    minHeight: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#00E676',
+    backgroundColor: '#D8FFE5',
+  },
+  catalogSuggestionActionSelected: {
+    borderColor: '#00D976',
+    backgroundColor: '#00D976',
+  },
+  catalogSuggestionActionText: {
+    color: '#035D35',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  catalogSuggestionActionTextSelected: {
+    color: '#FBFFF8',
+  },
+  catalogSuggestionCopy: {
+    flex: 1,
+    gap: 2,
+    backgroundColor: 'transparent',
+  },
+  catalogSuggestionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: 'transparent',
+  },
+  catalogHelpButton: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#D8FFE5',
+    backgroundColor: 'rgba(216, 255, 229, 0.24)',
+  },
+  catalogHelpButtonText: {
+    color: '#FBFFF8',
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  catalogHelpPanel: {
+    padding: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(216, 255, 229, 0.5)',
+    backgroundColor: 'rgba(6, 78, 47, 0.28)',
+  },
+  catalogHelpText: {
+    color: '#FBFFF8',
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 17,
+  },
+  catalogSuggestionImage: {
+    width: 46,
+    height: 46,
+    borderRadius: 13,
+    backgroundColor: '#00E676',
+  },
+  catalogSuggestionInfo: {
+    flex: 1,
+    gap: 3,
+    backgroundColor: 'transparent',
+  },
+  catalogSuggestionItem: {
+    minHeight: 62,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#00E676',
+    backgroundColor: '#F4FFF7',
+  },
+  catalogSuggestionItemSelected: {
+    borderColor: '#00D976',
+    backgroundColor: '#B9FFD1',
+  },
+  catalogLoadMoreAction: {
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#00E676',
+    backgroundColor: '#D8FFE5',
+  },
+  catalogLoadMoreText: {
+    color: '#035D35',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  catalogSuggestionMeta: {
+    color: '#087A46',
+    fontSize: 12,
+    fontWeight: '700',
+    flexShrink: 0,
+  },
+  catalogSuggestionName: {
+    color: '#035D35',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  catalogSuggestionPanel: {
+    gap: 10,
+    padding: 12,
+    borderRadius: 18,
+    borderWidth: 2,
+    borderColor: '#00E676',
+    backgroundColor: '#B9FFD1',
+    shadowColor: '#00E676',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.28,
+    shadowRadius: 18,
+    elevation: 4,
+  },
+  catalogSuggestionText: {
+    color: '#E9FBEF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  catalogSuggestionTitle: {
+    color: '#FBFFF8',
+    fontSize: 15,
+    fontWeight: '900',
+  },
   categorySuggestionActions: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1704,6 +2372,10 @@ const styles = StyleSheet.create({
   field: {
     flex: 1,
     gap: 8,
+    backgroundColor: 'transparent',
+  },
+  fieldAnchor: {
+    flex: 1,
     backgroundColor: 'transparent',
   },
   fieldInput: {
@@ -1975,6 +2647,35 @@ const styles = StyleSheet.create({
     backgroundColor: '#00B86B',
     overflow: 'hidden',
   },
+  priceReferencePanel: {
+    gap: 12,
+    padding: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#9FE7B9',
+    backgroundColor: '#DDF8E7',
+  },
+  priceReferenceText: {
+    color: '#2F7A4F',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  priceReferenceTitle: {
+    color: '#064E2F',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  cameraFrame: {
+    height: 280,
+    overflow: 'hidden',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#9FE7B9',
+    backgroundColor: '#064E2F',
+  },
+  cameraView: {
+    flex: 1,
+  },
   primaryAction: {
     minHeight: 52,
     flex: 1,
@@ -2005,6 +2706,200 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.22,
     shadowRadius: 12,
     elevation: 2,
+  },
+  scanButton: {
+    width: 38,
+    height: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#9FE7B9',
+    backgroundColor: '#DDF8E7',
+    shadowColor: '#74D997',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.22,
+    shadowRadius: 12,
+    elevation: 2,
+  },
+  scanCodeAction: {
+    minHeight: 58,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#9FE7B9',
+    backgroundColor: '#DDF8E7',
+  },
+  scanCodeActionText: {
+    color: '#064E2F',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  scanCodeCopy: {
+    flex: 1,
+    gap: 2,
+    backgroundColor: 'transparent',
+  },
+  scanCodeValue: {
+    color: '#2F7A4F',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  scanGuide: {
+    position: 'absolute',
+    left: 30,
+    right: 30,
+    top: '40%',
+    height: 78,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: '#9FE7B9',
+    backgroundColor: 'rgba(159, 231, 185, 0.08)',
+  },
+  scannedCodeLabel: {
+    color: '#2F7A4F',
+    fontSize: 12,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  scannedCodePanel: {
+    gap: 4,
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#9FE7B9',
+    backgroundColor: '#DDF8E7',
+  },
+  scannedCodeText: {
+    color: '#064E2F',
+    fontSize: 22,
+    fontWeight: '900',
+    letterSpacing: 0,
+  },
+  scannerActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    backgroundColor: 'transparent',
+  },
+  scannerBackdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    padding: 16,
+    backgroundColor: 'rgba(6, 78, 47, 0.28)',
+  },
+  scannerCard: {
+    width: '100%',
+    gap: 14,
+    padding: 16,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: '#9FE7B9',
+    backgroundColor: '#E9FBEF',
+  },
+  scannerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: 'transparent',
+  },
+  scannerHint: {
+    color: '#2F7A4F',
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 18,
+  },
+  scannerIcon: {
+    width: 46,
+    height: 46,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 16,
+    backgroundColor: '#DDF8E7',
+  },
+  scannerPermissionPanel: {
+    minHeight: 170,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    padding: 18,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#9FE7B9',
+    backgroundColor: '#DDF8E7',
+  },
+  scannerPermissionText: {
+    color: '#2F7A4F',
+    fontSize: 14,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  scannerPrimary: {
+    minHeight: 48,
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    backgroundColor: '#00B86B',
+  },
+  scannerPrimaryText: {
+    color: '#FBFFF8',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  scannerSecondary: {
+    minHeight: 48,
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#9FE7B9',
+    backgroundColor: '#DDF8E7',
+  },
+  scannerSecondaryText: {
+    color: '#064E2F',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  scannerSubtitle: {
+    color: '#2F7A4F',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  scannerTitle: {
+    color: '#064E2F',
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  scannerTitleWrap: {
+    flex: 1,
+    gap: 2,
+    backgroundColor: 'transparent',
+  },
+  slidingMetaViewport: {
+    width: '100%',
+    height: 17,
+    overflow: 'hidden',
+    backgroundColor: 'transparent',
+  },
+  slidingMetaMeasure: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    opacity: 0,
+  },
+  slidingMetaText: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    minWidth: '100%',
   },
   searchIconStatic: {
     width: 38,
@@ -2057,6 +2952,21 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.22,
     shadowRadius: 12,
     elevation: 3,
+  },
+  smallScanButton: {
+    width: 42,
+    height: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#9FE7B9',
+    backgroundColor: '#DDF8E7',
+    shadowColor: '#74D997',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.22,
+    shadowRadius: 12,
+    elevation: 2,
   },
   subtitle: {
     color: '#2F7A4F',

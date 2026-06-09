@@ -1,12 +1,13 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Animated, Easing, Pressable, ScrollView, StyleSheet, TextInput } from 'react-native';
 
 import { Text, View } from '@/components/Themed';
 import { useAuth } from '@/contexts/AuthContext';
 import { DespensaItemData, fetchDespensa } from '@/services/despensa';
 import { BudgetPurchaseSuggestion, GeneratedRecipe, generateBudgetRecipe, generateRecipes } from '@/services/recipes';
+import { savePreparationRecipe } from '@/services/preparation';
 import { appendShoppingItems, createShoppingItem } from '@/services/shoppingList';
 
 type MealType = {
@@ -54,6 +55,55 @@ function parseBudget(value: string) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function parseRestrictionInput(value: string) {
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function normalizeText(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+function getRecipePurchaseNames(recipe: GeneratedRecipe, suggestions: PurchaseSuggestion[] = []) {
+  const explicitPurchases = (recipe.compras_usadas || []).filter(Boolean);
+  if (explicitPurchases.length > 0) {
+    return explicitPurchases;
+  }
+
+  const ingredientText = normalizeText((recipe.ingredientes || []).join(' '));
+  return suggestions
+    .filter((item) => ingredientText.includes(normalizeText(item.nombre)))
+    .map((item) => item.nombre);
+}
+
+function textMatches(left: string, right: string) {
+  const normalizedLeft = normalizeText(left);
+  const normalizedRight = normalizeText(right);
+  return (
+    normalizedLeft === normalizedRight ||
+    normalizedLeft.includes(normalizedRight) ||
+    normalizedRight.includes(normalizedLeft)
+  );
+}
+
+function getRecipePurchaseCost(recipe: GeneratedRecipe, suggestions: PurchaseSuggestion[] = []) {
+  const usedPurchases = getRecipePurchaseNames(recipe, suggestions);
+  return suggestions
+    .filter((item) => usedPurchases.some((name) => textMatches(name, item.nombre)))
+    .reduce((sum, item) => sum + item.precio, 0);
+}
+
+function getRecipePurchaseItems(recipe: GeneratedRecipe, suggestions: PurchaseSuggestion[] = []) {
+  const usedPurchases = getRecipePurchaseNames(recipe, suggestions);
+  return suggestions.filter((item) => usedPurchases.some((name) => textMatches(name, item.nombre)));
+}
+
 export default function RecipeScreen() {
   const router = useRouter();
   const { user } = useAuth();
@@ -68,9 +118,14 @@ export default function RecipeScreen() {
   const [selectedPurchaseIds, setSelectedPurchaseIds] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [objective, setObjective] = useState('');
+  const [customRestrictionsInput, setCustomRestrictionsInput] = useState('');
+  const [useProfileRestrictions, setUseProfileRestrictions] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [recipes, setRecipes] = useState<GeneratedRecipe[]>([]);
   const [error, setError] = useState('');
+  const modeTransition = useRef(new Animated.Value(1)).current;
+  const modePillAnim = useRef(new Animated.Value(0)).current;
+  const [modeSwitchWidth, setModeSwitchWidth] = useState(0);
 
   const loadDespensa = useCallback(async () => {
     if (!user?.id) return;
@@ -122,11 +177,91 @@ export default function RecipeScreen() {
     [selectedPurchaseSuggestions]
   );
 
+  const userRestrictions = useMemo(
+    () => (user?.restricciones || []).filter((item) => item.trim().length > 0),
+    [user?.restricciones]
+  );
+
+  const customRestrictions = useMemo(
+    () => parseRestrictionInput(customRestrictionsInput),
+    [customRestrictionsInput]
+  );
+
+  const activeRestrictions = useMemo(
+    () => {
+      const source = useProfileRestrictions ? [...userRestrictions, ...customRestrictions] : customRestrictions;
+      const seen = new Set<string>();
+      return source.filter((item) => {
+        const key = normalizeText(item);
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    },
+    [customRestrictions, useProfileRestrictions, userRestrictions]
+  );
+
+  const budgetRecipePurchaseNames = useMemo(
+    () =>
+      recipeMode === 'presupuesto' && recipes.length > 0
+        ? recipes.flatMap((recipe) => getRecipePurchaseNames(recipe, purchaseSuggestions))
+        : [],
+    [purchaseSuggestions, recipeMode, recipes]
+  );
+
+  const budgetRecipeCosts = useMemo(
+    () =>
+      recipeMode === 'presupuesto'
+        ? recipes.map((recipe) => getRecipePurchaseCost(recipe, purchaseSuggestions))
+        : [],
+    [purchaseSuggestions, recipeMode, recipes]
+  );
+
+  const maxBudgetRecipeCost = useMemo(
+    () => Math.max(0, ...budgetRecipeCosts),
+    [budgetRecipeCosts]
+  );
+
+  const minBudgetRecipeCost = useMemo(
+    () => (budgetRecipeCosts.length > 0 ? Math.min(...budgetRecipeCosts) : 0),
+    [budgetRecipeCosts]
+  );
+
   function toggleIngredient(itemId: string) {
     setError('');
     setSelectedIngredientIds((prev) =>
       prev.includes(itemId) ? prev.filter((id) => id !== itemId) : [...prev, itemId]
     );
+  }
+
+  function switchRecipeMode(mode: RecipeMode) {
+    if (mode === recipeMode) return;
+
+    Animated.spring(modePillAnim, {
+      toValue: mode === 'presupuesto' ? 1 : 0,
+      damping: 18,
+      mass: 0.7,
+      stiffness: 190,
+      useNativeDriver: true,
+    }).start();
+
+    Animated.timing(modeTransition, {
+      toValue: 0,
+      duration: 150,
+      easing: Easing.in(Easing.cubic),
+      useNativeDriver: true,
+    }).start(() => {
+      setRecipeMode(mode);
+      setRecipes([]);
+      setError('');
+      Animated.spring(modeTransition, {
+        toValue: 1,
+        damping: 16,
+        mass: 0.75,
+        stiffness: 190,
+        useNativeDriver: true,
+      }).start();
+    });
   }
 
   function toggleObjective(value: string) {
@@ -148,6 +283,8 @@ export default function RecipeScreen() {
       tipo_comida: selectedMeal,
       ingredientes: selectedIngredients.map((item) => item.nombre_producto),
       objetivo_nutricional: objective.trim(),
+      restricciones: customRestrictions,
+      usar_restricciones_perfil: useProfileRestrictions,
     });
 
     if (result.error) {
@@ -189,7 +326,10 @@ export default function RecipeScreen() {
       user_id: user.id,
       tipo_comida: selectedMeal,
       presupuesto: budget,
+      ingredientes: selectedIngredients.map((item) => item.nombre_producto),
       objetivo_nutricional: objective.trim(),
+      restricciones: customRestrictions,
+      usar_restricciones_perfil: useProfileRestrictions,
     });
 
     if (result.error) {
@@ -206,7 +346,7 @@ export default function RecipeScreen() {
       }));
       setPurchaseSuggestions(suggestions);
       setSelectedPurchaseIds(suggestions.map((item) => item.id));
-      setRecipes(result.recetas?.slice(0, 1) || []);
+      setRecipes(result.recetas?.slice(0, 3) || []);
 
       if (!result.recetas?.length) {
         setError('No llegó receta desde el backend.');
@@ -242,19 +382,111 @@ export default function RecipeScreen() {
     router.push('/(navbarnt)/lista');
   }
 
+  async function useRecipe(recipe: GeneratedRecipe) {
+    const recipePurchases = getRecipePurchaseItems(recipe, purchaseSuggestions);
+    await savePreparationRecipe({
+      receta: recipe,
+      compras_sugeridas: purchaseSuggestions,
+      compras_receta: recipePurchases,
+      restricciones: activeRestrictions,
+      tipo_comida: selectedMeal,
+    });
+    router.push('/(navbarnt)/preparacion');
+  }
+
+  function renderRestrictionsSection(compact = false) {
+    const panelStyles = compact ? styles.budgetSharedSection : styles.detailPanel;
+    const titleStyle = compact ? styles.panelTitleSmall : styles.panelTitle;
+    const iconSize = compact ? 20 : 22;
+    const iconStyle = compact ? styles.panelIconSmall : styles.panelIcon;
+
+    return (
+      <View style={panelStyles}>
+        <View style={styles.panelHeader}>
+          <View style={iconStyle}>
+            <MaterialCommunityIcons name="food-off-outline" size={iconSize} color="#064E2F" />
+          </View>
+          <View style={styles.panelCopy}>
+            <Text style={titleStyle}>Restricciones</Text>
+            <Text style={styles.panelSubtitle}>
+              {activeRestrictions.length > 0
+                ? `Aplicando: ${activeRestrictions.join(', ')}`
+                : 'Sin restricciones para esta generación'}
+            </Text>
+          </View>
+        </View>
+
+        <Pressable
+          accessibilityRole="switch"
+          accessibilityState={{ checked: useProfileRestrictions }}
+          onPress={() => setUseProfileRestrictions((prev) => !prev)}
+          style={styles.restrictionToggle}>
+          <View style={[styles.restrictionSwitch, useProfileRestrictions && styles.restrictionSwitchOn]}>
+            <View style={[styles.restrictionSwitchKnob, useProfileRestrictions && styles.restrictionSwitchKnobOn]} />
+          </View>
+          <View style={styles.panelCopy}>
+            <Text style={styles.restrictionToggleTitle}>Usar restricciones del perfil</Text>
+            <Text style={styles.restrictionToggleText}>
+              {userRestrictions.length > 0 ? userRestrictions.join(', ') : 'No tienes restricciones guardadas'}
+            </Text>
+          </View>
+        </Pressable>
+
+        <TextInput
+          onChangeText={setCustomRestrictionsInput}
+          placeholder="Agregar para esta receta, ej: sin lactosa, sin gluten"
+          placeholderTextColor="#43A66C"
+          style={styles.textInput}
+          value={customRestrictionsInput}
+        />
+
+        {activeRestrictions.length > 0 && (
+          <View style={styles.restrictionChipRow}>
+            {activeRestrictions.map((restriction) => (
+              <Text key={restriction} style={styles.restrictionChip}>
+                {restriction}
+              </Text>
+            ))}
+          </View>
+        )}
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <View style={styles.hero}>
           <Text style={styles.title}>Generar receta</Text>
-          <Text style={styles.subtitle}>Elige el tipo de comida y, si quieres, ingredientes que deben aparecer sí o sí.</Text>
+          <Text style={styles.subtitle}>Elige tipo de comida e ingredientes obligatorios que la IA debe usar, como arroz o pollo.</Text>
         </View>
 
-        <View style={styles.modeSwitch}>
+        <View
+          style={styles.modeSwitch}
+          onLayout={(event) => setModeSwitchWidth(event.nativeEvent.layout.width)}>
+          {modeSwitchWidth > 0 && (
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.modeSlidingPill,
+                {
+                  width: (modeSwitchWidth - 12 - 8) / 2,
+                  transform: [
+                    {
+                      translateX: modePillAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [6, 6 + (modeSwitchWidth - 12 - 8) / 2 + 8],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            />
+          )}
           <Pressable
             accessibilityRole="button"
-            onPress={() => setRecipeMode('despensa')}
-            style={[styles.modeButton, recipeMode === 'despensa' && styles.modeButtonActive]}>
+            onPress={() => switchRecipeMode('despensa')}
+            style={styles.modeButton}>
             <MaterialCommunityIcons
               name="fridge-outline"
               size={18}
@@ -266,8 +498,8 @@ export default function RecipeScreen() {
           </Pressable>
           <Pressable
             accessibilityRole="button"
-            onPress={() => setRecipeMode('presupuesto')}
-            style={[styles.modeButton, recipeMode === 'presupuesto' && styles.modeButtonActive]}>
+            onPress={() => switchRecipeMode('presupuesto')}
+            style={styles.modeButton}>
             <MaterialCommunityIcons
               name="cash-multiple"
               size={18}
@@ -279,6 +511,27 @@ export default function RecipeScreen() {
           </Pressable>
         </View>
 
+        <Animated.View
+          style={[
+            styles.modeContent,
+            {
+              opacity: modeTransition,
+              transform: [
+                {
+                  translateX: modeTransition.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [recipeMode === 'presupuesto' ? 32 : -32, 0],
+                  }),
+                },
+                {
+                  scale: modeTransition.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.97, 1],
+                  }),
+                },
+              ],
+            },
+          ]}>
         {recipeMode === 'despensa' ? (
           <>
             <View style={styles.detailPanel}>
@@ -363,17 +616,19 @@ export default function RecipeScreen() {
               />
             </View>
 
+            {renderRestrictionsSection()}
+
             <View style={styles.detailPanel}>
               <View style={styles.panelHeader}>
                 <View style={styles.panelIcon}>
                   <MaterialCommunityIcons name="fridge-outline" size={22} color="#064E2F" />
                 </View>
                 <View style={styles.panelCopy}>
-                  <Text style={styles.panelTitle}>Ingredientes opcionales</Text>
+                  <Text style={styles.panelTitle}>Ingredientes obligatorios</Text>
                   <Text style={styles.panelSubtitle}>
                     {selectedIngredients.length > 0
                       ? `${selectedIngredients.length} obligatorio${selectedIngredients.length === 1 ? '' : 's'}`
-                      : 'La IA puede usar toda tu despensa'}
+                      : 'Elige si quieres forzar alguno, por ejemplo arroz'}
                   </Text>
                 </View>
                 {selectedIngredients.length > 0 && (
@@ -445,6 +700,160 @@ export default function RecipeScreen() {
               </View>
             </View>
 
+            <View style={styles.budgetSharedSection}>
+              <View style={styles.panelHeader}>
+                <View style={styles.panelIconSmall}>
+                  <MaterialCommunityIcons name="silverware" size={20} color="#064E2F" />
+                </View>
+                <View style={styles.panelCopy}>
+                  <Text style={styles.panelTitleSmall}>Tipo de comida</Text>
+                  <Text style={styles.panelSubtitle}>{selectedMealType.label}</Text>
+                </View>
+              </View>
+
+              <View style={styles.dropdownWrap}>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => setMealDropdownOpen((prev) => !prev)}
+                  style={styles.mealDropdownButton}>
+                  <View style={styles.mealDropdownLeft}>
+                    <View style={[styles.mealIcon, { backgroundColor: selectedMealType.color + '33' }]}>
+                      <MaterialCommunityIcons name={selectedMealType.icon} size={22} color={selectedMealType.color} />
+                    </View>
+                    <Text style={styles.mealDropdownText}>{selectedMealType.label}</Text>
+                  </View>
+                  <MaterialCommunityIcons name={mealDropdownOpen ? 'chevron-up' : 'chevron-down'} size={22} color="#064E2F" />
+                </Pressable>
+
+                {mealDropdownOpen && (
+                  <View style={styles.mealDropdownMenu}>
+                    {MEAL_TYPES.map((meal) => {
+                      const isSelected = selectedMeal === meal.id;
+                      return (
+                        <Pressable
+                          accessibilityRole="button"
+                          key={meal.id}
+                          onPress={() => {
+                            setSelectedMeal(meal.id);
+                            setMealDropdownOpen(false);
+                          }}
+                          style={[styles.mealDropdownOption, isSelected && styles.mealDropdownOptionSelected]}>
+                          <View style={[styles.mealOptionIcon, { backgroundColor: meal.color + '33' }]}>
+                            <MaterialCommunityIcons name={meal.icon} size={19} color={meal.color} />
+                          </View>
+                          <Text style={styles.mealDropdownOptionText}>{meal.label}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                )}
+              </View>
+            </View>
+
+            <View style={styles.budgetSharedSection}>
+              <View style={styles.panelHeader}>
+                <View style={styles.panelIconSmall}>
+                  <MaterialCommunityIcons name="target" size={20} color="#064E2F" />
+                </View>
+                <View style={styles.panelCopy}>
+                  <Text style={styles.panelTitleSmall}>Objetivo</Text>
+                  <Text style={styles.panelSubtitle}>Opcional para guiar compras y receta.</Text>
+                </View>
+              </View>
+
+              <View style={styles.objectiveRow}>
+                {QUICK_OBJECTIVES.map((item) => (
+                  <Pressable
+                    accessibilityRole="button"
+                    key={item}
+                    onPress={() => toggleObjective(item)}
+                    style={[styles.objectiveChip, objective === item && styles.objectiveChipSelected]}>
+                    <Text style={[styles.objectiveChipText, objective === item && styles.objectiveChipTextSelected]}>{item}</Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              <TextInput
+                onChangeText={setObjective}
+                placeholder="O escribe algo más específico..."
+                placeholderTextColor="#43A66C"
+                style={styles.textInput}
+                value={objective}
+              />
+            </View>
+
+            {renderRestrictionsSection(true)}
+
+            <View style={styles.budgetSharedSection}>
+              <View style={styles.panelHeader}>
+                <View style={styles.panelIconSmall}>
+                  <MaterialCommunityIcons name="fridge-outline" size={20} color="#064E2F" />
+                </View>
+                <View style={styles.panelCopy}>
+                  <Text style={styles.panelTitleSmall}>Ingredientes obligatorios</Text>
+                  <Text style={styles.panelSubtitle}>
+                    {selectedIngredients.length > 0
+                      ? `${selectedIngredients.length} obligatorio${selectedIngredients.length === 1 ? '' : 's'}`
+                      : 'Elige si quieres forzar alguno, por ejemplo arroz'}
+                  </Text>
+                </View>
+                {selectedIngredients.length > 0 && (
+                  <Pressable accessibilityRole="button" onPress={clearSelection} style={styles.clearButton}>
+                    <MaterialCommunityIcons name="close" size={20} color="#064E2F" />
+                  </Pressable>
+                )}
+              </View>
+
+              <View style={styles.searchBar}>
+                <MaterialCommunityIcons name="magnify" size={22} color="#2F7A4F" />
+                <TextInput
+                  onChangeText={setSearchQuery}
+                  onFocus={loadDespensa}
+                  placeholder="Buscar ingredientes de tu refri..."
+                  placeholderTextColor="#2F7A4F"
+                  style={styles.searchInput}
+                  value={searchQuery}
+                />
+              </View>
+
+              {loadingItems ? (
+                <View style={styles.emptyState}>
+                  <ActivityIndicator size="large" color="#064E2F" />
+                </View>
+              ) : filteredItems.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <MaterialCommunityIcons name="food-off" size={40} color="#4F9F70" />
+                  <Text style={styles.emptyText}>No hay ingredientes para seleccionar</Text>
+                </View>
+              ) : (
+                <ScrollView
+                  nestedScrollEnabled
+                  showsVerticalScrollIndicator
+                  style={styles.ingredientScroller}
+                  contentContainerStyle={styles.ingredientList}>
+                  {filteredItems.map((item) => {
+                    const isSelected = selectedIngredientIds.includes(item.id);
+                    return (
+                      <Pressable
+                        accessibilityRole="button"
+                        key={item.id}
+                        onPress={() => toggleIngredient(item.id)}
+                        style={[styles.ingredientRow, isSelected && styles.ingredientRowSelected]}>
+                        <View style={[styles.checkBox, isSelected && styles.checkBoxSelected]}>
+                          {isSelected && <MaterialCommunityIcons name="check" size={17} color="#FBFFF8" />}
+                        </View>
+                        <View style={styles.ingredientCopy}>
+                          <Text style={styles.ingredientTitle}>{item.nombre_producto}</Text>
+                          <Text style={styles.ingredientSubtitle}>{itemSubtitle(item) || 'Sin detalle'}</Text>
+                        </View>
+                        <Text style={styles.macroPill}>{item.energia_kcal ?? 0} kcal</Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              )}
+            </View>
+
             <View style={styles.budgetInputRow}>
               <View style={styles.budgetInputBox}>
                 <Text style={styles.budgetLabel}>Presupuesto</Text>
@@ -469,6 +878,9 @@ export default function RecipeScreen() {
             <View style={styles.budgetContext}>
               <Text style={styles.budgetContextText}>{items.length} ingredientes disponibles en despensa</Text>
               <Text style={styles.budgetContextText}>{selectedMeal}</Text>
+              {activeRestrictions.length > 0 && (
+                <Text style={styles.budgetContextText}>Respeta: {activeRestrictions.join(', ')}</Text>
+              )}
             </View>
 
             {purchaseSuggestions.length === 0 ? (
@@ -488,6 +900,9 @@ export default function RecipeScreen() {
 
                 {purchaseSuggestions.map((item) => {
                   const isSelected = selectedPurchaseIds.includes(item.id);
+                  const isUsedInRecipe = budgetRecipePurchaseNames.some(
+                    (name) => textMatches(name, item.nombre)
+                  );
                   return (
                     <Pressable
                       accessibilityRole="button"
@@ -500,6 +915,12 @@ export default function RecipeScreen() {
                       <View style={styles.ingredientCopy}>
                         <Text style={styles.ingredientTitle}>{item.nombre}</Text>
                         <Text style={styles.ingredientSubtitle}>{item.cantidad} · {item.reason}</Text>
+                        {isUsedInRecipe && (
+                          <View style={styles.purchaseRecipeBadge}>
+                            <MaterialCommunityIcons name="silverware-fork-knife" size={13} color="#FBFFF8" />
+                            <Text style={styles.purchaseRecipeBadgeText}>Se usa en la receta</Text>
+                          </View>
+                        )}
                       </View>
                       <Text style={styles.pricePill}>{formatPrice(item.precio)}</Text>
                     </Pressable>
@@ -517,6 +938,7 @@ export default function RecipeScreen() {
             )}
           </View>
         )}
+        </Animated.View>
 
         {error !== '' && (
           <View style={styles.errorPanel}>
@@ -545,8 +967,20 @@ export default function RecipeScreen() {
               <Text style={styles.sectionMeta}>{recipes.length} receta{recipes.length === 1 ? '' : 's'}</Text>
             </View>
 
-            {recipes.map((recipe, index) => (
-              <View key={`${recipe.titulo}-${index}`} style={styles.recipeCard}>
+            {recipes.map((recipe, index) => {
+              const usedPurchases =
+                recipeMode === 'presupuesto' ? getRecipePurchaseNames(recipe, purchaseSuggestions) : [];
+              const recipePurchaseCost = budgetRecipeCosts[index] ?? 0;
+              const costRatio =
+                recipeMode === 'presupuesto' && maxBudgetRecipeCost > 0
+                  ? Math.max(0.08, recipePurchaseCost / maxBudgetRecipeCost)
+                  : 0;
+              const isCheapestBudgetRecipe =
+                recipeMode === 'presupuesto' && recipePurchaseCost === minBudgetRecipeCost;
+              const costFillWidth = `${Math.round(costRatio * 100)}%` as `${number}%`;
+
+              return (
+                <View key={`${recipe.titulo}-${index}`} style={styles.recipeCard}>
                 <View style={styles.recipeHeader}>
                   <View style={styles.recipeNumber}>
                     <Text style={styles.recipeNumberText}>{index + 1}</Text>
@@ -557,6 +991,10 @@ export default function RecipeScreen() {
                       {[recipe.tiempo_preparacion, recipe.dificultad].filter(Boolean).join(' · ') || selectedMeal}
                     </Text>
                   </View>
+                  <Pressable accessibilityRole="button" onPress={() => useRecipe(recipe)} style={styles.useRecipeButton}>
+                    <MaterialCommunityIcons name="play-circle-outline" size={18} color="#FBFFF8" />
+                    <Text style={styles.useRecipeButtonText}>Usar</Text>
+                  </Pressable>
                 </View>
 
                 {!!recipe.por_que_funciona && (
@@ -571,6 +1009,42 @@ export default function RecipeScreen() {
                     <Text style={styles.macroPill}>P {recipe.macros_totales.proteinas ?? 0}g</Text>
                     <Text style={styles.macroPill}>C {recipe.macros_totales.carbohidratos ?? 0}g</Text>
                     <Text style={styles.macroPill}>G {recipe.macros_totales.grasas ?? 0}g</Text>
+                  </View>
+                )}
+
+                {recipeMode === 'presupuesto' && (
+                  <View style={styles.recipeCostMeter}>
+                    <View style={styles.recipeCostHeader}>
+                      <View style={styles.recipeCostTitleWrap}>
+                        <MaterialCommunityIcons name="cart-check" size={18} color="#064E2F" />
+                        <Text style={styles.recipeCostTitle}>Costo y compras usadas</Text>
+                      </View>
+                      <View style={styles.recipeCostValueWrap}>
+                        {isCheapestBudgetRecipe && (
+                          <Text style={styles.recipeCostBestPill}>
+                            {recipePurchaseCost === 0 ? 'Sin compras' : 'Más barata'}
+                          </Text>
+                        )}
+                        <Text style={styles.recipeCostValue}>{formatPrice(recipePurchaseCost)}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.recipeCostTrack}>
+                      <View style={[styles.recipeCostFill, { width: costFillWidth }]} />
+                    </View>
+                    <Text style={styles.recipeCostMeta}>
+                      {usedPurchases.length > 0
+                        ? `${usedPurchases.length} compra${usedPurchases.length === 1 ? '' : 's'} usada${usedPurchases.length === 1 ? '' : 's'} en esta receta`
+                        : 'Usa solo lo que ya tienes en despensa'}
+                    </Text>
+                    {usedPurchases.length > 0 && (
+                      <View style={styles.recipePurchaseChipRow}>
+                        {usedPurchases.map((purchaseName, purchaseIndex) => (
+                          <Text key={`${purchaseName}-${purchaseIndex}`} style={styles.recipePurchaseChip}>
+                            {purchaseName}
+                          </Text>
+                        ))}
+                      </View>
+                    )}
                   </View>
                 )}
 
@@ -595,10 +1069,12 @@ export default function RecipeScreen() {
                     ))}
                   </View>
                 )}
-              </View>
-            ))}
+                </View>
+              );
+            })}
           </View>
         )}
+
       </ScrollView>
     </View>
   );
@@ -664,6 +1140,14 @@ const styles = StyleSheet.create({
     alignItems: 'stretch',
     gap: 10,
     backgroundColor: 'transparent',
+  },
+  budgetSharedSection: {
+    gap: 12,
+    padding: 12,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#9FE7B9',
+    backgroundColor: '#DDF8E7',
   },
   budgetLabel: {
     color: '#2F7A4F',
@@ -943,9 +1427,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     borderRadius: 16,
     backgroundColor: 'transparent',
+    zIndex: 1,
   },
   modeButtonActive: {
-    backgroundColor: '#00B86B',
+    backgroundColor: 'transparent',
   },
   modeButtonText: {
     color: '#2F7A4F',
@@ -963,6 +1448,24 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#9FE7B9',
     backgroundColor: '#E9FBEF',
+    overflow: 'hidden',
+  },
+  modeSlidingPill: {
+    position: 'absolute',
+    top: 6,
+    bottom: 6,
+    left: 0,
+    borderRadius: 16,
+    backgroundColor: '#00B86B',
+    shadowColor: '#00B86B',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.24,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  modeContent: {
+    gap: 18,
+    backgroundColor: 'transparent',
   },
   objectiveChip: {
     minHeight: 40,
@@ -1010,6 +1513,14 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: '#9FE7B9',
   },
+  panelIconSmall: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    backgroundColor: '#9FE7B9',
+  },
   panelSubtitle: {
     color: '#2F7A4F',
     fontSize: 14,
@@ -1018,6 +1529,11 @@ const styles = StyleSheet.create({
   panelTitle: {
     color: '#064E2F',
     fontSize: 18,
+    fontWeight: '900',
+  },
+  panelTitleSmall: {
+    color: '#064E2F',
+    fontSize: 15,
     fontWeight: '900',
   },
   pricePill: {
@@ -1031,6 +1547,147 @@ const styles = StyleSheet.create({
     borderColor: '#74D997',
     backgroundColor: '#D8FBE3',
     overflow: 'hidden',
+  },
+  preparationActions: {
+    gap: 10,
+    backgroundColor: 'transparent',
+  },
+  preparationHero: {
+    gap: 4,
+    padding: 13,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: '#74D997',
+    backgroundColor: '#D8FBE3',
+  },
+  preparationMessage: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 15,
+    backgroundColor: '#D8FBE3',
+  },
+  preparationMessageText: {
+    flex: 1,
+    color: '#064E2F',
+    fontSize: 13,
+    fontWeight: '800',
+    lineHeight: 18,
+  },
+  preparationMeta: {
+    color: '#2F7A4F',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  preparationPanel: {
+    gap: 14,
+    padding: 16,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: '#9FE7B9',
+    backgroundColor: '#E9FBEF',
+    shadowColor: '#74D997',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.24,
+    shadowRadius: 20,
+    elevation: 2,
+  },
+  preparationPrimaryButton: {
+    minHeight: 50,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: 16,
+    backgroundColor: '#00B86B',
+  },
+  preparationPrimaryButtonText: {
+    color: '#FBFFF8',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  preparationRecipeTab: {
+    minWidth: 42,
+    minHeight: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#9FE7B9',
+    backgroundColor: '#DDF8E7',
+  },
+  preparationRecipeTabSelected: {
+    borderColor: '#00B86B',
+    backgroundColor: '#00B86B',
+  },
+  preparationRecipeTabText: {
+    color: '#064E2F',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  preparationRecipeTabTextSelected: {
+    color: '#FBFFF8',
+  },
+  preparationRecipeTabs: {
+    flexDirection: 'row',
+    gap: 8,
+    backgroundColor: 'transparent',
+  },
+  preparationSecondaryButton: {
+    minHeight: 50,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#74D997',
+    backgroundColor: '#D8FBE3',
+  },
+  preparationSecondaryButtonText: {
+    color: '#064E2F',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  preparationStep: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    padding: 11,
+    borderRadius: 16,
+    backgroundColor: '#DDF8E7',
+  },
+  preparationStepNumber: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
+    backgroundColor: '#9FE7B9',
+  },
+  preparationStepNumberText: {
+    color: '#064E2F',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  preparationStepText: {
+    flex: 1,
+    color: '#0B6B40',
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 20,
+  },
+  preparationSteps: {
+    gap: 9,
+    backgroundColor: 'transparent',
+  },
+  preparationTitle: {
+    color: '#064E2F',
+    fontSize: 18,
+    fontWeight: '900',
   },
   purchaseList: {
     gap: 10,
@@ -1051,6 +1708,22 @@ const styles = StyleSheet.create({
     borderColor: '#74D997',
     backgroundColor: '#D8FBE3',
   },
+  purchaseRecipeBadge: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: '#00B86B',
+  },
+  purchaseRecipeBadgeText: {
+    color: '#FBFFF8',
+    fontSize: 11,
+    fontWeight: '900',
+  },
   recipeCard: {
     gap: 14,
     padding: 16,
@@ -1058,6 +1731,108 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#9FE7B9',
     backgroundColor: '#E9FBEF',
+  },
+  recipeAdjustBox: {
+    gap: 11,
+    padding: 12,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#9FE7B9',
+    backgroundColor: '#DDF8E7',
+  },
+  recipeAdjustButton: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderRadius: 16,
+    backgroundColor: '#00B86B',
+  },
+  recipeAdjustButtonText: {
+    color: '#FBFFF8',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  recipeAdjustInput: {
+    minHeight: 86,
+    color: '#064E2F',
+    fontSize: 14,
+    fontWeight: '800',
+    lineHeight: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: '#9FE7B9',
+    backgroundColor: '#E9FBEF',
+    textAlignVertical: 'top',
+  },
+  recipeCostBestPill: {
+    color: '#FBFFF8',
+    fontSize: 11,
+    fontWeight: '900',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: '#00B86B',
+    overflow: 'hidden',
+  },
+  recipeCostFill: {
+    height: '100%',
+    borderRadius: 999,
+    backgroundColor: '#00B86B',
+  },
+  recipeCostHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    backgroundColor: 'transparent',
+  },
+  recipeCostMeta: {
+    color: '#2F7A4F',
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 17,
+  },
+  recipeCostMeter: {
+    gap: 9,
+    padding: 12,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: '#74D997',
+    backgroundColor: '#D8FBE3',
+  },
+  recipeCostTitle: {
+    color: '#064E2F',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  recipeCostTitleWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    backgroundColor: 'transparent',
+  },
+  recipeCostTrack: {
+    height: 10,
+    borderRadius: 999,
+    backgroundColor: '#B8EEC8',
+    overflow: 'hidden',
+  },
+  recipeCostValue: {
+    color: '#064E2F',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  recipeCostValueWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 7,
+    backgroundColor: 'transparent',
   },
   recipeHeader: {
     flexDirection: 'row',
@@ -1093,6 +1868,22 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '900',
   },
+  recipePurchaseChip: {
+    color: '#064E2F',
+    fontSize: 12,
+    fontWeight: '900',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: '#9FE7B9',
+    overflow: 'hidden',
+  },
+  recipePurchaseChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 7,
+    backgroundColor: 'transparent',
+  },
   recipeSection: {
     gap: 6,
     backgroundColor: 'transparent',
@@ -1110,6 +1901,64 @@ const styles = StyleSheet.create({
   resultsWrap: {
     gap: 12,
     backgroundColor: 'transparent',
+  },
+  restrictionChip: {
+    color: '#064E2F',
+    fontSize: 12,
+    fontWeight: '900',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: '#9FE7B9',
+    overflow: 'hidden',
+  },
+  restrictionChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 7,
+    backgroundColor: 'transparent',
+  },
+  restrictionSwitch: {
+    width: 44,
+    height: 26,
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+    borderRadius: 999,
+    backgroundColor: '#9FE7B9',
+  },
+  restrictionSwitchKnob: {
+    width: 20,
+    height: 20,
+    borderRadius: 999,
+    backgroundColor: '#FBFFF8',
+  },
+  restrictionSwitchKnobOn: {
+    alignSelf: 'flex-end',
+  },
+  restrictionSwitchOn: {
+    backgroundColor: '#00B86B',
+  },
+  restrictionToggle: {
+    minHeight: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#9FE7B9',
+    backgroundColor: '#DDF8E7',
+  },
+  restrictionToggleText: {
+    color: '#2F7A4F',
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 17,
+  },
+  restrictionToggleTitle: {
+    color: '#064E2F',
+    fontSize: 14,
+    fontWeight: '900',
   },
   searchBar: {
     minHeight: 56,
@@ -1168,6 +2017,21 @@ const styles = StyleSheet.create({
     fontSize: 34,
     fontWeight: '900',
     lineHeight: 38,
+  },
+  useRecipeButton: {
+    minHeight: 38,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    borderRadius: 14,
+    backgroundColor: '#00B86B',
+  },
+  useRecipeButtonText: {
+    color: '#FBFFF8',
+    fontSize: 12,
+    fontWeight: '900',
   },
   whyBox: {
     padding: 12,

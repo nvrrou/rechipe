@@ -10,6 +10,7 @@ export type ShoppingItem = {
 };
 
 const SHOPPING_LIST_KEY = 'rechipe:shopping-list';
+const PREPARATION_SHOPPING_LIST_KEY = 'rechipe:preparation-shopping-list';
 
 export const INITIAL_SHOPPING_ITEMS: ShoppingItem[] = [
   { id: '1', nombre: 'Arroz', categoria: 'Cereales', cantidad: '1 kg', precio: 1890, comprado: false },
@@ -51,4 +52,20 @@ export async function appendShoppingItems(items: ShoppingItem[]) {
   const nextItems = [...currentItems, ...items];
   await saveShoppingItems(nextItems);
   return nextItems;
+}
+
+export async function getPreparationShoppingItems() {
+  const rawItems = await AsyncStorage.getItem(PREPARATION_SHOPPING_LIST_KEY);
+  if (!rawItems) return [];
+
+  try {
+    const parsed = JSON.parse(rawItems);
+    return Array.isArray(parsed) ? (parsed as ShoppingItem[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function savePreparationShoppingItems(items: ShoppingItem[]) {
+  await AsyncStorage.setItem(PREPARATION_SHOPPING_LIST_KEY, JSON.stringify(items));
 }

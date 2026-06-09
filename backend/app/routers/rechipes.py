@@ -1,9 +1,10 @@
 from fastapi import APIRouter, HTTPException, Depends
-from app.models.schemas import BudgetRecipeRequest, RecipeRequest, EsquemaAlimento
+from app.models.schemas import BudgetRecipeRequest, RecipeAdjustRequest, RecipeRequest, EsquemaAlimento
 from app.services.ai_service import (
     estimar_precio_producto_chile,
     generar_receta_con_ia,
     generar_receta_presupuestada_con_ia,
+    modificar_receta_con_ia,
     obtener_info_nutricional,
     generar_url_temporal_dalle,
 )
@@ -18,6 +19,39 @@ router = APIRouter(
 )
 
 PRODUCT_SELECT = "id,nombre,categoria,energia_kcal,proteinas_g,carbohidratos_g,grasas_totales_g"
+
+
+async def _get_profile_context(client: httpx.AsyncClient, user_id: str):
+    profile_response = await client.get(
+        "/profiles",
+        params={"id": f"eq.{user_id}", "select": "objetivos,restricciones", "limit": "1"},
+    )
+    profile_response.raise_for_status()
+    profile_data = profile_response.json()
+
+    if not profile_data:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    profile = profile_data[0]
+    objetivos = profile.get("objetivos") or []
+    restricciones = profile.get("restricciones") or []
+
+    return {
+        "objetivos": objetivos if isinstance(objetivos, list) else [str(objetivos)],
+        "restricciones": restricciones if isinstance(restricciones, list) else [str(restricciones)],
+    }
+
+
+def _merge_unique_text(values: list[str]):
+    seen = set()
+    merged = []
+    for value in values:
+        clean_value = str(value or "").strip()
+        key = clean_value.lower()
+        if clean_value and key not in seen:
+            seen.add(key)
+            merged.append(clean_value)
+    return merged
 
 
 async def _get_user_pantry(client: httpx.AsyncClient, user_id: str):
@@ -262,16 +296,14 @@ async def generar_receta(
     client: httpx.AsyncClient = Depends(get_supabase_client)
 ):
     try:
-        # 1. Obtener los objetivos del usuario desde la tabla 'profiles'
-        res_perfil = await client.get(f"/profiles?id=eq.{request.user_id}&select=objetivos")
-        res_perfil.raise_for_status()
-        perfil_data = res_perfil.json()
-        
-        if not perfil_data:
-            raise HTTPException(status_code=404, detail="Usuario no encontrado")
-            
-        objetivos_perfil = perfil_data[0].get("objetivos", [])
-        objetivo_base = ", ".join(objetivos_perfil) if isinstance(objetivos_perfil, list) else str(objetivos_perfil)
+        # 1. Obtener objetivos y restricciones del usuario desde profiles.
+        profile_context = await _get_profile_context(client, request.user_id)
+        objetivos_perfil = profile_context["objetivos"]
+        objetivo_base = ", ".join(objetivos_perfil)
+        restricciones_alimentarias = _merge_unique_text([
+            *(profile_context["restricciones"] if request.usar_restricciones_perfil else []),
+            *(request.restricciones or []),
+        ])
 
         # LA MAGIA DE LOS OBJETIVOS COMBINADOS
         # Juntamos la meta a largo plazo con el antojo o necesidad actual
@@ -315,7 +347,8 @@ async def generar_receta(
             ingredientes=ingredientes_disponibles,
             objetivo_nutricional=objetivos_combinados, # <--- ¡Aquí viajan ambos!
             tipo_comida=request.tipo_comida,
-            ingredientes_obligatorios=request.ingredientes
+            ingredientes_obligatorios=request.ingredientes,
+            restricciones_alimentarias=restricciones_alimentarias,
         )
         
         return receta_generada
@@ -338,6 +371,20 @@ async def generar_receta_presupuestada(
         pantry_items = await _get_user_pantry(client, request.user_id)
         if not pantry_items:
             raise HTTPException(status_code=400, detail="La despensa del usuario está vacía")
+
+        profile_context = await _get_profile_context(client, request.user_id)
+        restricciones_alimentarias = _merge_unique_text([
+            *(profile_context["restricciones"] if request.usar_restricciones_perfil else []),
+            *(request.restricciones or []),
+        ])
+        objetivos_perfil = profile_context["objetivos"]
+        objetivo_base = ", ".join(objetivos_perfil)
+        objetivos_combinados = ""
+        if objetivo_base and objetivo_base.strip() and objetivo_base.lower() != "none":
+            objetivos_combinados += f"Meta general: {objetivo_base}. "
+        if request.objetivo_nutricional and request.objetivo_nutricional.strip():
+            objetivos_combinados += f"Enfoque para esta comida: {request.objetivo_nutricional}."
+        objetivos_combinados = objetivos_combinados.strip()
 
         pantry_names = {
             (item["producto"].get("nombre") or "").lower()
@@ -379,8 +426,10 @@ async def generar_receta_presupuestada(
             ingredientes_despensa=ingredientes_despensa,
             compras_posibles=compras_posibles,
             presupuesto=request.presupuesto,
-            objetivo_nutricional=request.objetivo_nutricional or "",
+            objetivo_nutricional=objetivos_combinados,
             tipo_comida=request.tipo_comida,
+            ingredientes_obligatorios=request.ingredientes,
+            restricciones_alimentarias=restricciones_alimentarias,
         )
 
         if "error" in receta:
@@ -411,5 +460,25 @@ async def generar_receta_presupuestada(
 
     except httpx.HTTPStatusError as exc:
         raise HTTPException(status_code=exc.response.status_code, detail=f"Error en BD: {exc.response.text}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
+
+
+@router.post("/modificar")
+async def modificar_receta(request: RecipeAdjustRequest):
+    try:
+        if not request.cambios.strip():
+            raise HTTPException(status_code=400, detail="Describe qué quieres cambiar de la receta")
+
+        receta = await modificar_receta_con_ia(
+            receta=request.receta,
+            cambios=request.cambios,
+            restricciones_alimentarias=request.restricciones,
+            compras_sugeridas=request.compras_sugeridas,
+        )
+
+        return receta
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")

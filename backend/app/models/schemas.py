@@ -1,6 +1,6 @@
 import pydantic
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import Any, List, Optional
 
 class UserCreate(pydantic.BaseModel):
     email: str
@@ -64,13 +64,25 @@ class RecipeRequest(BaseModel):
     tipo_comida: str     # Ej: "desayuno", "almuerzo", "cena"
     ingredientes: List[str] = []         # Lista de nombres de ingredientes obligatorios
     objetivo_nutricional: Optional[str] = "" # El objetivo que manda el frontend
+    restricciones: List[str] = []
+    usar_restricciones_perfil: bool = True
 
 
 class BudgetRecipeRequest(BaseModel):
     user_id: str
     tipo_comida: str
     presupuesto: float
+    ingredientes: List[str] = []
     objetivo_nutricional: Optional[str] = ""
+    restricciones: List[str] = []
+    usar_restricciones_perfil: bool = True
+
+
+class RecipeAdjustRequest(BaseModel):
+    receta: dict[str, Any]
+    cambios: str
+    restricciones: List[str] = []
+    compras_sugeridas: List[dict[str, Any]] = []
 
 class EsquemaAlimento(BaseModel):
     nombre: str
@@ -85,6 +97,7 @@ class CategoriaProductoCheck(BaseModel):
 
 class DespensaAdd(pydantic.BaseModel):
     user_id: str
+    producto_catalogo_id: str | None = None
     nombre_producto: str
     categoria: str
     codigo_barra: str | None = None
@@ -100,6 +113,8 @@ class DespensaAdd(pydantic.BaseModel):
     cantidad: float | None = None
     unidad: str | None = None
     precio_aprox: float | None = None
+    cantidad_precio: float | None = None
+    unidad_precio: str | None = None
     supermercado_id: str | None = None
     precio_supermercado: float | None = None
     precio_unidad: str | None = None
@@ -109,6 +124,7 @@ class DespensaAdd(pydantic.BaseModel):
 
 
 class DespensaUpdate(pydantic.BaseModel):
+    producto_catalogo_id: str | None = None
     nombre_producto: str | None = None
     categoria: str | None = None
     codigo_barra: str | None = None
@@ -124,6 +140,8 @@ class DespensaUpdate(pydantic.BaseModel):
     cantidad: float | None = None
     unidad: str | None = None
     precio_aprox: float | None = None
+    cantidad_precio: float | None = None
+    unidad_precio: str | None = None
     supermercado_id: str | None = None
     precio_supermercado: float | None = None
     precio_unidad: str | None = None
@@ -149,6 +167,8 @@ class DespensaItem(pydantic.BaseModel):
     cantidad: float | None = None
     unidad: str | None = None
     precio_aprox: float | None = None
+    cantidad_precio: float | None = None
+    unidad_precio: str | None = None
     supermercado_id: str | None = None
     precio_supermercado: float | None = None
     precio_unidad: str | None = None

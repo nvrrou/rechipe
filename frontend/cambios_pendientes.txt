@@ -1,0 +1,1 @@
+al añadir los ingredientes a la lista de compras no se borra el coso ni se comunica que ha sido añadida.

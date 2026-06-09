@@ -12,6 +12,7 @@ export interface GeneratedRecipe {
     grasas?: number;
   };
   ingredientes?: string[];
+  compras_usadas?: string[];
   pasos?: string[];
 }
 
@@ -28,6 +29,8 @@ export interface GenerateRecipeData {
   tipo_comida: string;
   ingredientes: string[];
   objetivo_nutricional?: string;
+  restricciones?: string[];
+  usar_restricciones_perfil?: boolean;
 }
 
 export interface BudgetPurchaseSuggestion {
@@ -42,7 +45,17 @@ export interface GenerateBudgetRecipeData {
   user_id: string;
   tipo_comida: string;
   presupuesto: number;
+  ingredientes?: string[];
   objetivo_nutricional?: string;
+  restricciones?: string[];
+  usar_restricciones_perfil?: boolean;
+}
+
+export interface AdjustRecipeData {
+  receta: GeneratedRecipe;
+  cambios: string;
+  restricciones?: string[];
+  compras_sugeridas?: BudgetPurchaseSuggestion[];
 }
 
 export async function generateRecipes(data: GenerateRecipeData): Promise<GenerateRecipeResponse> {
@@ -57,6 +70,30 @@ export async function generateRecipes(data: GenerateRecipeData): Promise<Generat
 
     if (typeof responseData === 'string') {
       return { error: responseData };
+    }
+
+    return responseData;
+  } catch (e: any) {
+    return { error: `Error de conexión: ${e.message}` };
+  }
+}
+
+export async function adjustRecipe(data: AdjustRecipeData): Promise<GenerateRecipeResponse> {
+  try {
+    const res = await fetch(`${API_URL}/recipes/modificar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+
+    const responseData = await res.json();
+
+    if (typeof responseData === 'string') {
+      return { error: responseData };
+    }
+
+    if (!res.ok) {
+      return { error: responseData.detail || responseData.error || 'No se pudo modificar la receta' };
     }
 
     return responseData;

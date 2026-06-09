@@ -156,7 +156,13 @@ async def verificar_categoria_producto(nombre_producto: str, categoria_actual: s
     except Exception as e:
         return {"error": str(e)}
 
-async def generar_receta_con_ia(ingredientes: list, objetivo_nutricional: str, tipo_comida: str, ingredientes_obligatorios: list = None):
+async def generar_receta_con_ia(
+    ingredientes: list,
+    objetivo_nutricional: str,
+    tipo_comida: str,
+    ingredientes_obligatorios: list = None,
+    restricciones_alimentarias: list = None,
+):
     """
     Toma una lista de ingredientes (con sus macros), un objetivo (combinado) y un tipo de comida,
     y devuelve una receta generada por IA calculando el total nutricional.
@@ -165,9 +171,12 @@ async def generar_receta_con_ia(ingredientes: list, objetivo_nutricional: str, t
     try:
         lista_ingredientes = "\n".join(ingredientes)
         
+        restricciones = ", ".join(restricciones_alimentarias or [])
+
         instrucciones = f"""
         Eres un chef experto y nutricionista de precisión. El usuario quiere un/a {tipo_comida}. 
         Su contexto y objetivos son: {objetivo_nutricional}.
+        Restricciones alimentarias del usuario: {restricciones or "ninguna"}.
         
         INGREDIENTES DISPONIBLES EN SU DESPENSA:
         {lista_ingredientes}
@@ -182,20 +191,21 @@ async def generar_receta_con_ia(ingredientes: list, objetivo_nutricional: str, t
         1. EXPRIME LA DESPENSA: Genera como máximo 3 recetas DISTINTAS que tengan sentido culinario para un/a {tipo_comida}. Nunca devuelvas más de 3 opciones.
         2. CERO INGREDIENTES EXTERNOS: Solo puedes usar los ingredientes de la lista (más agua, sal y aceite).
         3. CÁLCULO NUTRICIONAL ESTRICTO: Por cada receta, calcula el TOTAL de kcal, proteínas, carbohidratos y grasas sumando las porciones, basándote ÚNICAMENTE en la 'Info base por 100g' proporcionada.
+        4. RESPETA RESTRICCIONES: No uses ni sugieras ingredientes que contradigan las restricciones alimentarias del usuario.
         """
         
         # --- REGLA 4: INGREDIENTES OBLIGATORIOS (Vienen del Frontend) ---
         if ingredientes_obligatorios and len(ingredientes_obligatorios) > 0:
             nombres_obligatorios = ", ".join(ingredientes_obligatorios)
-            instrucciones += f"\n4. INGREDIENTES OBLIGATORIOS: Tienes que incluir SÍ O SÍ los siguientes ingredientes en TODAS las recetas que generes: {nombres_obligatorios}."
+            instrucciones += f"\n5. INGREDIENTES OBLIGATORIOS: Tienes que incluir SÍ O SÍ los siguientes ingredientes en TODAS las recetas que generes: {nombres_obligatorios}."
         else:
-            instrucciones += "\n4. No hay ingredientes obligatorios, elige los que combinen mejor."
+            instrucciones += "\n5. No hay ingredientes obligatorios, elige los que combinen mejor."
 
         # --- REGLA 5: OBJETIVOS (Combinados del perfil + frontend) ---
         if objetivo_nutricional:
-            instrucciones += f"\n5. OBJETIVO NUTRICIONAL: Asegúrate de incluir la sección 'por_que_funciona' explicando cómo la receta ayuda a cumplir con: {objetivo_nutricional}."
+            instrucciones += f"\n6. OBJETIVO NUTRICIONAL: Asegúrate de incluir la sección 'por_que_funciona' explicando cómo la receta ayuda a cumplir con: {objetivo_nutricional}."
         else:
-            instrucciones += "\n5. No se ha proporcionado un objetivo nutricional. Pon null en 'por_que_funciona'."
+            instrucciones += "\n6. No se ha proporcionado un objetivo nutricional. Pon null en 'por_que_funciona'."
 
         instrucciones += """\n
         FORMATO DE SALIDA ESTRICTO (JSON):
@@ -298,18 +308,29 @@ async def estimar_precio_producto_chile(nombre_producto: str, categoria: str = "
       return {"error": str(e)}
 
 
-async def generar_receta_presupuestada_con_ia(ingredientes_despensa: list, compras_posibles: list, presupuesto: float, objetivo_nutricional: str, tipo_comida: str):
+async def generar_receta_presupuestada_con_ia(
+    ingredientes_despensa: list,
+    compras_posibles: list,
+    presupuesto: float,
+    objetivo_nutricional: str,
+    tipo_comida: str,
+    ingredientes_obligatorios: list = None,
+    restricciones_alimentarias: list = None,
+):
     """
     Genera receta usando despensa y compras posibles dentro de presupuesto.
     """
     lista_despensa = "\n".join(ingredientes_despensa)
     lista_compras = "\n".join(compras_posibles)
+    obligatorios = ", ".join(ingredientes_obligatorios or [])
+    restricciones = ", ".join(restricciones_alimentarias or [])
     instrucciones = f"""
     Eres chef y planificador de compras en Chile.
-    Genera 1 receta para {tipo_comida} usando los ingredientes disponibles en despensa y, si conviene, algunas compras.
+    Genera 3 recetas distintas para {tipo_comida} usando los ingredientes disponibles en despensa y compras adicionales concretas.
 
     Presupuesto máximo para compras adicionales: CLP {int(presupuesto)}.
     Objetivo del usuario: {objetivo_nutricional or "sin objetivo específico"}.
+    Restricciones alimentarias del usuario: {restricciones or "ninguna"}.
 
     DESPENSA DISPONIBLE:
     {lista_despensa}
@@ -318,11 +339,18 @@ async def generar_receta_presupuestada_con_ia(ingredientes_despensa: list, compr
     {lista_compras}
 
     Reglas:
-    1. La receta puede usar libremente ingredientes de despensa.
-    2. Las compras adicionales deben sumar como máximo CLP {int(presupuesto)}.
-    3. Prefiere compras que complementen lo que falta en despensa.
-    4. Devuelve una lista "compras_sugeridas" con precio y cantidad.
-    5. Responde solo JSON valido, sin markdown.
+    1. Devuelve exactamente 3 recetas distintas.
+    2. Cada receta puede usar libremente ingredientes de despensa.
+    3. Las compras adicionales de la lista compras_sugeridas deben sumar como máximo CLP {int(presupuesto)}.
+    4. Si la despensa permite una receta razonable, una de las 3 recetas debe ser "solo despensa", sin compras_usadas y con costo_estimado 0. No es obligatorio si culinariamente no alcanza.
+    5. Las compras_sugeridas NO son opcionales ni decorativas: toda compra sugerida debe aparecer explícitamente en los ingredientes de al menos una receta.
+    6. Si una compra no aporta a ninguna receta, no la sugieras.
+    7. Devuelve una lista "compras_sugeridas" con precio, cantidad y reason explicando qué rol cumple en las recetas.
+    8. Ingredientes obligatorios de despensa: {obligatorios or "ninguno"}.
+    9. Si hay ingredientes obligatorios, deben aparecer en todas las recetas finales.
+    10. Respeta las restricciones alimentarias: no uses ni sugieras productos que las contradigan.
+    11. Devuelve "compras_usadas" dentro de cada receta con los nombres exactos de compras_sugeridas que esa receta utiliza; para la receta solo despensa usa [].
+    12. Responde solo JSON valido, sin markdown.
 
     Formato:
     {{
@@ -334,6 +362,7 @@ async def generar_receta_presupuestada_con_ia(ingredientes_despensa: list, compr
           "por_que_funciona": "Por qué cumple presupuesto y objetivo",
           "costo_estimado": numero,
           "macros_totales": {{"calorias": numero, "proteinas": numero, "carbohidratos": numero, "grasas": numero}},
+          "compras_usadas": ["Producto comprado usado en la receta"],
           "ingredientes": ["..."],
           "pasos": ["..."]
         }}
@@ -349,6 +378,76 @@ async def generar_receta_presupuestada_con_ia(ingredientes_despensa: list, compr
           model="gpt-4o-mini",
           messages=[
               {"role": "system", "content": "Eres un asistente de cocina y presupuesto para supermercados chilenos."},
+              {"role": "user", "content": instrucciones},
+          ],
+          temperature=0.35,
+      )
+      contenido = response.choices[0].message.content.strip()
+      if contenido.startswith("```json"):
+          contenido = contenido.replace("```json", "", 1)
+      elif contenido.startswith("```"):
+          contenido = contenido.replace("```", "", 1)
+      if contenido.endswith("```"):
+          contenido = contenido.rsplit("```", 1)[0]
+      return json.loads(contenido.strip())
+    except json.JSONDecodeError:
+      return {"error": "La IA no devolvió un JSON válido", "texto_crudo": contenido}
+    except Exception as e:
+      return {"error": str(e)}
+
+
+async def modificar_receta_con_ia(
+    receta: dict,
+    cambios: str,
+    restricciones_alimentarias: list = None,
+    compras_sugeridas: list = None,
+):
+    restricciones = ", ".join(restricciones_alimentarias or [])
+    instrucciones = f"""
+    Eres chef y nutricionista. Modifica la receta existente segun la solicitud del usuario.
+
+    RECETA ACTUAL JSON:
+    {json.dumps(receta, ensure_ascii=False)}
+
+    COMPRAS SUGERIDAS DISPONIBLES JSON:
+    {json.dumps(compras_sugeridas or [], ensure_ascii=False)}
+
+    SOLICITUD DEL USUARIO:
+    {cambios}
+
+    Restricciones alimentarias que debes respetar: {restricciones or "ninguna"}.
+
+    Reglas:
+    1. Mantén el mismo formato de receta.
+    2. Cambia solo lo necesario para cumplir la solicitud.
+    3. Respeta restricciones alimentarias.
+    4. Si usas compras sugeridas, decláralas en "compras_usadas" con nombres exactos.
+    5. Si la receta queda sin compras, usa "compras_usadas": [].
+    6. Recalcula por_que_funciona, macros_totales aproximados, ingredientes y pasos.
+    7. Responde solo JSON valido, sin markdown.
+
+    Formato:
+    {{
+      "recetas": [
+        {{
+          "titulo": "Nombre",
+          "tiempo_preparacion": "Ej: 25 min",
+          "dificultad": "Fácil",
+          "por_que_funciona": "Explicación breve",
+          "costo_estimado": numero,
+          "macros_totales": {{"calorias": numero, "proteinas": numero, "carbohidratos": numero, "grasas": numero}},
+          "compras_usadas": ["Producto comprado usado en la receta"],
+          "ingredientes": ["..."],
+          "pasos": ["..."]
+        }}
+      ]
+    }}
+    """
+    try:
+      response = await client.chat.completions.create(
+          model="gpt-4o-mini",
+          messages=[
+              {"role": "system", "content": "Eres un asistente de cocina que edita recetas sin perder estructura."},
               {"role": "user", "content": instrucciones},
           ],
           temperature=0.35,

@@ -1,6 +1,8 @@
 from fastapi import APIRouter
 import base64
 import httpx
+import re
+import unicodedata
 import uuid
 from app.dependencias import get_supabase_client
 from app.models.schemas import CategoriaProductoCheck, DespensaAdd, DespensaUpdate
@@ -24,7 +26,7 @@ PRODUCT_FIELDS = (
 )
 
 DESPENSA_SELECT = (
-    "id,cantidad,unidad,precio_aprox,fecha_vencimiento,created_at,producto_id"
+    "id,cantidad,unidad,precio_aprox,cantidad_precio,unidad_precio,fecha_vencimiento,created_at,producto_id"
 )
 
 PRODUCT_ATTR_MAP = {
@@ -42,7 +44,7 @@ PRODUCT_ATTR_MAP = {
     "azucar_g": "azucares_totales_g",
 }
 
-PANTRY_ATTRS = ["cantidad", "unidad", "precio_aprox", "fecha_vencimiento"]
+PANTRY_ATTRS = ["cantidad", "unidad", "precio_aprox", "cantidad_precio", "unidad_precio", "fecha_vencimiento"]
 
 
 def _clean_payload(payload: dict) -> dict:
@@ -54,6 +56,54 @@ def _first_value(*values):
         if value is not None and value != "":
             return value
     return None
+
+
+def _normalize_search_text(value: str | None) -> str:
+    if not value:
+        return ""
+
+    normalized = unicodedata.normalize("NFD", value.lower())
+    normalized = "".join(char for char in normalized if unicodedata.category(char) != "Mn")
+    return re.sub(r"[^a-z0-9]+", " ", normalized).strip()
+
+
+def _singularize_search_text(value: str) -> str:
+    if len(value) > 3 and value.endswith("es"):
+        return value[:-2]
+    if len(value) > 3 and value.endswith("s"):
+        return value[:-1]
+    return value
+
+
+def _score_catalog_product(product: dict, clean_name: str, clean_category: str, clean_barcode: str) -> int:
+    product_name = _normalize_search_text(product.get("nombre"))
+    product_category = _normalize_search_text(product.get("categoria"))
+    product_barcode = str(product.get("codigo_barra") or "").strip()
+    query = _normalize_search_text(clean_name)
+    singular_query = _singularize_search_text(query)
+    singular_name = _singularize_search_text(product_name)
+    score = 0
+
+    if clean_barcode and product_barcode == clean_barcode:
+        score += 1000
+
+    if query:
+        words = product_name.split()
+        if product_name == query or singular_name == singular_query:
+            score += 500
+        elif product_name.startswith(f"{query} ") or product_name.startswith(query):
+            score += 380
+        elif words and (_singularize_search_text(words[0]) == singular_query or words[0].startswith(query)):
+            score += 330
+        elif any(_singularize_search_text(word) == singular_query for word in words):
+            score += 230
+        elif query in product_name:
+            score += 130
+
+    if clean_category and product_category == clean_category:
+        score += 80
+
+    return score
 
 
 def _format_item(item: dict, producto: dict | None = None) -> dict:
@@ -79,12 +129,32 @@ def _format_item(item: dict, producto: dict | None = None) -> dict:
         "cantidad": item.get("cantidad"),
         "unidad": item.get("unidad"),
         "precio_aprox": item.get("precio_aprox"),
+        "cantidad_precio": item.get("cantidad_precio"),
+        "unidad_precio": item.get("unidad_precio"),
         "precio_supermercado": precio_info.get("precio"),
         "precio_unidad": precio_info.get("unidad"),
         "supermercado_id": precio_info.get("supermercado_id"),
         "supermercado_nombre": precio_info.get("supermercado_nombre"),
         "fecha_vencimiento": item.get("fecha_vencimiento"),
         "created_at": item.get("created_at"),
+    }
+
+
+def _format_catalog_product(product: dict) -> dict:
+    return {
+        "id": product.get("id"),
+        "nombre_producto": product.get("nombre"),
+        "categoria": product.get("categoria"),
+        "codigo_barra": product.get("codigo_barra"),
+        "marca": product.get("marca"),
+        "imagen_url": product.get("imagen_url"),
+        "energia_kcal": product.get("energia_kcal"),
+        "proteinas_g": product.get("proteinas_g"),
+        "carbohidratos_g": product.get("carbohidratos_g"),
+        "grasas_g": product.get("grasas_g"),
+        "fibra_g": product.get("fibra_g"),
+        "sodio_mg": product.get("sodio_mg"),
+        "azucar_g": product.get("azucar_g"),
     }
 
 
@@ -229,6 +299,21 @@ async def _get_prices_by_product_ids(client, product_ids: list[str]):
 
 
 async def _find_catalog_product(client, data: DespensaAdd):
+    if data.producto_catalogo_id:
+        catalog_response = await client.get(
+            "/productos_catalogo",
+            params={
+                "id": f"eq.{data.producto_catalogo_id}",
+                "select": CATALOG_FIELDS,
+                "limit": "1",
+            },
+        )
+        if catalog_response.status_code != 200:
+            return None, {"error": f"Error al buscar producto recomendado. Detalle: {catalog_response.text}"}
+        catalog_matches = catalog_response.json()
+        if catalog_matches:
+            return catalog_matches[0], None
+
     if data.codigo_barra:
         barcode_response = await client.get(
             "/productos_catalogo",
@@ -256,6 +341,25 @@ async def _find_catalog_product(client, data: DespensaAdd):
         return None, {"error": f"Error al buscar producto. Detalle: {name_response.text}"}
 
     products = name_response.json()
+    return (products[0] if products else None), None
+
+
+async def _get_catalog_product_by_id(client, producto_catalogo_id: str | None):
+    if not producto_catalogo_id:
+        return None, None
+
+    response = await client.get(
+        "/productos_catalogo",
+        params={
+            "id": f"eq.{producto_catalogo_id}",
+            "select": CATALOG_FIELDS,
+            "limit": "1",
+        },
+    )
+    if response.status_code != 200:
+        return None, {"error": f"Error al obtener producto del catálogo. Detalle: {response.text}"}
+
+    products = response.json()
     return (products[0] if products else None), None
 
 
@@ -291,9 +395,20 @@ async def _build_product_payload(client, data, catalog_product=None, current_pro
     values = data.model_dump(exclude_unset=True)
     nombre = values.get("nombre_producto") or (current_product or {}).get("nombre")
     imagen_url = _first_value(values.get("imagen_url"), (catalog_product or {}).get("imagen_url"), (current_product or {}).get("imagen_url"))
+    is_ai_fill = bool(values.get("generar_info_ia"))
+    barcode_source = (
+        (values.get("codigo_barra"), (current_product or {}).get("codigo_barra"))
+        if is_ai_fill
+        else (values.get("codigo_barra"), (catalog_product or {}).get("codigo_barra"), (current_product or {}).get("codigo_barra"))
+    )
+    brand_source = (
+        (values.get("marca"), (current_product or {}).get("marca"))
+        if is_ai_fill
+        else (values.get("marca"), (catalog_product or {}).get("marca"), (current_product or {}).get("marca"))
+    )
 
     ai_nutrition = {}
-    should_generate_nutrition = bool(values.get("generar_info_ia")) and any(
+    should_generate_nutrition = is_ai_fill and any(
         _first_value(
             values.get(field),
             (catalog_product or {}).get(catalog_field),
@@ -321,11 +436,10 @@ async def _build_product_payload(client, data, catalog_product=None, current_pro
 
     payload = _clean_payload({
         "user_id": values.get("user_id") or (current_product or {}).get("user_id"),
-        "producto_catalogo_id": (catalog_product or {}).get("id") or (current_product or {}).get("producto_catalogo_id"),
         "nombre": _first_value(values.get("nombre_producto"), (catalog_product or {}).get("nombre"), (current_product or {}).get("nombre")),
-        "codigo_barra": _first_value(values.get("codigo_barra"), (catalog_product or {}).get("codigo_barra"), (current_product or {}).get("codigo_barra")),
+        "codigo_barra": _first_value(*barcode_source),
         "categoria": _first_value(values.get("categoria"), (catalog_product or {}).get("categoria"), (current_product or {}).get("categoria")),
-        "marca": _first_value(values.get("marca"), (catalog_product or {}).get("marca"), (current_product or {}).get("marca")),
+        "marca": _first_value(*brand_source),
         "imagen_url": imagen_url,
         "energia_kcal": _first_value(values.get("energia_kcal"), (catalog_product or {}).get("energia_kcal"), (current_product or {}).get("energia_kcal"), ai_nutrition.get("energia_kcal")),
         "proteinas_g": _first_value(values.get("proteinas_g"), (catalog_product or {}).get("proteinas_g"), (current_product or {}).get("proteinas_g"), ai_nutrition.get("proteinas_g")),
@@ -361,6 +475,80 @@ async def verificar_categoria(data: CategoriaProductoCheck):
         return {"requiere_cambio": False, "categoria_sugerida": None, "razon": str(e)}
 
 
+@router.get("/catalogo/recomendaciones")
+async def recomendar_productos_catalogo(
+    nombre_producto: str = "",
+    codigo_barra: str = "",
+    categoria_actual: str = "",
+    limit: int = 5,
+    offset: int = 0,
+):
+    """Recomienda productos del catálogo base para completar agregar/editar."""
+    try:
+        clean_name = nombre_producto.strip().replace("*", "")
+        clean_category = _normalize_search_text(categoria_actual)
+        clean_barcode = codigo_barra.strip()
+        clean_limit = max(1, min(limit, 10))
+        clean_offset = max(0, offset)
+        candidates = {}
+
+        async with get_supabase_client() as client:
+            if clean_barcode:
+                barcode_response = await client.get(
+                    "/productos_catalogo",
+                    params={
+                        "codigo_barra": f"eq.{clean_barcode}",
+                        "select": CATALOG_FIELDS,
+                        "limit": "20",
+                    },
+                )
+                if barcode_response.status_code != 200:
+                    return {"error": f"Error al buscar por código. Detalle: {barcode_response.text}"}
+
+                for product in barcode_response.json():
+                    if product.get("id"):
+                        candidates[product["id"]] = product
+
+            if clean_name:
+                name_filters = [
+                    f"ilike.{clean_name}",
+                    f"ilike.{clean_name}*",
+                    f"ilike.*{clean_name}*",
+                ]
+
+                for name_filter in name_filters:
+                    name_response = await client.get(
+                        "/productos_catalogo",
+                        params={
+                            "nombre": name_filter,
+                            "select": CATALOG_FIELDS,
+                            "limit": "35",
+                        },
+                    )
+                    if name_response.status_code != 200:
+                        return {"error": f"Error al buscar recomendaciones. Detalle: {name_response.text}"}
+
+                    for product in name_response.json():
+                        if product.get("id"):
+                            candidates[product["id"]] = product
+
+        ranked_products = sorted(
+            candidates.values(),
+            key=lambda product: (
+                -_score_catalog_product(product, clean_name, clean_category, clean_barcode),
+                _normalize_search_text(product.get("nombre")),
+            ),
+        )
+        page = ranked_products[clean_offset : clean_offset + clean_limit]
+
+        return {
+            "items": [_format_catalog_product(product) for product in page],
+            "has_more": clean_offset + clean_limit < len(ranked_products),
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
 @router.post("/agregar")
 async def agregar_ingrediente(data: DespensaAdd):
     """Agrega un ingrediente a la despensa creando un producto del usuario."""
@@ -386,6 +574,8 @@ async def agregar_ingrediente(data: DespensaAdd):
                 "cantidad": data.cantidad,
                 "unidad": data.unidad,
                 "precio_aprox": data.precio_aprox,
+                "cantidad_precio": data.cantidad_precio,
+                "unidad_precio": data.unidad_precio,
                 "fecha_vencimiento": data.fecha_vencimiento,
             })
             insertar = await client.post("/despensa", json=item_despensa)
@@ -457,9 +647,19 @@ async def actualizar_ingrediente(item_id: str, data: DespensaUpdate):
 
             values = data.model_dump(exclude_unset=True)
             product_payload = {}
+            catalog_product, catalog_error = await _get_catalog_product_by_id(client, values.get("producto_catalogo_id"))
+            if catalog_error:
+                return catalog_error
+
             for source_key, product_key in PRODUCT_ATTR_MAP.items():
                 if source_key in values:
                     product_payload[product_key] = values[source_key]
+
+            if catalog_product:
+                catalog_payload, error = await _build_product_payload(client, data, catalog_product)
+                if error:
+                    return error
+                product_payload.update({key: value for key, value in catalog_payload.items() if key not in ("user_id",)})
 
             if values.get("generar_info_ia") or values.get("generar_imagen_ia"):
                 current_product = {

@@ -19,7 +19,17 @@ const TAB_CONFIG: Record<string, { label: string; icon: keyof typeof MaterialCom
   progreso: { label: 'Progreso', icon: 'food-apple-outline' },
 };
 
-export function Navbar({ state, descriptors, navigation }: BottomTabBarProps) {
+type NavbarRoute = {
+  key: string;
+  name: string;
+  params?: object;
+};
+
+type NavbarProps = Partial<BottomTabBarProps> & {
+  noSelection?: boolean;
+};
+
+export function Navbar({ state, descriptors, navigation, noSelection = false }: NavbarProps) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
@@ -29,14 +39,15 @@ export function Navbar({ state, descriptors, navigation }: BottomTabBarProps) {
   const slideAnim = useRef(new Animated.Value(320)).current;
   const backdropAnim = useRef(new Animated.Value(0)).current;
   const indicatorAnim = useRef(new Animated.Value(0)).current;
-  const activeRouteName = state.routes[state.index]?.name; // Ruta activa actual
+  const indicatorPresenceAnim = useRef(new Animated.Value(1)).current;
+  const activeRouteName = noSelection ? undefined : state?.routes[state.index]?.name;
 
-  const visibleRoutes = state.routes.filter((route) => TAB_CONFIG[route.name]);
-  const activeRouteKey = state.routes[state.index]?.key;
-  const activeVisibleIndex = Math.max(
-    visibleRoutes.findIndex((route) => route.key === activeRouteKey),
-    0
-  );
+  const visibleRoutes: NavbarRoute[] = state
+    ? state.routes.filter((route) => TAB_CONFIG[route.name])
+    : Object.keys(TAB_CONFIG).map((name) => ({ key: `standalone-${name}`, name }));
+  const activeRouteKey = noSelection ? undefined : state?.routes[state.index]?.key;
+  const activeVisibleIndex = visibleRoutes.findIndex((route) => route.key === activeRouteKey);
+  const showActiveIndicator = activeVisibleIndex >= 0;
   const itemCount = visibleRoutes.length + 1;
   const contentWidth = navbarWidth > 0 ? navbarWidth - NAVBAR_HORIZONTAL_PADDING * 2 : 0;
   const itemWidth = contentWidth > 0 ? contentWidth / itemCount : 0;
@@ -103,8 +114,17 @@ export function Navbar({ state, descriptors, navigation }: BottomTabBarProps) {
   }, [backdropAnim, menuOpen, slideAnim]);
 
   useEffect(() => {
-    moveIndicator(activeVisibleIndex);
-  }, [activeVisibleIndex, itemWidth]);
+    if (showActiveIndicator) {
+      moveIndicator(activeVisibleIndex);
+    }
+
+    Animated.timing(indicatorPresenceAnim, {
+      toValue: showActiveIndicator ? 1 : 0,
+      duration: showActiveIndicator ? 180 : 160,
+      easing: showActiveIndicator ? Easing.out(Easing.cubic) : Easing.in(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [activeVisibleIndex, indicatorPresenceAnim, itemWidth, showActiveIndicator]);
 
   function openMenu() {
     setMenuOpen(true);
@@ -127,6 +147,15 @@ export function Navbar({ state, descriptors, navigation }: BottomTabBarProps) {
   function openList() {
     closeMenu();
     router.push('/(navbarnt)/lista');
+  }
+
+  function navigateStandalone(routeName: string) {
+    if (routeName === 'index') {
+      router.replace('/(tabs)');
+      return;
+    }
+
+    router.replace(`/(tabs)/${routeName}` as never);
   }
 
   const profileInitial = (user?.nombre || user?.email || 'U').trim().charAt(0).toUpperCase();
@@ -210,8 +239,9 @@ export function Navbar({ state, descriptors, navigation }: BottomTabBarProps) {
               style={[
                 styles.activeGlass,
                 {
+                  opacity: indicatorPresenceAnim,
                   width: indicatorWidth,
-                  transform: [{ translateX: indicatorAnim }],
+                  transform: [{ translateX: indicatorAnim }, { scale: indicatorPresenceAnim }],
                 },
               ]}
             />
@@ -226,6 +256,11 @@ export function Navbar({ state, descriptors, navigation }: BottomTabBarProps) {
             }
 
             const onPress = () => {
+              if (!navigation) {
+                navigateStandalone(route.name);
+                return;
+              }
+
               const event = navigation.emit({
                 type: 'tabPress',
                 target: route.key,
@@ -238,6 +273,8 @@ export function Navbar({ state, descriptors, navigation }: BottomTabBarProps) {
             };
 
             const onLongPress = () => {
+              if (!navigation) return;
+
               navigation.emit({
                 type: 'tabLongPress',
                 target: route.key,
@@ -251,7 +288,7 @@ export function Navbar({ state, descriptors, navigation }: BottomTabBarProps) {
                 key={route.key}
                 accessibilityRole="button"
                 accessibilityState={isFocused ? { selected: true } : {}}
-                accessibilityLabel={descriptors[route.key].options.tabBarAccessibilityLabel}
+                accessibilityLabel={descriptors?.[route.key]?.options.tabBarAccessibilityLabel || config.label}
                 onLongPress={onLongPress}
                 onPress={onPress}
                 style={styles.iconButton}>

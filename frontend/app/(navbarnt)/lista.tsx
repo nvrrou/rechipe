@@ -1,5 +1,5 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import {
   Pressable,
@@ -13,7 +13,9 @@ import { Text, View } from '@/components/Themed';
 import {
   INITIAL_SHOPPING_ITEMS,
   ShoppingItem,
+  getPreparationShoppingItems,
   getShoppingItems,
+  savePreparationShoppingItems,
   saveShoppingItems,
 } from '@/services/shoppingList';
 
@@ -23,7 +25,9 @@ function formatPrice(value: number) {
 
 export default function ShoppingListScreen() {
   const router = useRouter();
-  const [items, setItems]   = useState<ShoppingItem[]>(INITIAL_SHOPPING_ITEMS);
+  const params = useLocalSearchParams<{ modo?: string }>();
+  const isPreparationList = params.modo === 'preparacion';
+  const [items, setItems]   = useState<ShoppingItem[]>(isPreparationList ? [] : INITIAL_SHOPPING_ITEMS);
   const [search, setSearch] = useState('');
   const [replacementRequest, setReplacementRequest] = useState('');
   const [replacementMessage, setReplacementMessage] = useState('');
@@ -47,18 +51,23 @@ export default function ShoppingListScreen() {
   useFocusEffect(
     useCallback(() => {
       let isActive = true;
-      getShoppingItems().then((storedItems) => {
+      const loader = isPreparationList ? getPreparationShoppingItems : getShoppingItems;
+      loader().then((storedItems) => {
         if (isActive) setItems(storedItems);
       });
 
       return () => {
         isActive = false;
       };
-    }, [])
+    }, [isPreparationList])
   );
 
   function persistItems(nextItems: ShoppingItem[]) {
     setItems(nextItems);
+    if (isPreparationList) {
+      savePreparationShoppingItems(nextItems);
+      return;
+    }
     saveShoppingItems(nextItems);
   }
 
@@ -88,7 +97,7 @@ export default function ShoppingListScreen() {
       return;
     }
 
-    router.replace('/(tabs)');
+    router.replace(isPreparationList ? '/(navbarnt)/preparacion' : '/(tabs)');
   }
 
   return (
@@ -101,15 +110,32 @@ export default function ShoppingListScreen() {
             <MaterialCommunityIcons name="chevron-left" size={24} color="#064E2F" />
           </Pressable>
           <View style={styles.headerCopy}>
-            <Text style={styles.title}>Lista de compras</Text>
-            <Text style={styles.subtitle}>Organiza los productos que necesitas comprar.</Text>
+            <Text style={styles.title}>{isPreparationList ? 'Lista de preparación' : 'Lista de compras'}</Text>
+            <Text style={styles.subtitle}>
+              {isPreparationList
+                ? 'Ingredientes faltantes para preparar la receta elegida.'
+                : 'Organiza los productos que necesitas comprar.'}
+            </Text>
           </View>
         </View>
+
+        {isPreparationList && (
+          <View style={styles.topBridge}>
+            <Pressable accessibilityRole="button" onPress={() => router.push('/(navbarnt)/preparacion')} style={styles.bridgeButton}>
+              <MaterialCommunityIcons name="chef-hat" size={18} color="#064E2F" />
+              <Text style={styles.bridgeButtonText}>Preparación</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" style={[styles.bridgeButton, styles.bridgeButtonActive]}>
+              <MaterialCommunityIcons name="clipboard-list-outline" size={18} color="#FBFFF8" />
+              <Text style={[styles.bridgeButtonText, styles.bridgeButtonTextActive]}>Lista de compras</Text>
+            </Pressable>
+          </View>
+        )}
 
         {/* Tarjeta resumen */}
         <View style={styles.summaryCard}>
           <View style={styles.summaryTextBox}>
-            <Text style={styles.summaryLabel}>Total pendiente</Text>
+            <Text style={styles.summaryLabel}>{isPreparationList ? 'Faltantes pendientes' : 'Total pendiente'}</Text>
             <Text style={styles.summaryTotal}>{formatPrice(totalPendiente)}</Text>
             <Text style={styles.summarySmall}>
               {totalComprado} de {items.length} productos comprados
@@ -181,7 +207,7 @@ export default function ShoppingListScreen() {
         )}
 
         {/* Reemplazos */}
-        <View style={styles.replacementCard}>
+        {!isPreparationList && <View style={styles.replacementCard}>
           <View style={styles.replacementHeader}>
             <View style={styles.replacementIcon}>
               <MaterialCommunityIcons name="swap-horizontal" size={22} color="#00B86B" />
@@ -206,7 +232,7 @@ export default function ShoppingListScreen() {
             <MaterialCommunityIcons name="creation" size={18} color="#FBFFF8" />
             <Text style={styles.replacementButtonText}>Solicitar reemplazos</Text>
           </Pressable>
-        </View>
+        </View>}
 
       </ScrollView>
     </View>
@@ -236,6 +262,28 @@ const styles = StyleSheet.create({
     shadowRadius: 14,
     elevation: 2,
   },
+  bridgeButton: {
+    minHeight: 44,
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    paddingHorizontal: 10,
+    borderRadius: 15,
+    backgroundColor: '#DDF8E7',
+  },
+  bridgeButtonActive: {
+    backgroundColor: '#00B86B',
+  },
+  bridgeButtonText: {
+    color: '#064E2F',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  bridgeButtonTextActive: {
+    color: '#FBFFF8',
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -257,6 +305,16 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     marginTop: 6,
+  },
+  topBridge: {
+    flexDirection: 'row',
+    gap: 8,
+    padding: 6,
+    marginBottom: 16,
+    borderRadius: 19,
+    borderWidth: 1,
+    borderColor: '#9FE7B9',
+    backgroundColor: '#E9FBEF',
   },
 
   // Resumen
