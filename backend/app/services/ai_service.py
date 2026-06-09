@@ -423,8 +423,11 @@ async def modificar_receta_con_ia(
     3. Respeta restricciones alimentarias.
     4. Si usas compras sugeridas, decláralas en "compras_usadas" con nombres exactos.
     5. Si la receta queda sin compras, usa "compras_usadas": [].
-    6. Recalcula por_que_funciona, macros_totales aproximados, ingredientes y pasos.
-    7. Responde solo JSON valido, sin markdown.
+    6. La clave "ingredientes" debe contener SIEMPRE la lista completa de ingredientes usados en la receta final, con cantidad + ingrediente.
+    7. No omitas ingredientes que sigan apareciendo en los pasos, compras_usadas o solicitud del usuario.
+    8. Si reemplazas o quitas un ingrediente, actualiza tambien los pasos para que coincidan.
+    9. Recalcula por_que_funciona, macros_totales aproximados, ingredientes y pasos.
+    10. Responde solo JSON valido, sin markdown.
 
     Formato:
     {{

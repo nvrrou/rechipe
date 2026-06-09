@@ -269,6 +269,60 @@ export default function PreparationScreen() {
               </Text>
             </View>
 
+            {!!recipe.macros_totales && (
+              <View style={styles.nutritionPanel}>
+                <View style={styles.nutritionHeader}>
+                  <View style={styles.nutritionIcon}>
+                    <MaterialCommunityIcons name="chart-donut" size={18} color="#064E2F" />
+                  </View>
+                  <View style={styles.headerCopy}>
+                    <Text style={styles.sectionTitle}>Info nutricional</Text>
+                    <Text style={styles.nutritionSubtitle}>Totales aproximados de la receta completa.</Text>
+                  </View>
+                </View>
+                <View style={styles.nutritionGrid}>
+                  <View style={styles.nutritionItem}>
+                    <Text style={styles.nutritionValue}>{recipe.macros_totales.calorias ?? 0}</Text>
+                    <Text style={styles.nutritionLabel}>kcal</Text>
+                  </View>
+                  <View style={styles.nutritionItem}>
+                    <Text style={styles.nutritionValue}>{recipe.macros_totales.proteinas ?? 0}g</Text>
+                    <Text style={styles.nutritionLabel}>Proteínas</Text>
+                  </View>
+                  <View style={styles.nutritionItem}>
+                    <Text style={styles.nutritionValue}>{recipe.macros_totales.carbohidratos ?? 0}g</Text>
+                    <Text style={styles.nutritionLabel}>Carbos</Text>
+                  </View>
+                  <View style={styles.nutritionItem}>
+                    <Text style={styles.nutritionValue}>{recipe.macros_totales.grasas ?? 0}g</Text>
+                    <Text style={styles.nutritionLabel}>Grasas</Text>
+                  </View>
+                </View>
+              </View>
+            )}
+
+            {!!recipe.ingredientes?.length && (
+              <View style={styles.ingredientsPanel}>
+                <View style={styles.ingredientsHeader}>
+                  <View style={styles.ingredientsIcon}>
+                    <MaterialCommunityIcons name="food-variant" size={18} color="#064E2F" />
+                  </View>
+                  <View style={styles.headerCopy}>
+                    <Text style={styles.sectionTitle}>Ingredientes usados</Text>
+                    <Text style={styles.ingredientsSubtitle}>Lista completa que se toma en cuenta para preparar y descontar despensa.</Text>
+                  </View>
+                </View>
+                <View style={styles.ingredientsList}>
+                  {recipe.ingredientes.map((ingredient, ingredientIndex) => (
+                    <View key={`${ingredient}-${ingredientIndex}`} style={styles.ingredientRow}>
+                      <MaterialCommunityIcons name="check-circle" size={16} color="#00B86B" />
+                      <Text style={styles.ingredientText}>{ingredient}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+
             {!!recipe.pasos?.length && (
               <View style={styles.stepsPanel}>
                 <Text style={styles.sectionTitle}>Instrucciones</Text>
@@ -506,6 +560,53 @@ const styles = StyleSheet.create({
     gap: 3,
     backgroundColor: 'transparent',
   },
+  ingredientRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    padding: 10,
+    borderRadius: 14,
+    backgroundColor: '#DDF8E7',
+  },
+  ingredientText: {
+    flex: 1,
+    color: '#0B6B40',
+    fontSize: 14,
+    fontWeight: '800',
+    lineHeight: 19,
+  },
+  ingredientsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: 'transparent',
+  },
+  ingredientsIcon: {
+    width: 38,
+    height: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    backgroundColor: '#9FE7B9',
+  },
+  ingredientsList: {
+    gap: 8,
+    backgroundColor: 'transparent',
+  },
+  ingredientsPanel: {
+    gap: 12,
+    padding: 14,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#9FE7B9',
+    backgroundColor: '#E9FBEF',
+  },
+  ingredientsSubtitle: {
+    color: '#2F7A4F',
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 17,
+  },
   messageBox: {
     minHeight: 46,
     flexDirection: 'row',
@@ -522,6 +623,62 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
     lineHeight: 18,
+  },
+  nutritionGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    backgroundColor: 'transparent',
+  },
+  nutritionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: 'transparent',
+  },
+  nutritionIcon: {
+    width: 38,
+    height: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    backgroundColor: '#BDEFCF',
+  },
+  nutritionItem: {
+    flexBasis: '48%',
+    flexGrow: 1,
+    gap: 2,
+    minHeight: 70,
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 15,
+    backgroundColor: '#DDF8E7',
+  },
+  nutritionLabel: {
+    color: '#2F7A4F',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  nutritionPanel: {
+    gap: 12,
+    padding: 14,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#9FE7B9',
+    backgroundColor: '#E9FBEF',
+  },
+  nutritionSubtitle: {
+    color: '#2F7A4F',
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 17,
+  },
+  nutritionValue: {
+    color: '#064E2F',
+    fontSize: 20,
+    fontWeight: '900',
+    lineHeight: 24,
   },
   primaryButton: {
     minHeight: 50,
