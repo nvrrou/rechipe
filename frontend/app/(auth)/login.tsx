@@ -130,10 +130,10 @@ export default function LoginScreen() {
         });
 
         if (result.success) {
-            setSignupMsg('¡Cuenta creada! a continuacion complete el resto de su perfil');
+            setSignupMsg('¡Cuenta creada! Verifica tu correo para continuar.');
             setSignupError(false);
             setTimeout(() => {
-                router.replace('/(auth)/completar_perfil');
+                router.replace('/(auth)/verificar_correo');
             }, 1500);
         } else {
             setSignupMsg(result.error || 'Error al crear la cuenta');

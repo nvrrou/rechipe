@@ -23,10 +23,12 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   pendingCredentials: { email: string; password: string } | null;
+  pendingVerificationEmail: string | null;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   register: (data: RegisterData) => Promise<{ success: boolean; error?: string }>;
   updateProfile: (data: Omit<UpdateProfileData, 'user_id'>) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
+  clearPendingVerification: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -44,6 +46,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [pendingCredentials, setPendingCredentials] = useState<{ email: string; password: string } | null>(null);
+  const [pendingVerificationEmail, setPendingVerificationEmail] = useState<string | null>(null);
 
   // Al montar, intentamos cargar la sesion guardada
   useEffect(() => {
@@ -138,8 +141,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
         setUser(newUser);
 
-        // 4. Guardamos las credenciales para hacer login después de completar el perfil
+        //4.Guardamos las credenciales para hacer login después de completar el perfil
         setPendingCredentials({ email: data.email, password: data.password });
+
+        //5.Marcamos email como pendiente de verificación (HU-11)
+        setPendingVerificationEmail(data.email);
 
         return { success: true };
       }
@@ -201,11 +207,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // LOGOUT
+  //limpiamos  estado de verificación pendiente
+  const clearPendingVerification = () => {
+    setPendingVerificationEmail(null);
+  };
+
+  //hacemos el logout
   const logout = async () => {
     setUser(null);
     setAccessToken(null);
     setPendingCredentials(null);
+    setPendingVerificationEmail(null);
     await clearSession();
   };
 
@@ -217,10 +229,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isAuthenticated: !!accessToken,
         isLoading,
         pendingCredentials,
+        pendingVerificationEmail,
         login,
         register,
         updateProfile,
         logout,
+        clearPendingVerification,
       }}
     >
       {children}
@@ -228,12 +242,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-// HOOK
+//HOOK
 
 export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) {
-    throw new Error('useAuth debe usarse dentro de un AuthProvider');
+    throw new Error('useAuth  debe usarse dentro de un AuthProvider');
   }
   return context;
 }
