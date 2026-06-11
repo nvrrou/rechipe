@@ -14,6 +14,7 @@ import {
   SupermarketData,
   actualizarIngrediente,
   agregarIngrediente,
+  agregarIngredientePorCodigo,
   buscarIngredientes,
   eliminarIngrediente,
   fetchCatalogProductSuggestions,
@@ -597,6 +598,55 @@ export default function FridgeScreen() {
     setScannerLocked(true);
     setScannedCode(digits);
     setForm((prev) => ({ ...prev, codigo_barra: digits, producto_catalogo_id: '' }));
+  }
+
+  async function addScannedCodeOnly(useAi = false) {
+    if (!user?.id || !scannedCode || saving) return;
+
+    setFormError('');
+    setSaving(true);
+    const result = await agregarIngredientePorCodigo({
+      user_id: user.id,
+      codigo_barra: scannedCode,
+      categorias_disponibles: categories.map((category) => category.name),
+      usar_ia: useAi,
+    });
+    setSaving(false);
+
+    if (result.requiere_ia) {
+      Alert.alert(
+        'No esta en la base de datos',
+        result.mensaje || 'No encontramos este codigo en la base. Puedes intentar completarlo con IA.',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Usar IA', onPress: () => addScannedCodeOnly(true) },
+        ]
+      );
+      return;
+    }
+
+    if (result.error) {
+      setScannerOpen(false);
+      setScannedCode('');
+      setScannerLocked(false);
+      setActiveView('add');
+      setFormError(result.error);
+      Alert.alert(result.tipo === 'no_alimento' ? 'No parece comida' : 'No se pudo agregar', result.error);
+      scrollToFirstFormPosition(['form']);
+      return;
+    }
+
+    setScannerOpen(false);
+    setScannedCode('');
+    setScannerLocked(false);
+    setItems((prev) => [result, ...prev]);
+    setSelectedCategoryId(slugifyCategory(result.categoria));
+    setForm({ ...EMPTY_FORM, categoria: slugifyCategory(result.categoria), codigo_barra: result.codigo_barra || '' });
+    setActiveView('category');
+    Alert.alert(
+      result.origen_agregado === 'bdd' ? 'Agregado desde la base de datos' : 'Agregado con IA',
+      result.mensaje_agregado || `${result.nombre_producto} se agregó a tu despensa.`
+    );
   }
 
   function scanFromCurrentCategory() {
@@ -1724,22 +1774,20 @@ export default function FridgeScreen() {
                 <Text style={styles.scannedCodeText}>{scannedCode}</Text>
               </View>
             ) : (
-              <Text style={styles.scannerHint}>Por ahora solo mostramos el numero detectado y lo copiamos al campo Codigo barra.</Text>
+              <Text style={styles.scannerHint}>Escanea un codigo para buscarlo en la base y agregarlo automaticamente con categoria.</Text>
             )}
 
             <View style={styles.scannerActions}>
               <Pressable accessibilityRole="button" onPress={() => setScannerOpen(false)} style={styles.scannerSecondary}>
-                <Text style={styles.scannerSecondaryText}>{scannedCode ? 'Usar codigo' : 'Cerrar'}</Text>
+                <Text style={styles.scannerSecondaryText}>{scannedCode ? 'Editar manual' : 'Cerrar'}</Text>
               </Pressable>
               {scannedCode ? (
                 <Pressable
                   accessibilityRole="button"
-                  onPress={() => {
-                    setScannedCode('');
-                    setScannerLocked(false);
-                  }}
+                  disabled={saving}
+                  onPress={() => addScannedCodeOnly()}
                   style={styles.scannerPrimary}>
-                  <Text style={styles.scannerPrimaryText}>Escanear otro</Text>
+                  {saving ? <ActivityIndicator size="small" color="#FBFFF8" /> : <Text style={styles.scannerPrimaryText}>Agregar por codigo</Text>}
                 </Pressable>
               ) : null}
             </View>

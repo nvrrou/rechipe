@@ -156,6 +156,70 @@ async def verificar_categoria_producto(nombre_producto: str, categoria_actual: s
     except Exception as e:
         return {"error": str(e)}
 
+
+async def identificar_producto_por_codigo_barras(codigo_barra: str, categorias_disponibles: list[str] | None = None):
+    """
+    Intenta identificar un producto solo desde su codigo de barras.
+    Devuelve datos listos para crear el producto cuando no esta en la base.
+    """
+    categorias = [categoria for categoria in (categorias_disponibles or []) if categoria]
+    categorias_texto = categorias or ["Carnes", "Vegetales", "Frutas", "Legumbres", "Mariscos", "Pescado", "Aderezos", "Cereales", "Lácteos", "Jugos", "Bebidas", "Otros"]
+    instrucciones = f"""
+    Eres un asistente para una app chilena de despensa.
+    Identifica el producto asociado al codigo de barras "{codigo_barra}" usando solo ese codigo.
+
+    Reglas:
+    1. Responde solo JSON valido, sin markdown.
+    2. Si reconoces el codigo, usa el nombre comercial mas probable.
+    3. Si no puedes reconocerlo con certeza, usa un nombre descriptivo como "Producto codigo {codigo_barra}".
+    4. La categoria debe ser exactamente una de estas: {categorias_texto}.
+    5. Los nutrientes son por 100 g o 100 ml, usando numeros. Si no sabes un valor, usa 0.
+    6. Si el codigo parece corresponder a un producto que no es alimento o bebida, marca es_alimento=false.
+    7. Busca ESPECIFICAMENTE productos comunes en supermercados chilenos. Si el codigo es muy genérico o no corresponde a un producto alimenticio, responde con es_alimento=false y pon un aviso breve en "aviso".
+    8. NO INVENTES PRODUCTOS: Si el codigo no es reconocible o parece ser un producto no alimenticio, no trates de inventar un alimento. En ese caso, pon es_alimento=false y un aviso breve explicando que no se pudo identificar o que no es un alimento.
+
+    Formato:
+    {{
+      "es_alimento": boolean,
+      "nombre_producto": "string",
+      "categoria": "string",
+      "marca": "string o null",
+      "aviso": "string breve si no es alimento o null",
+      "energia_kcal": numero,
+      "proteinas_g": numero,
+      "carbohidratos_g": numero,
+      "grasas_g": numero,
+      "fibra_g": numero,
+      "sodio_mg": numero,
+      "azucar_g": numero
+    }}
+    """
+
+    try:
+        response = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "system", "content": instrucciones}],
+            temperature=0.1,
+        )
+        contenido = response.choices[0].message.content.strip()
+        if contenido.startswith("```json"):
+            contenido = contenido.replace("```json", "", 1)
+        elif contenido.startswith("```"):
+            contenido = contenido.replace("```", "", 1)
+        if contenido.endswith("```"):
+            contenido = contenido.rsplit("```", 1)[0]
+
+        resultado = json.loads(contenido.strip())
+        if "es_alimento" not in resultado:
+            resultado["es_alimento"] = True
+        if resultado.get("categoria") not in categorias_texto:
+            resultado["categoria"] = "Otros" if "Otros" in categorias_texto else categorias_texto[0]
+        return resultado
+    except json.JSONDecodeError:
+        return {"error": "La IA no devolvió un JSON válido", "texto_crudo": contenido}
+    except Exception as e:
+        return {"error": str(e)}
+
 async def generar_receta_con_ia(
     ingredientes: list,
     objetivo_nutricional: str,

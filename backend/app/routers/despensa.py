@@ -5,9 +5,9 @@ import re
 import unicodedata
 import uuid
 from app.dependencias import get_supabase_client
-from app.models.schemas import CategoriaProductoCheck, DespensaAdd, DespensaUpdate
+from app.models.schemas import CategoriaProductoCheck, DespensaAdd, DespensaBarcodeAdd, DespensaUpdate
 from app.routers.supermarkets import guardar_precio_supermercado
-from app.services.ai_service import obtener_info_nutricional, generar_url_temporal_dalle, verificar_categoria_producto
+from app.services.ai_service import obtener_info_nutricional, generar_url_temporal_dalle, identificar_producto_por_codigo_barras, verificar_categoria_producto
 
 router = APIRouter(
     prefix="/despensa",
@@ -45,6 +45,21 @@ PRODUCT_ATTR_MAP = {
 }
 
 PANTRY_ATTRS = ["cantidad", "unidad", "precio_aprox", "cantidad_precio", "unidad_precio", "fecha_vencimiento"]
+
+DEFAULT_CATEGORY_NAMES = [
+    "Carnes",
+    "Vegetales",
+    "Frutas",
+    "Legumbres",
+    "Mariscos",
+    "Pescado",
+    "Aderezos",
+    "Cereales",
+    "Lácteos",
+    "Jugos",
+    "Bebidas",
+    "Otros",
+]
 
 
 def _clean_payload(payload: dict) -> dict:
@@ -454,6 +469,127 @@ async def _build_product_payload(client, data, catalog_product=None, current_pro
     return payload, None
 
 
+async def _create_pantry_item_from_payload(client, data, product_payload: dict) -> tuple[dict | None, dict | None]:
+    crear_producto = await client.post("/productos", json=product_payload)
+    if crear_producto.status_code != 201:
+        return None, {"error": f"No se pudo crear el producto. Detalle: {crear_producto.text}"}
+
+    producto_id = crear_producto.json()[0]["id"]
+    item_despensa = _clean_payload({
+        "user_id": data.user_id,
+        "producto_id": producto_id,
+        "cantidad": data.cantidad,
+        "unidad": data.unidad,
+        "precio_aprox": data.precio_aprox,
+        "cantidad_precio": data.cantidad_precio,
+        "unidad_precio": data.unidad_precio,
+        "fecha_vencimiento": data.fecha_vencimiento,
+    })
+    insertar = await client.post("/despensa", json=item_despensa)
+
+    if insertar.status_code != 201:
+        return None, {"error": f"No se pudo agregar a la despensa. Detalle: {insertar.text}"}
+
+    price_error = await guardar_precio_supermercado(
+        client,
+        producto_id,
+        data.supermercado_id,
+        data.precio_supermercado,
+        data.precio_unidad,
+        data.user_id,
+    )
+    if price_error:
+        return None, price_error
+
+    item_id = insertar.json()[0]["id"]
+    item, error = await _get_item(client, item_id)
+    return item, error
+
+
+async def _resolve_barcode_add_data(client, data: DespensaBarcodeAdd):
+    clean_barcode = data.codigo_barra.strip()
+    if not clean_barcode:
+        return None, None, None, {"error": "Escanea o ingresa un codigo de barra valido."}
+
+    catalog_response = await client.get(
+        "/productos_catalogo",
+        params={
+            "codigo_barra": f"eq.{clean_barcode}",
+            "select": CATALOG_FIELDS,
+            "limit": "1",
+        },
+    )
+    if catalog_response.status_code != 200:
+        return None, None, None, {"error": f"Error al buscar producto por codigo. Detalle: {catalog_response.text}"}
+
+    catalog_matches = catalog_response.json()
+    if catalog_matches:
+        catalog_product = catalog_matches[0]
+        resolved = DespensaAdd(
+            user_id=data.user_id,
+            producto_catalogo_id=catalog_product.get("id"),
+            nombre_producto=catalog_product.get("nombre") or f"Producto codigo {clean_barcode}",
+            categoria=catalog_product.get("categoria") or "Otros",
+            codigo_barra=clean_barcode,
+            cantidad=data.cantidad,
+            unidad=data.unidad,
+            precio_aprox=data.precio_aprox,
+            cantidad_precio=data.cantidad_precio,
+            unidad_precio=data.unidad_precio,
+            supermercado_id=data.supermercado_id,
+            precio_supermercado=data.precio_supermercado,
+            precio_unidad=data.precio_unidad,
+            fecha_vencimiento=data.fecha_vencimiento,
+            generar_imagen_ia=data.generar_imagen_ia,
+        )
+        return resolved, catalog_product, "bdd", None
+
+    if not data.usar_ia:
+        return None, None, None, {
+            "requiere_ia": True,
+            "codigo_barra": clean_barcode,
+            "mensaje": "No encontramos este codigo en la base de datos. Puedes intentar completarlo con IA.",
+        }
+
+    categorias = data.categorias_disponibles or DEFAULT_CATEGORY_NAMES
+    ai_product = await identificar_producto_por_codigo_barras(clean_barcode, categorias)
+    if "error" in ai_product:
+        return None, None, None, {"error": f"No se pudo identificar el producto por codigo. Detalle: {ai_product['error']}"}
+
+    if ai_product.get("es_alimento") is False:
+        return None, None, None, {
+            "error": ai_product.get("aviso") or "El codigo escaneado no parece corresponder a un alimento o bebida.",
+            "tipo": "no_alimento",
+        }
+
+    category = ai_product.get("categoria") if ai_product.get("categoria") in categorias else "Otros"
+    resolved = DespensaAdd(
+        user_id=data.user_id,
+        nombre_producto=ai_product.get("nombre_producto") or f"Producto codigo {clean_barcode}",
+        categoria=category or "Otros",
+        codigo_barra=clean_barcode,
+        marca=ai_product.get("marca"),
+        energia_kcal=ai_product.get("energia_kcal"),
+        proteinas_g=ai_product.get("proteinas_g"),
+        carbohidratos_g=ai_product.get("carbohidratos_g"),
+        grasas_g=ai_product.get("grasas_g"),
+        fibra_g=ai_product.get("fibra_g"),
+        sodio_mg=ai_product.get("sodio_mg"),
+        azucar_g=ai_product.get("azucar_g"),
+        cantidad=data.cantidad,
+        unidad=data.unidad,
+        precio_aprox=data.precio_aprox,
+        cantidad_precio=data.cantidad_precio,
+        unidad_precio=data.unidad_precio,
+        supermercado_id=data.supermercado_id,
+        precio_supermercado=data.precio_supermercado,
+        precio_unidad=data.precio_unidad,
+        fecha_vencimiento=data.fecha_vencimiento,
+        generar_imagen_ia=data.generar_imagen_ia,
+    )
+    return resolved, None, "ia", None
+
+
 @router.post("/verificar-categoria")
 async def verificar_categoria(data: CategoriaProductoCheck):
     """Usa IA para recomendar otra categoria si la actual no calza con el producto."""
@@ -562,41 +698,35 @@ async def agregar_ingrediente(data: DespensaAdd):
             if error:
                 return error
 
-            crear_producto = await client.post("/productos", json=product_payload)
-            if crear_producto.status_code != 201:
-                return {"error": f"No se pudo crear el producto. Detalle: {crear_producto.text}"}
-
-            producto_id = crear_producto.json()[0]["id"]
-
-            item_despensa = _clean_payload({
-                "user_id": data.user_id,
-                "producto_id": producto_id,
-                "cantidad": data.cantidad,
-                "unidad": data.unidad,
-                "precio_aprox": data.precio_aprox,
-                "cantidad_precio": data.cantidad_precio,
-                "unidad_precio": data.unidad_precio,
-                "fecha_vencimiento": data.fecha_vencimiento,
-            })
-            insertar = await client.post("/despensa", json=item_despensa)
-
-            if insertar.status_code != 201:
-                return {"error": f"No se pudo agregar a la despensa. Detalle: {insertar.text}"}
-
-            price_error = await guardar_precio_supermercado(
-                client,
-                producto_id,
-                data.supermercado_id,
-                data.precio_supermercado,
-                data.precio_unidad,
-                data.user_id,
-            )
-            if price_error:
-                return price_error
-
-            item_id = insertar.json()[0]["id"]
-            item, error = await _get_item(client, item_id)
+            item, error = await _create_pantry_item_from_payload(client, data, product_payload)
             return error or item
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@router.post("/agregar-por-codigo")
+async def agregar_ingrediente_por_codigo(data: DespensaBarcodeAdd):
+    """Agrega un ingrediente usando solo codigo de barra, con categoria automatica."""
+    try:
+        async with get_supabase_client() as client:
+            resolved_data, catalog_product, source, error = await _resolve_barcode_add_data(client, data)
+            if error:
+                return error
+
+            product_payload, error = await _build_product_payload(client, resolved_data, catalog_product)
+            if error:
+                return error
+
+            item, error = await _create_pantry_item_from_payload(client, resolved_data, product_payload)
+            if error:
+                return error
+            item["origen_agregado"] = source
+            item["mensaje_agregado"] = (
+                "Producto agregado desde la base de datos."
+                if source == "bdd"
+                else "Producto agregado con datos completados por IA."
+            )
+            return item
     except Exception as e:
         return {"error": str(e)}
 

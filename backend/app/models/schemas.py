@@ -123,6 +123,23 @@ class DespensaAdd(pydantic.BaseModel):
     generar_imagen_ia: bool = False
 
 
+class DespensaBarcodeAdd(pydantic.BaseModel):
+    user_id: str
+    codigo_barra: str
+    categorias_disponibles: list[str] = pydantic.Field(default_factory=list)
+    usar_ia: bool = False
+    cantidad: float | None = None
+    unidad: str | None = None
+    precio_aprox: float | None = None
+    cantidad_precio: float | None = None
+    unidad_precio: str | None = None
+    supermercado_id: str | None = None
+    precio_supermercado: float | None = None
+    precio_unidad: str | None = None
+    fecha_vencimiento: str | None = None
+    generar_imagen_ia: bool = False
+
+
 class DespensaUpdate(pydantic.BaseModel):
     producto_catalogo_id: str | None = None
     nombre_producto: str | None = None

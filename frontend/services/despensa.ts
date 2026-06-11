@@ -31,6 +31,23 @@ export interface DespensaAddData {
   generar_imagen_ia?: boolean;
 }
 
+export interface DespensaBarcodeAddData {
+  user_id: string;
+  codigo_barra: string;
+  categorias_disponibles?: string[];
+  usar_ia?: boolean;
+  cantidad?: number;
+  unidad?: string;
+  precio_aprox?: number;
+  cantidad_precio?: number;
+  unidad_precio?: string;
+  supermercado_id?: string;
+  precio_supermercado?: number;
+  precio_unidad?: string;
+  fecha_vencimiento?: string;
+  generar_imagen_ia?: boolean;
+}
+
 export interface DespensaUpdateData {
   producto_catalogo_id?: string;
   nombre_producto?: string;
@@ -86,6 +103,11 @@ export interface DespensaItemData {
   created_at?: string;
   producto_catalogo_id?: string;
   es_personalizado?: boolean;
+  origen_agregado?: 'bdd' | 'ia';
+  mensaje_agregado?: string;
+  tipo?: string;
+  requiere_ia?: boolean;
+  mensaje?: string;
 }
 
 export interface CategoriaCheckResult {
@@ -142,6 +164,24 @@ export async function agregarIngrediente(data: DespensaAddData): Promise<Despens
     const responseData = await res.json();
     if (!res.ok) {
       return { error: responseData.detail || responseData.error || 'No se pudo agregar el ingrediente' } as any;
+    }
+    return responseData;
+  } catch (e: any) {
+    return { error: `Error de conexión: ${e.message}` } as any;
+  }
+}
+
+/** Agrega un ingrediente usando solo el codigo de barra */
+export async function agregarIngredientePorCodigo(data: DespensaBarcodeAddData): Promise<DespensaItemData & { error?: string }> {
+  try {
+    const res = await fetch(`${API_URL}/despensa/agregar-por-codigo`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    const responseData = await res.json();
+    if (!res.ok) {
+      return { error: responseData.detail || responseData.error || 'No se pudo agregar el ingrediente por codigo' } as any;
     }
     return responseData;
   } catch (e: any) {
