@@ -22,6 +22,11 @@ import {
   solicitarAutenticacionProducto,
   verificarCategoriaProducto,
 } from '@/services/despensa';
+import {
+  getExpiryStatus,
+  getExpiryLabel,
+  scheduleExpiryNotifications,
+} from '@/services/notificaciones';
 
 type ActiveView = 'categories' | 'category' | 'add' | 'search' | 'edit';
 type FormMode = 'add' | 'edit';
@@ -109,14 +114,14 @@ const NUTRIENT_FIELDS: Array<{
   unit: string;
   itemKey: keyof DespensaItemData;
 }> = [
-  { key: 'energia_kcal', label: 'Energía', unit: 'kcal', itemKey: 'energia_kcal' },
-  { key: 'proteinas_g', label: 'Proteínas', unit: 'g', itemKey: 'proteinas_g' },
-  { key: 'carbohidratos_g', label: 'Carbohidratos', unit: 'g', itemKey: 'carbohidratos_g' },
-  { key: 'grasas_g', label: 'Grasas', unit: 'g', itemKey: 'grasas_g' },
-  { key: 'fibra_g', label: 'Fibra', unit: 'g', itemKey: 'fibra_g' },
-  { key: 'sodio_mg', label: 'Sodio', unit: 'mg', itemKey: 'sodio_mg' },
-  { key: 'azucar_g', label: 'Azúcar', unit: 'g', itemKey: 'azucar_g' },
-];
+    { key: 'energia_kcal', label: 'Energía', unit: 'kcal', itemKey: 'energia_kcal' },
+    { key: 'proteinas_g', label: 'Proteínas', unit: 'g', itemKey: 'proteinas_g' },
+    { key: 'carbohidratos_g', label: 'Carbohidratos', unit: 'g', itemKey: 'carbohidratos_g' },
+    { key: 'grasas_g', label: 'Grasas', unit: 'g', itemKey: 'grasas_g' },
+    { key: 'fibra_g', label: 'Fibra', unit: 'g', itemKey: 'fibra_g' },
+    { key: 'sodio_mg', label: 'Sodio', unit: 'mg', itemKey: 'sodio_mg' },
+    { key: 'azucar_g', label: 'Azúcar', unit: 'g', itemKey: 'azucar_g' },
+  ];
 
 function slugifyCategory(value: string) {
   return value
@@ -442,6 +447,10 @@ export default function FridgeScreen() {
     const result = await fetchDespensa(user.id);
     if (result.items) {
       setItems(result.items);
+      // HU-10: Programar notificaciones de vencimiento
+      scheduleExpiryNotifications(result.items).catch(() => {
+        // Silenciar errores de notificaciones - no son críticos
+      });
     } else if (result.error) {
       Alert.alert('Error', result.error);
     }
@@ -948,8 +957,20 @@ export default function FridgeScreen() {
 
   function renderIngredientCard(item: DespensaItemData, compact = false) {
     const imageUri = item.imagen_url || getPlaceholderUri(item.nombre_producto);
+    //Estado de vencimiento
+    const expiryStatus = getExpiryStatus(item.fecha_vencimiento);
+    const expiryLabel = getExpiryLabel(item.fecha_vencimiento);
+    const isExpiring = expiryStatus === 'expiring' || expiryStatus === 'expired';
     return (
-      <Pressable accessibilityRole="button" key={item.id} onPress={() => openEditView(item)} style={styles.ingredientRow}>
+      <Pressable
+        accessibilityRole="button"
+        key={item.id}
+        onPress={() => openEditView(item)}
+        style={[
+          styles.ingredientRow,
+          expiryStatus === 'expiring' && styles.ingredientRowExpiring,
+          expiryStatus === 'expired' && styles.ingredientRowExpired,
+        ]}>
         <Image source={{ uri: imageUri }} style={styles.ingredientImage} />
         <View style={styles.ingredientInfo}>
           <View style={styles.ingredientTitleRow}>
@@ -958,6 +979,25 @@ export default function FridgeScreen() {
             </Text>
             <Text style={styles.pricePill}>{formatPrice(item.precio_aprox)}</Text>
           </View>
+          {/*Badge de vencimiento*/}
+          {isExpiring && expiryLabel && (
+            <View style={[
+              styles.expiryBadge,
+              expiryStatus === 'expired' ? styles.expiryBadgeExpired : styles.expiryBadgeExpiring,
+            ]}>
+              <MaterialCommunityIcons
+                name={expiryStatus === 'expired' ? 'alert-circle' : 'clock-alert-outline'}
+                size={14}
+                color={expiryStatus === 'expired' ? '#DC2626' : '#EA580C'}
+              />
+              <Text style={[
+                styles.expiryBadgeText,
+                expiryStatus === 'expired' ? styles.expiryBadgeTextExpired : styles.expiryBadgeTextExpiring,
+              ]}>
+                {expiryLabel}
+              </Text>
+            </View>
+          )}
           {item.supermercado_nombre && (
             <Text style={styles.supermarketMeta} numberOfLines={1}>
               {item.supermercado_nombre}
@@ -1216,17 +1256,17 @@ export default function FridgeScreen() {
               {unitDropdownOpen && (
                 <View style={styles.dropdownMenu}>
                   {UNIT_OPTIONS.map((unit) => (
-                  <Pressable
-                    accessibilityRole="button"
-                    key={unit}
-                    onPress={() => {
-                      updateForm('unidad', unit);
-                      setUnitDropdownOpen(false);
-                    }}
-                    style={[styles.dropdownOption, form.unidad === unit && styles.dropdownOptionSelected]}>
-                    <MaterialCommunityIcons name="scale-balance" size={20} color="#064E2F" />
-                    <Text style={styles.dropdownOptionText}>{unit}</Text>
-                  </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      key={unit}
+                      onPress={() => {
+                        updateForm('unidad', unit);
+                        setUnitDropdownOpen(false);
+                      }}
+                      style={[styles.dropdownOption, form.unidad === unit && styles.dropdownOptionSelected]}>
+                      <MaterialCommunityIcons name="scale-balance" size={20} color="#064E2F" />
+                      <Text style={styles.dropdownOptionText}>{unit}</Text>
+                    </Pressable>
                   ))}
                 </View>
               )}
@@ -3050,5 +3090,50 @@ const styles = StyleSheet.create({
   unitRow: {
     gap: 8,
     paddingRight: 4,
+  },
+
+
+
+
+  //Estilos de cuando venza la wea
+  ingredientRowExpiring: {
+    borderColor: '#F97316',
+    borderWidth: 2,
+    backgroundColor: '#FFF7ED',
+  },
+  ingredientRowExpired: {
+    borderColor: '#DC2626',
+    borderWidth: 2,
+    backgroundColor: '#FEF2F2',
+  },
+  expiryBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    marginTop: 2,
+  },
+  expiryBadgeExpiring: {
+    backgroundColor: '#FFEDD5',
+    borderWidth: 1,
+    borderColor: '#FDBA74',
+  },
+  expiryBadgeExpired: {
+    backgroundColor: '#FEE2E2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+  },
+  expiryBadgeText: {
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  expiryBadgeTextExpiring: {
+    color: '#EA580C',
+  },
+  expiryBadgeTextExpired: {
+    color: '#DC2626',
   },
 });
