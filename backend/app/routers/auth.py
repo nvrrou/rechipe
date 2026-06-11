@@ -2,7 +2,7 @@ from app.config import SUPABASE_URL
 from fastapi import APIRouter
 from app.models.schemas import UserCreate, UserResponse, ProfileUpdate
 from app.dependencias import get_supabase_client
-from app.models.schemas import UserLogin
+from app.models.schemas import UserLogin, ResendVerification, CheckVerification
 
 
 router = APIRouter(
@@ -134,3 +134,51 @@ async def update_profile(profile_data: ProfileUpdate):
             return {"msg": "Perfil actualizado exitosamente"}
     except Exception as e:
         return {"error": str(e)}
+
+
+@router.post("/resend-verification")
+async def resend_verification(data: ResendVerification):
+    #REENVIA el correo de verificacion usando la API de Supabase Auth
+    try:
+        async with get_supabase_client() as client:
+            response = await client.post(
+                f"{SUPABASE_URL}/auth/v1/resend",
+                json={
+                    "type": "signup",
+                    "email": data.email,
+                }
+            )
+            
+            if response.status_code == 200:
+                return {"msg": "Correo de verificación reenviado exitosamente"}
+            else:
+                error_data = response.json()
+                mensaje = error_data.get("error_description", error_data.get("msg", "Error al reenviar correo"))
+                return {"error": mensaje}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@router.post("/check-verification")
+async def check_verification(data: CheckVerification):
+    """Verifica si el email del usuario ya fue confirmado intentando un login"""
+    try:
+        async with get_supabase_client() as client:
+            response = await client.post(
+                f"{SUPABASE_URL}/auth/v1/token?grant_type=password",
+                json={"email": data.email, "password": data.password}
+            )
+            
+            if response.status_code == 200:
+                return {"verified": True}
+            else:
+                error_data = response.json()
+                error_msg = error_data.get("error_description", error_data.get("msg", ""))
+                
+                # Si el error es por email no confirmado, indicamos que no está verificado
+                if "email not confirmed" in error_msg.lower() or "email_not_confirmed" in error_msg.lower():
+                    return {"verified": False, "error": "Email aún no confirmado"}
+                
+                return {"verified": False, "error": error_msg}
+    except Exception as e:
+        return {"verified": False, "error": str(e)}
