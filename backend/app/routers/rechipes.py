@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends
-from app.models.schemas import BudgetRecipeRequest, RecipeAdjustRequest, RecipeRequest, EsquemaAlimento
+from app.models.schemas import BudgetRecipeRequest, RecipeAdjustRequest, RecipeHistorySaveRequest, RecipePrepareRequest, RecipeRequest, EsquemaAlimento
 from app.services.ai_service import (
     estimar_precio_producto_chile,
     generar_receta_con_ia,
@@ -11,6 +11,8 @@ from app.services.ai_service import (
 from app.dependencias import get_supabase_client
 import httpx
 import uuid
+import re
+import unicodedata
 
 
 router = APIRouter(
@@ -19,6 +21,88 @@ router = APIRouter(
 )
 
 PRODUCT_SELECT = "id,nombre,categoria,energia_kcal,proteinas_g,carbohidratos_g,grasas_totales_g"
+RECIPE_SELECT = "id,creado_por,titulo,descripcion,instrucciones,ingredientes,info_nutricional,tiempo_preparacion,porciones,costo_estimado,es_publica,generada_por_ia,prompt_usado,created_at,updated_at"
+
+
+def _normalize_recipe_text(value: str | None) -> str:
+    if not value:
+        return ""
+    normalized = unicodedata.normalize("NFD", value.lower())
+    normalized = "".join(char for char in normalized if unicodedata.category(char) != "Mn")
+    return re.sub(r"[^a-z0-9]+", " ", normalized).strip()
+
+
+def _recipe_text_matches(left: str, right: str) -> bool:
+    normalized_left = _normalize_recipe_text(left)
+    normalized_right = _normalize_recipe_text(right)
+    if not normalized_left or not normalized_right:
+        return False
+    left_words = {word for word in normalized_left.split() if len(word) > 2}
+    right_words = {word for word in normalized_right.split() if len(word) > 2}
+    return (
+        normalized_left == normalized_right
+        or normalized_left in normalized_right
+        or normalized_right in normalized_left
+        or len(left_words.intersection(right_words)) >= 1
+    )
+
+
+def _parse_preparation_minutes(value) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return int(value)
+    match = re.search(r"\d+", str(value))
+    return int(match.group(0)) if match else None
+
+
+def _recipe_to_db_payload(request: RecipeHistorySaveRequest) -> dict:
+    receta = request.receta or {}
+    pasos = receta.get("pasos") or []
+    instrucciones = "\n".join(str(step) for step in pasos) if isinstance(pasos, list) else str(pasos or "")
+    ingredientes = receta.get("ingredientes") or []
+    macros = receta.get("macros_totales") or {}
+    descripcion = receta.get("por_que_funciona") or request.tipo_comida or ""
+    costo_estimado = request.costo_estimado
+    if costo_estimado is None:
+        costo_estimado = receta.get("costo_estimado")
+
+    return {
+        "creado_por": request.user_id,
+        "titulo": receta.get("titulo") or "Receta sin titulo",
+        "descripcion": descripcion,
+        "instrucciones": instrucciones,
+        "ingredientes": ingredientes if isinstance(ingredientes, list) else [str(ingredientes)],
+        "info_nutricional": macros if isinstance(macros, dict) else {},
+        "tiempo_preparacion": _parse_preparation_minutes(receta.get("tiempo_preparacion")),
+        "porciones": receta.get("porciones") or 1,
+        "costo_estimado": costo_estimado,
+        "es_publica": False,
+        "generada_por_ia": True,
+        "prompt_usado": request.prompt_usado or request.tipo_comida or "",
+    }
+
+
+def _db_recipe_to_generated(recipe: dict) -> dict:
+    pasos = [
+        step.strip()
+        for step in (recipe.get("instrucciones") or "").split("\n")
+        if step.strip()
+    ]
+    minutes = recipe.get("tiempo_preparacion")
+    return {
+        "id": recipe.get("id"),
+        "titulo": recipe.get("titulo"),
+        "tiempo_preparacion": f"{minutes} min" if minutes else None,
+        "dificultad": None,
+        "por_que_funciona": recipe.get("descripcion"),
+        "macros_totales": recipe.get("info_nutricional") or {},
+        "ingredientes": recipe.get("ingredientes") or [],
+        "compras_usadas": [],
+        "pasos": pasos,
+        "created_at": recipe.get("created_at"),
+        "costo_estimado": recipe.get("costo_estimado"),
+    }
 
 
 async def _get_profile_context(client: httpx.AsyncClient, user_id: str):
@@ -170,6 +254,143 @@ async def _build_estimated_candidates(existing_names: set[str], needed_count: in
         if len(candidates) >= needed_count:
             break
     return candidates
+
+
+async def _build_purchase_for_missing_ingredient(client: httpx.AsyncClient, ingredient_line: str):
+    clean_name = re.sub(r"^\s*[-•]?\s*", "", str(ingredient_line or "")).strip()
+    clean_name = re.sub(r"^\d+(?:[.,]\d+)?\s*(g|kg|ml|l|taza|tazas|cda|cdas|unidad|unidades)?\s*(de)?\s*", "", clean_name, flags=re.IGNORECASE).strip()
+    if not clean_name:
+        return None
+
+    words = _normalize_recipe_text(clean_name).split()
+    search_name = " ".join(words[:3]) or clean_name
+
+    products_response = await client.get(
+        "/productos",
+        params={"nombre": f"ilike.*{search_name}*", "select": PRODUCT_SELECT, "limit": "1"},
+    )
+    if products_response.status_code == 200 and products_response.json():
+        product = products_response.json()[0]
+        price = await _get_best_price(client, product["id"])
+        if price:
+            return {
+                "nombre": product.get("nombre") or clean_name,
+                "categoria": product.get("categoria") or "Otros",
+                "cantidad": price.get("unidad") or "1 unidad",
+                "precio": price.get("precio") or 0,
+                "reason": "Faltante detectado al comparar la receta con tu despensa.",
+            }
+
+    estimate = await estimar_precio_producto_chile(clean_name, "Otros")
+    if "error" in estimate:
+        return {
+            "nombre": clean_name,
+            "categoria": "Otros",
+            "cantidad": "1 unidad",
+            "precio": 0,
+            "reason": "Faltante detectado al comparar la receta con tu despensa.",
+        }
+
+    return {
+        "nombre": estimate.get("nombre") or clean_name,
+        "categoria": estimate.get("categoria") or "Otros",
+        "cantidad": estimate.get("cantidad") or "1 unidad",
+        "precio": estimate.get("precio") or 0,
+        "reason": estimate.get("razon") or "Precio estimado con IA para un ingrediente faltante.",
+    }
+
+
+async def _prepare_recipe_for_user(client: httpx.AsyncClient, user_id: str, receta: dict):
+    pantry_items = await _get_user_pantry(client, user_id)
+    pantry_names = [
+        item["producto"].get("nombre") or ""
+        for item in pantry_items
+        if item.get("producto")
+    ]
+    ingredientes = receta.get("ingredientes") or []
+    compras_receta = []
+    matched_ingredients = []
+    missing_ingredients = []
+
+    for ingredient in ingredientes:
+        ingredient_text = str(ingredient or "")
+        matched_name = next((name for name in pantry_names if _recipe_text_matches(ingredient_text, name)), None)
+        if matched_name:
+            matched_ingredients.append({"ingrediente": ingredient_text, "despensa": matched_name})
+            continue
+
+        missing_ingredients.append(ingredient_text)
+        purchase = await _build_purchase_for_missing_ingredient(client, ingredient_text)
+        if purchase:
+            compras_receta.append(purchase)
+
+    seen = set()
+    unique_purchases = []
+    for purchase in compras_receta:
+        key = _normalize_recipe_text(purchase.get("nombre"))
+        if key and key not in seen:
+            seen.add(key)
+            unique_purchases.append(purchase)
+
+    return {
+        "receta": receta,
+        "compras_sugeridas": unique_purchases,
+        "compras_receta": unique_purchases,
+        "ingredientes_encontrados": matched_ingredients,
+        "ingredientes_faltantes": missing_ingredients,
+    }
+
+
+@router.post("/guardar-usada")
+async def guardar_receta_usada(
+    request: RecipeHistorySaveRequest,
+    client: httpx.AsyncClient = Depends(get_supabase_client),
+):
+    try:
+        payload = _recipe_to_db_payload(request)
+        response = await client.post("/recetas", json=payload)
+        if response.status_code != 201:
+            return {"error": f"No se pudo guardar la receta. Detalle: {response.text}"}
+        saved = response.json()[0]
+        return {"receta": _db_recipe_to_generated(saved), "registro": saved}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@router.get("/historial/{user_id}")
+async def listar_historial_recetas(user_id: str, limit: int = 30):
+    try:
+        clean_limit = max(1, min(limit, 80))
+        async with get_supabase_client() as client:
+            response = await client.get(
+                "/recetas",
+                params={
+                    "creado_por": f"eq.{user_id}",
+                    "select": RECIPE_SELECT,
+                    "order": "created_at.desc",
+                    "limit": str(clean_limit),
+                },
+            )
+            if response.status_code != 200:
+                return {"items": [], "error": f"Error al obtener historial. Detalle: {response.text}"}
+
+            return {"items": [_db_recipe_to_generated(recipe) for recipe in response.json()]}
+    except Exception as e:
+        return {"items": [], "error": str(e)}
+
+
+@router.post("/preparar")
+async def preparar_receta_guardada(
+    request: RecipePrepareRequest,
+    client: httpx.AsyncClient = Depends(get_supabase_client),
+):
+    try:
+        result = await _prepare_recipe_for_user(client, request.user_id, request.receta)
+        return result
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(status_code=exc.response.status_code, detail=f"Error en BD: {exc.response.text}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
 
 @router.post("/analizar-alimento")
 async def analizar_alimento(

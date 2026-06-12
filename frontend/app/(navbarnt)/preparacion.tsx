@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Animated, Easing, Pressable, ScrollView, StyleSheet, TextInput } from 'react-native';
 
 import { Text, View } from '@/components/Themed';
 import { useAuth } from '@/contexts/AuthContext';
@@ -52,6 +52,8 @@ function getRecipePurchaseItems(recipe: GeneratedRecipe, suggestions: BudgetPurc
   return suggestions.filter((item) => usedPurchases.some((name) => textMatches(name, item.nombre)));
 }
 
+type PrepSurface = 'preparacion' | 'lista';
+
 export default function PreparationScreen() {
   const router = useRouter();
   const { user } = useAuth();
@@ -62,6 +64,10 @@ export default function PreparationScreen() {
   const [recipeChangeRequest, setRecipeChangeRequest] = useState('');
   const [adjustingRecipe, setAdjustingRecipe] = useState(false);
   const [message, setMessage] = useState('');
+  const [bridgeTarget, setBridgeTarget] = useState<PrepSurface>('preparacion');
+  const [bridgeWidth, setBridgeWidth] = useState(0);
+  const bridgePillAnim = useRef(new Animated.Value(0)).current;
+  const surfaceTransition = useRef(new Animated.Value(0)).current;
 
   const recipe = payload?.receta;
   const purchaseSuggestions = payload?.compras_sugeridas || [];
@@ -97,12 +103,44 @@ export default function PreparationScreen() {
     }, [user?.id])
   );
 
+  useEffect(() => {
+    Animated.spring(surfaceTransition, {
+      toValue: 1,
+      damping: 16,
+      mass: 0.75,
+      stiffness: 190,
+      useNativeDriver: true,
+    }).start();
+  }, [surfaceTransition]);
+
   function goBack() {
     if (router.canGoBack()) {
       router.back();
       return;
     }
     router.replace('/(tabs)/recipe');
+  }
+
+  function switchPreparationSurface(target: PrepSurface) {
+    if (target === 'preparacion') return;
+
+    setBridgeTarget(target);
+    Animated.spring(bridgePillAnim, {
+      toValue: 1,
+      damping: 18,
+      mass: 0.7,
+      stiffness: 190,
+      useNativeDriver: true,
+    }).start();
+
+    Animated.timing(surfaceTransition, {
+      toValue: 0,
+      duration: 150,
+      easing: Easing.in(Easing.cubic),
+      useNativeDriver: true,
+    }).start(() => {
+      router.replace('/(navbarnt)/lista?modo=preparacion');
+    });
   }
 
   async function addPurchasesToShoppingList() {
@@ -240,16 +278,59 @@ export default function PreparationScreen() {
           </View>
         </View>
 
-        <View style={styles.topBridge}>
-          <Pressable accessibilityRole="button" style={[styles.bridgeButton, styles.bridgeButtonActive]}>
-            <MaterialCommunityIcons name="chef-hat" size={18} color="#FBFFF8" />
-            <Text style={[styles.bridgeButtonText, styles.bridgeButtonTextActive]}>Preparación</Text>
+        <View
+          onLayout={(event) => setBridgeWidth(event.nativeEvent.layout.width)}
+          style={styles.topBridge}>
+          {bridgeWidth > 0 && (
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.bridgeSlidingPill,
+                {
+                  width: (bridgeWidth - 12 - 8) / 2,
+                  transform: [
+                    {
+                      translateX: bridgePillAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [6, 6 + (bridgeWidth - 12 - 8) / 2 + 8],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            />
+          )}
+          <Pressable accessibilityRole="button" style={styles.bridgeButton}>
+            <MaterialCommunityIcons name="chef-hat" size={18} color={bridgeTarget === 'preparacion' ? '#FBFFF8' : '#064E2F'} />
+            <Text style={[styles.bridgeButtonText, bridgeTarget === 'preparacion' && styles.bridgeButtonTextActive]}>Preparación</Text>
           </Pressable>
-          <Pressable accessibilityRole="button" onPress={() => router.push('/(navbarnt)/lista?modo=preparacion')} style={styles.bridgeButton}>
-            <MaterialCommunityIcons name="clipboard-list-outline" size={18} color="#064E2F" />
-            <Text style={styles.bridgeButtonText}>Lista de compras</Text>
+          <Pressable accessibilityRole="button" onPress={() => switchPreparationSurface('lista')} style={styles.bridgeButton}>
+            <MaterialCommunityIcons name="clipboard-list-outline" size={18} color={bridgeTarget === 'lista' ? '#FBFFF8' : '#064E2F'} />
+            <Text style={[styles.bridgeButtonText, bridgeTarget === 'lista' && styles.bridgeButtonTextActive]}>Lista de compras</Text>
           </Pressable>
         </View>
+
+        <Animated.View
+          style={[
+            styles.surfaceContent,
+            {
+              opacity: surfaceTransition,
+              transform: [
+                {
+                  translateX: surfaceTransition.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [-32, 0],
+                  }),
+                },
+                {
+                  scale: surfaceTransition.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.97, 1],
+                  }),
+                },
+              ],
+            },
+          ]}>
 
         {loading ? (
           <View style={styles.emptyState}>
@@ -359,7 +440,7 @@ export default function PreparationScreen() {
                     <Text style={styles.sectionTitle}>Compras para esta receta</Text>
                     <Text style={styles.purchaseSubtitle}>Ingredientes que faltan y pueden ir directo a tu lista.</Text>
                   </View>
-                  <Pressable accessibilityRole="button" onPress={() => router.push('/(navbarnt)/lista?modo=preparacion')} style={styles.purchaseListButton}>
+                  <Pressable accessibilityRole="button" onPress={() => switchPreparationSurface('lista')} style={styles.purchaseListButton}>
                     <MaterialCommunityIcons name="open-in-new" size={16} color="#064E2F" />
                   </Pressable>
                 </View>
@@ -375,7 +456,7 @@ export default function PreparationScreen() {
                     <MaterialCommunityIcons name="cart-plus" size={18} color="#FBFFF8" />
                     <Text style={styles.primaryButtonText}>Agregar faltantes</Text>
                   </Pressable>
-                  <Pressable accessibilityRole="button" onPress={() => router.push('/(navbarnt)/lista?modo=preparacion')} style={styles.secondaryButton}>
+                  <Pressable accessibilityRole="button" onPress={() => switchPreparationSurface('lista')} style={styles.secondaryButton}>
                     <MaterialCommunityIcons name="clipboard-list-outline" size={18} color="#064E2F" />
                     <Text style={styles.secondaryButtonText}>Ver lista</Text>
                   </Pressable>
@@ -421,6 +502,7 @@ export default function PreparationScreen() {
             <Text style={styles.messageText}>{message}</Text>
           </View>
         )}
+        </Animated.View>
       </ScrollView>
     </View>
   );
@@ -495,10 +577,24 @@ const styles = StyleSheet.create({
     gap: 7,
     paddingHorizontal: 10,
     borderRadius: 15,
-    backgroundColor: '#DDF8E7',
+    backgroundColor: 'transparent',
+    zIndex: 1,
   },
   bridgeButtonActive: {
     backgroundColor: '#00B86B',
+  },
+  bridgeSlidingPill: {
+    position: 'absolute',
+    left: 0,
+    top: 6,
+    bottom: 6,
+    borderRadius: 15,
+    backgroundColor: '#00B86B',
+    shadowColor: '#00B86B',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 2,
   },
   bridgeButtonText: {
     color: '#064E2F',
@@ -822,5 +918,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#9FE7B9',
     backgroundColor: '#E9FBEF',
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  surfaceContent: {
+    gap: 16,
+    backgroundColor: 'transparent',
   },
 });

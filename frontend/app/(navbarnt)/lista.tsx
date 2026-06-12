@@ -1,7 +1,9 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Animated,
+  Easing,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -23,6 +25,8 @@ function formatPrice(value: number) {
   return `$${Math.round(value).toLocaleString('es-CL')}`;
 }
 
+type PrepSurface = 'preparacion' | 'lista';
+
 export default function ShoppingListScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ modo?: string }>();
@@ -31,6 +35,10 @@ export default function ShoppingListScreen() {
   const [search, setSearch] = useState('');
   const [replacementRequest, setReplacementRequest] = useState('');
   const [replacementMessage, setReplacementMessage] = useState('');
+  const [bridgeTarget, setBridgeTarget] = useState<PrepSurface>('lista');
+  const [bridgeWidth, setBridgeWidth] = useState(0);
+  const bridgePillAnim = useRef(new Animated.Value(1)).current;
+  const surfaceTransition = useRef(new Animated.Value(0)).current;
 
   // Buscar productos por nombre
   const filteredItems = useMemo(
@@ -61,6 +69,16 @@ export default function ShoppingListScreen() {
       };
     }, [isPreparationList])
   );
+
+  useEffect(() => {
+    Animated.spring(surfaceTransition, {
+      toValue: 1,
+      damping: 16,
+      mass: 0.75,
+      stiffness: 190,
+      useNativeDriver: true,
+    }).start();
+  }, [surfaceTransition]);
 
   function persistItems(nextItems: ShoppingItem[]) {
     setItems(nextItems);
@@ -100,6 +118,28 @@ export default function ShoppingListScreen() {
     router.replace(isPreparationList ? '/(navbarnt)/preparacion' : '/(tabs)');
   }
 
+  function switchPreparationSurface(target: PrepSurface) {
+    if (!isPreparationList || target === 'lista') return;
+
+    setBridgeTarget(target);
+    Animated.spring(bridgePillAnim, {
+      toValue: 0,
+      damping: 18,
+      mass: 0.7,
+      stiffness: 190,
+      useNativeDriver: true,
+    }).start();
+
+    Animated.timing(surfaceTransition, {
+      toValue: 0,
+      duration: 150,
+      easing: Easing.in(Easing.cubic),
+      useNativeDriver: true,
+    }).start(() => {
+      router.replace('/(navbarnt)/preparacion');
+    });
+  }
+
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
@@ -120,17 +160,60 @@ export default function ShoppingListScreen() {
         </View>
 
         {isPreparationList && (
-          <View style={styles.topBridge}>
-            <Pressable accessibilityRole="button" onPress={() => router.push('/(navbarnt)/preparacion')} style={styles.bridgeButton}>
-              <MaterialCommunityIcons name="chef-hat" size={18} color="#064E2F" />
-              <Text style={styles.bridgeButtonText}>Preparación</Text>
+          <View
+            onLayout={(event) => setBridgeWidth(event.nativeEvent.layout.width)}
+            style={styles.topBridge}>
+            {bridgeWidth > 0 && (
+              <Animated.View
+                pointerEvents="none"
+                style={[
+                  styles.bridgeSlidingPill,
+                  {
+                    width: (bridgeWidth - 12 - 8) / 2,
+                    transform: [
+                      {
+                        translateX: bridgePillAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [6, 6 + (bridgeWidth - 12 - 8) / 2 + 8],
+                        }),
+                      },
+                    ],
+                  },
+                ]}
+              />
+            )}
+            <Pressable accessibilityRole="button" onPress={() => switchPreparationSurface('preparacion')} style={styles.bridgeButton}>
+              <MaterialCommunityIcons name="chef-hat" size={18} color={bridgeTarget === 'preparacion' ? '#FBFFF8' : '#064E2F'} />
+              <Text style={[styles.bridgeButtonText, bridgeTarget === 'preparacion' && styles.bridgeButtonTextActive]}>Preparación</Text>
             </Pressable>
-            <Pressable accessibilityRole="button" style={[styles.bridgeButton, styles.bridgeButtonActive]}>
-              <MaterialCommunityIcons name="clipboard-list-outline" size={18} color="#FBFFF8" />
-              <Text style={[styles.bridgeButtonText, styles.bridgeButtonTextActive]}>Lista de compras</Text>
+            <Pressable accessibilityRole="button" style={styles.bridgeButton}>
+              <MaterialCommunityIcons name="clipboard-list-outline" size={18} color={bridgeTarget === 'lista' ? '#FBFFF8' : '#064E2F'} />
+              <Text style={[styles.bridgeButtonText, bridgeTarget === 'lista' && styles.bridgeButtonTextActive]}>Lista de compras</Text>
             </Pressable>
           </View>
         )}
+
+        <Animated.View
+          style={[
+            styles.surfaceContent,
+            {
+              opacity: surfaceTransition,
+              transform: [
+                {
+                  translateX: surfaceTransition.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [32, 0],
+                  }),
+                },
+                {
+                  scale: surfaceTransition.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.97, 1],
+                  }),
+                },
+              ],
+            },
+          ]}>
 
         {/* Tarjeta resumen */}
         <View style={styles.summaryCard}>
@@ -234,6 +317,8 @@ export default function ShoppingListScreen() {
           </Pressable>
         </View>}
 
+        </Animated.View>
+
       </ScrollView>
     </View>
   );
@@ -271,10 +356,24 @@ const styles = StyleSheet.create({
     gap: 7,
     paddingHorizontal: 10,
     borderRadius: 15,
-    backgroundColor: '#DDF8E7',
+    backgroundColor: 'transparent',
+    zIndex: 1,
   },
   bridgeButtonActive: {
     backgroundColor: '#00B86B',
+  },
+  bridgeSlidingPill: {
+    position: 'absolute',
+    left: 0,
+    top: 6,
+    bottom: 6,
+    borderRadius: 15,
+    backgroundColor: '#00B86B',
+    shadowColor: '#00B86B',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    elevation: 2,
   },
   bridgeButtonText: {
     color: '#064E2F',
@@ -315,6 +414,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#9FE7B9',
     backgroundColor: '#E9FBEF',
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  surfaceContent: {
+    backgroundColor: 'transparent',
   },
 
   // Resumen

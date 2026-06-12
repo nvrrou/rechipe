@@ -84,6 +84,20 @@ class RecipeAdjustRequest(BaseModel):
     restricciones: List[str] = []
     compras_sugeridas: List[dict[str, Any]] = []
 
+
+class RecipeHistorySaveRequest(BaseModel):
+    user_id: str
+    receta: dict[str, Any]
+    tipo_comida: Optional[str] = ""
+    prompt_usado: Optional[str] = ""
+    costo_estimado: Optional[float] = None
+
+
+class RecipePrepareRequest(BaseModel):
+    user_id: str
+    receta: dict[str, Any]
+
+
 class EsquemaAlimento(BaseModel):
     nombre: str
 

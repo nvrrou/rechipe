@@ -203,6 +203,10 @@ export function Navbar({ state, descriptors, navigation, noSelection = false }: 
                 <View style={styles.optionIcon}>
                   <MaterialCommunityIcons name="clipboard-list-outline" size={22} color="#064E2F" />
                 </View>
+                <View style={styles.optionCopy}>
+                  <Text style={styles.optionText}>Lista de compras</Text>
+                  <Text style={styles.optionDescription}>Gestiona tu lista de compras</Text>
+                </View>
                 <MaterialCommunityIcons name="chevron-right" size={22} color="#2F7A4F" />
               </Pressable>
 

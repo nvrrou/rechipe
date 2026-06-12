@@ -1,12 +1,20 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Easing, Pressable, ScrollView, StyleSheet, TextInput } from 'react-native';
+import { ActivityIndicator, Animated, Easing, Modal, Pressable, ScrollView, StyleSheet, TextInput } from 'react-native';
 
 import { Text, View } from '@/components/Themed';
 import { useAuth } from '@/contexts/AuthContext';
 import { DespensaItemData, fetchDespensa } from '@/services/despensa';
-import { BudgetPurchaseSuggestion, GeneratedRecipe, generateBudgetRecipe, generateRecipes } from '@/services/recipes';
+import {
+  BudgetPurchaseSuggestion,
+  GeneratedRecipe,
+  fetchRecipeHistory,
+  generateBudgetRecipe,
+  generateRecipes,
+  prepareRecipeForUser,
+  saveUsedRecipe,
+} from '@/services/recipes';
 import { savePreparationRecipe } from '@/services/preparation';
 import { appendShoppingItems, createShoppingItem } from '@/services/shoppingList';
 
@@ -104,6 +112,13 @@ function getRecipePurchaseItems(recipe: GeneratedRecipe, suggestions: PurchaseSu
   return suggestions.filter((item) => usedPurchases.some((name) => textMatches(name, item.nombre)));
 }
 
+function formatHistoryDate(value?: string) {
+  if (!value) return 'Sin fecha';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Sin fecha';
+  return new Intl.DateTimeFormat('es-CL', { day: 'numeric', month: 'long' }).format(date);
+}
+
 export default function RecipeScreen() {
   const router = useRouter();
   const { user } = useAuth();
@@ -122,7 +137,12 @@ export default function RecipeScreen() {
   const [useProfileRestrictions, setUseProfileRestrictions] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [recipes, setRecipes] = useState<GeneratedRecipe[]>([]);
+  const [generationTimeMs, setGenerationTimeMs] = useState<number | null>(null);
   const [error, setError] = useState('');
+  const [historyVisible, setHistoryVisible] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyItems, setHistoryItems] = useState<GeneratedRecipe[]>([]);
+  const [usingRecipeKey, setUsingRecipeKey] = useState<string | null>(null);
   const modeTransition = useRef(new Animated.Value(1)).current;
   const modePillAnim = useRef(new Animated.Value(0)).current;
   const [modeSwitchWidth, setModeSwitchWidth] = useState(0);
@@ -227,6 +247,18 @@ export default function RecipeScreen() {
     [budgetRecipeCosts]
   );
 
+  const groupedHistory = useMemo(() => {
+    const groups: Array<{ date: string; recipes: GeneratedRecipe[] }> = [];
+    const byDate = new Map<string, GeneratedRecipe[]>();
+    for (const recipe of historyItems) {
+      const key = formatHistoryDate(recipe.created_at);
+      if (!byDate.has(key)) byDate.set(key, []);
+      byDate.get(key)!.push(recipe);
+    }
+    byDate.forEach((itemsForDate, date) => groups.push({ date, recipes: itemsForDate }));
+    return groups;
+  }, [historyItems]);
+
   function toggleIngredient(itemId: string) {
     setError('');
     setSelectedIngredientIds((prev) =>
@@ -253,6 +285,7 @@ export default function RecipeScreen() {
     }).start(() => {
       setRecipeMode(mode);
       setRecipes([]);
+      setGenerationTimeMs(null);
       setError('');
       Animated.spring(modeTransition, {
         toValue: 1,
@@ -277,6 +310,8 @@ export default function RecipeScreen() {
     setGenerating(true);
     setError('');
     setRecipes([]);
+    setGenerationTimeMs(null);
+    const generationStartedAt = Date.now();
 
     const result = await generateRecipes({
       user_id: user.id,
@@ -291,6 +326,7 @@ export default function RecipeScreen() {
       setError(result.error);
     } else if (result.recetas?.length) {
       setRecipes(result.recetas.slice(0, 3));
+      setGenerationTimeMs(Date.now() - generationStartedAt);
     } else {
       setError('No llegaron recetas desde el backend.');
     }
@@ -319,8 +355,10 @@ export default function RecipeScreen() {
     setGenerating(true);
     setError('');
     setRecipes([]);
+    setGenerationTimeMs(null);
     setPurchaseSuggestions([]);
     setSelectedPurchaseIds([]);
+    const generationStartedAt = Date.now();
 
     const result = await generateBudgetRecipe({
       user_id: user.id,
@@ -347,6 +385,9 @@ export default function RecipeScreen() {
       setPurchaseSuggestions(suggestions);
       setSelectedPurchaseIds(suggestions.map((item) => item.id));
       setRecipes(result.recetas?.slice(0, 3) || []);
+      if (result.recetas?.length) {
+        setGenerationTimeMs(Date.now() - generationStartedAt);
+      }
 
       if (!result.recetas?.length) {
         setError('No llegó receta desde el backend.');
@@ -382,15 +423,71 @@ export default function RecipeScreen() {
     router.push('/(navbarnt)/lista');
   }
 
-  async function useRecipe(recipe: GeneratedRecipe) {
-    const recipePurchases = getRecipePurchaseItems(recipe, purchaseSuggestions);
+  async function openHistory() {
+    if (!user?.id) {
+      setError('No hay usuario activo para revisar historial.');
+      return;
+    }
+
+    setHistoryVisible(true);
+    setHistoryLoading(true);
+    const result = await fetchRecipeHistory(user.id);
+    if (result.items) {
+      setHistoryItems(result.items);
+    } else if (result.error) {
+      setError(result.error);
+    }
+    setHistoryLoading(false);
+  }
+
+  async function useRecipe(recipe: GeneratedRecipe, saveToHistory = true, recipeKey = recipe.id || recipe.titulo) {
+    if (!user?.id) {
+      setError('No hay usuario activo para usar esta receta.');
+      return;
+    }
+
+    setUsingRecipeKey(recipeKey);
+    setError('');
+
+    let recipeToPrepare = recipe;
+    if (saveToHistory) {
+      const recipePurchaseCost = getRecipePurchaseCost(recipe, purchaseSuggestions);
+      const saved = await saveUsedRecipe({
+        user_id: user.id,
+        receta: recipe,
+        tipo_comida: selectedMeal,
+        prompt_usado: [selectedMeal, objective.trim(), activeRestrictions.join(', ')].filter(Boolean).join(' · '),
+        costo_estimado: recipeMode === 'presupuesto' ? recipePurchaseCost : undefined,
+      });
+
+      if (saved.error) {
+        setError(saved.error);
+        setUsingRecipeKey(null);
+        return;
+      }
+      recipeToPrepare = saved.receta || recipe;
+    }
+
+    const prepared = await prepareRecipeForUser({
+      user_id: user.id,
+      receta: recipeToPrepare,
+    });
+
+    if (prepared.error) {
+      setError(prepared.error);
+      setUsingRecipeKey(null);
+      return;
+    }
+
     await savePreparationRecipe({
-      receta: recipe,
-      compras_sugeridas: purchaseSuggestions,
-      compras_receta: recipePurchases,
+      receta: prepared.receta || recipeToPrepare,
+      compras_sugeridas: prepared.compras_sugeridas || [],
+      compras_receta: prepared.compras_receta || [],
       restricciones: activeRestrictions,
       tipo_comida: selectedMeal,
     });
+    setUsingRecipeKey(null);
+    setHistoryVisible(false);
     router.push('/(navbarnt)/preparacion');
   }
 
@@ -457,7 +554,12 @@ export default function RecipeScreen() {
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <View style={styles.hero}>
-          <Text style={styles.title}>Generar receta</Text>
+          <View style={styles.heroTitleRow}>
+            <Text style={styles.title}>Generar receta</Text>
+            <Pressable accessibilityLabel="Historial de recetas" accessibilityRole="button" onPress={openHistory} style={styles.historyButton}>
+              <MaterialCommunityIcons name="history" size={23} color="#064E2F" />
+            </Pressable>
+          </View>
           <Text style={styles.subtitle}>Elige tipo de comida e ingredientes obligatorios que la IA debe usar, como arroz o pollo.</Text>
         </View>
 
@@ -963,7 +1065,12 @@ export default function RecipeScreen() {
         {recipes.length > 0 && (
           <View style={styles.resultsWrap}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Resultados</Text>
+              <View style={styles.resultsTitleWrap}>
+                <Text style={styles.sectionTitle}>Resultados</Text>
+                {generationTimeMs !== null && (
+                  <Text style={styles.generationTimeText}>Generado en {(generationTimeMs / 1000).toFixed(1).replace('.', ',')} s</Text>
+                )}
+              </View>
               <Text style={styles.sectionMeta}>{recipes.length} receta{recipes.length === 1 ? '' : 's'}</Text>
             </View>
 
@@ -991,9 +1098,19 @@ export default function RecipeScreen() {
                       {[recipe.tiempo_preparacion, recipe.dificultad].filter(Boolean).join(' · ') || selectedMeal}
                     </Text>
                   </View>
-                  <Pressable accessibilityRole="button" onPress={() => useRecipe(recipe)} style={styles.useRecipeButton}>
-                    <MaterialCommunityIcons name="play-circle-outline" size={18} color="#FBFFF8" />
-                    <Text style={styles.useRecipeButtonText}>Usar</Text>
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={usingRecipeKey === `${recipe.titulo}-${index}`}
+                    onPress={() => useRecipe(recipe, true, `${recipe.titulo}-${index}`)}
+                    style={styles.useRecipeButton}>
+                    {usingRecipeKey === `${recipe.titulo}-${index}` ? (
+                      <ActivityIndicator size="small" color="#FBFFF8" />
+                    ) : (
+                      <>
+                        <MaterialCommunityIcons name="play-circle-outline" size={18} color="#FBFFF8" />
+                        <Text style={styles.useRecipeButtonText}>Usar</Text>
+                      </>
+                    )}
                   </Pressable>
                 </View>
 
@@ -1076,6 +1193,73 @@ export default function RecipeScreen() {
         )}
 
       </ScrollView>
+
+      <Modal animationType="slide" transparent visible={historyVisible} onRequestClose={() => setHistoryVisible(false)}>
+        <View style={styles.historyBackdrop}>
+          <View style={styles.historySheet}>
+            <View style={styles.historyHeader}>
+              <View style={styles.historyTitleWrap}>
+                <Text style={styles.historyTitle}>Historial</Text>
+                <Text style={styles.historySubtitle}>Recetas que usaste, ordenadas por fecha.</Text>
+              </View>
+              <Pressable accessibilityRole="button" onPress={() => setHistoryVisible(false)} style={styles.historyCloseButton}>
+                <MaterialCommunityIcons name="close" size={22} color="#064E2F" />
+              </Pressable>
+            </View>
+
+            {historyLoading ? (
+              <View style={styles.historyEmpty}>
+                <ActivityIndicator size="large" color="#064E2F" />
+              </View>
+            ) : historyItems.length === 0 ? (
+              <View style={styles.historyEmpty}>
+                <MaterialCommunityIcons name="history" size={38} color="#43A66C" />
+                <Text style={styles.emptyText}>Todavía no hay recetas usadas.</Text>
+              </View>
+            ) : (
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.historyList}>
+                {groupedHistory.map((group) => (
+                  <View key={group.date} style={styles.historyGroup}>
+                    <View style={styles.historyDateRow}>
+                      <Text style={styles.historyDate}>{group.date}</Text>
+                      <View style={styles.historyDateLine} />
+                    </View>
+                    {group.recipes.map((recipe) => {
+                      const key = recipe.id || recipe.titulo;
+                      return (
+                        <View key={key} style={styles.historyCard}>
+                          <View style={styles.historyRecipeCopy}>
+                            <Text style={styles.historyRecipeTitle}>{recipe.titulo}</Text>
+                            <Text style={styles.historyRecipeMeta}>
+                              {[recipe.tiempo_preparacion, recipe.costo_estimado ? formatPrice(recipe.costo_estimado) : undefined]
+                                .filter(Boolean)
+                                .join(' · ') || `${recipe.ingredientes?.length || 0} ingredientes`}
+                            </Text>
+                          </View>
+                          <Pressable
+                            accessibilityRole="button"
+                            disabled={usingRecipeKey === key}
+                            onPress={() => useRecipe(recipe, false, key)}
+                            style={styles.historyUseButton}>
+                            {usingRecipeKey === key ? (
+                              <ActivityIndicator size="small" color="#FBFFF8" />
+                            ) : (
+                              <>
+                                <MaterialCommunityIcons name="play-circle-outline" size={17} color="#FBFFF8" />
+                                <Text style={styles.historyUseButtonText}>Usar</Text>
+                              </>
+                            )}
+                          </Pressable>
+                        </View>
+                      );
+                    })}
+                  </View>
+                ))}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1284,10 +1468,151 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '900',
   },
+  generationTimeText: {
+    color: '#4F9F70',
+    fontSize: 11,
+    fontWeight: '700',
+    marginTop: 2,
+  },
   hero: {
     gap: 14,
     paddingVertical: 4,
     backgroundColor: 'transparent',
+  },
+  heroTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    backgroundColor: 'transparent',
+  },
+  historyBackdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(6, 78, 47, 0.28)',
+  },
+  historyButton: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#9FE7B9',
+    backgroundColor: '#E9FBEF',
+  },
+  historyCard: {
+    minHeight: 72,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 12,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#9FE7B9',
+    backgroundColor: '#E9FBEF',
+  },
+  historyCloseButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    backgroundColor: '#DDF8E7',
+  },
+  historyDate: {
+    color: '#064E2F',
+    fontSize: 15,
+    fontWeight: '900',
+    textTransform: 'capitalize',
+  },
+  historyDateLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#74D997',
+  },
+  historyDateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: 'transparent',
+  },
+  historyEmpty: {
+    minHeight: 220,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: 'transparent',
+  },
+  historyGroup: {
+    gap: 9,
+    backgroundColor: 'transparent',
+  },
+  historyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: 'transparent',
+  },
+  historyList: {
+    gap: 18,
+    paddingBottom: 24,
+  },
+  historyRecipeCopy: {
+    flex: 1,
+    gap: 4,
+    backgroundColor: 'transparent',
+  },
+  historyRecipeMeta: {
+    color: '#2F7A4F',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  historyRecipeTitle: {
+    color: '#064E2F',
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  historySheet: {
+    maxHeight: '82%',
+    gap: 16,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 12,
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
+    backgroundColor: '#FBFFF8',
+  },
+  historySubtitle: {
+    color: '#2F7A4F',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  historyTitle: {
+    color: '#064E2F',
+    fontSize: 24,
+    fontWeight: '900',
+  },
+  historyTitleWrap: {
+    flex: 1,
+    gap: 3,
+    backgroundColor: 'transparent',
+  },
+  historyUseButton: {
+    minHeight: 38,
+    minWidth: 78,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    borderRadius: 14,
+    backgroundColor: '#00B86B',
+  },
+  historyUseButtonText: {
+    color: '#FBFFF8',
+    fontSize: 12,
+    fontWeight: '900',
   },
   ingredientCopy: {
     flex: 1,
@@ -1900,6 +2225,10 @@ const styles = StyleSheet.create({
   },
   resultsWrap: {
     gap: 12,
+    backgroundColor: 'transparent',
+  },
+  resultsTitleWrap: {
+    flex: 1,
     backgroundColor: 'transparent',
   },
   restrictionChip: {
