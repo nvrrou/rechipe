@@ -1,15 +1,27 @@
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
+const PRODUCTION_API_URL = 'https://rechipe.onrender.com';
+
 function getApiUrl() {
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    return process.env.EXPO_PUBLIC_API_URL;
+  }
+
   const hostUri = Constants.expoConfig?.hostUri || Constants.manifest2?.extra?.expoClient?.hostUri;
   const host = typeof hostUri === 'string' ? hostUri.split(':')[0] : undefined;
 
-  if (__DEV__ && Platform.OS !== 'web' && host) {
-    return `http://${host}:8000`;
+  if (__DEV__) {
+    if (Platform.OS === 'web') {
+      return 'http://localhost:8000';
+    }
+
+    if (host) {
+      return `http://${host}:8000`;
+    }
   }
 
-  return 'http://localhost:8000';
+  return PRODUCTION_API_URL;
 }
 
 // URL base del backend FastAPI

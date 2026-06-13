@@ -92,7 +92,6 @@ def _singularize_search_text(value: str) -> str:
 
 def _score_catalog_product(product: dict, clean_name: str, clean_category: str, clean_barcode: str) -> int:
     product_name = _normalize_search_text(product.get("nombre"))
-    product_category = _normalize_search_text(product.get("categoria"))
     product_barcode = str(product.get("codigo_barra") or "").strip()
     query = _normalize_search_text(clean_name)
     singular_query = _singularize_search_text(query)
@@ -115,10 +114,17 @@ def _score_catalog_product(product: dict, clean_name: str, clean_category: str, 
         elif query in product_name:
             score += 130
 
-    if clean_category and product_category == clean_category:
-        score += 80
-
     return score
+
+
+def _score_catalog_category(product: dict, clean_category: str) -> int:
+    product_category = _normalize_search_text(product.get("categoria"))
+    return 1 if clean_category and product_category == clean_category else 0
+
+
+def _has_catalog_image(product: dict) -> bool:
+    image_url = product.get("imagen_url")
+    return isinstance(image_url, str) and bool(image_url.strip())
 
 
 def _format_item(item: dict, producto: dict | None = None) -> dict:
@@ -672,6 +678,8 @@ async def recomendar_productos_catalogo(
             candidates.values(),
             key=lambda product: (
                 -_score_catalog_product(product, clean_name, clean_category, clean_barcode),
+                not _has_catalog_image(product),
+                -_score_catalog_category(product, clean_category),
                 _normalize_search_text(product.get("nombre")),
             ),
         )
