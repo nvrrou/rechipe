@@ -17,7 +17,9 @@ export const unstable_settings = {
 };
 
 import { useAuth } from '@/contexts/AuthContext';
-import { useRouter, useSegments } from 'expo-router';
+import { Href, useRouter, useSegments } from 'expo-router';
+
+const VERIFY_EMAIL_ROUTE = '/(auth)/verificar_correo' as Href;
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({
@@ -56,7 +58,7 @@ function RootLayoutNav() {
 }
 
 function ProtectedLayout({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading, user, pendingCredentials } = useAuth();
+  const { isAuthenticated, isLoading, user, pendingCredentials, pendingVerificationEmail } = useAuth();
   const segments = useSegments();
   const router = useRouter();
 
@@ -66,6 +68,8 @@ function ProtectedLayout({ children }: { children: React.ReactNode }) {
     const inAuthGroup = segments[0] === '(auth)';
     const isLogin = segments[1] === 'login';
     const isCompletingProfile = segments[1] === 'completar_perfil';
+    const currentRoute = segments[1] as string | undefined;
+    const isVerifyingEmail = currentRoute === 'verificar_correo';
 
     const hasPendingRegistration = !!user && !isAuthenticated && !!pendingCredentials;
     const hasIncompleteProfile =
@@ -73,7 +77,13 @@ function ProtectedLayout({ children }: { children: React.ReactNode }) {
       isAuthenticated &&
       (!user.edad || !user.peso || !user.altura || !user.genero || user.objetivos.length === 0);
 
-    if (hasPendingRegistration && !isCompletingProfile) {
+    //Si hay un email pendiente de verificación, redirigir a la pantalla de verificacion
+    if (pendingVerificationEmail && hasPendingRegistration && !isVerifyingEmail) {
+      router.replace(VERIFY_EMAIL_ROUTE);
+      return;
+    }
+
+    if (hasPendingRegistration && !isCompletingProfile && !isVerifyingEmail) {
       router.replace('/(auth)/completar_perfil');
       return;
     }
@@ -91,7 +101,7 @@ function ProtectedLayout({ children }: { children: React.ReactNode }) {
     if (isAuthenticated && inAuthGroup && !hasIncompleteProfile) {
       router.replace('/(tabs)');
     }
-  }, [isAuthenticated, isLoading, pendingCredentials, router, segments, user]);
+  }, [isAuthenticated, isLoading, pendingCredentials, pendingVerificationEmail, router, segments, user]);
 
   return <>{children}</>;
 }

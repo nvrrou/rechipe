@@ -58,6 +58,15 @@ class UserLogin(pydantic.BaseModel):
     password: str
 
 
+class ResendVerification(pydantic.BaseModel):
+    email: str
+
+
+class CheckVerification(pydantic.BaseModel):
+    email: str
+    password: str
+
+
 #IA
 class RecipeRequest(BaseModel):
     user_id: str         # El ID del usuario en Supabase (UUID)

@@ -20,6 +20,12 @@ import {
   savePreparationShoppingItems,
   saveShoppingItems,
 } from '@/services/shoppingList';
+import {
+  addSyncListener,
+  queueSync,
+  startConnectionMonitor,
+  getIsConnected,
+} from '@/services/syncService';
 
 function formatPrice(value: number) {
   return `$${Math.round(value).toLocaleString('es-CL')}`;
@@ -31,7 +37,7 @@ export default function ShoppingListScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ modo?: string }>();
   const isPreparationList = params.modo === 'preparacion';
-  const [items, setItems]   = useState<ShoppingItem[]>(isPreparationList ? [] : INITIAL_SHOPPING_ITEMS);
+  const [items, setItems] = useState<ShoppingItem[]>(isPreparationList ? [] : INITIAL_SHOPPING_ITEMS);
   const [search, setSearch] = useState('');
   const [replacementRequest, setReplacementRequest] = useState('');
   const [replacementMessage, setReplacementMessage] = useState('');
@@ -40,13 +46,39 @@ export default function ShoppingListScreen() {
   const bridgePillAnim = useRef(new Animated.Value(1)).current;
   const surfaceTransition = useRef(new Animated.Value(0)).current;
 
-  // Buscar productos por nombre
+  // HU-12: Estado de conexión y sincronizacion
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error' | 'offline'>('idle');
+  const [syncMessage, setSyncMessage] = useState('');
+
+  //HU-12: Monitorear conexión e iniciar sincronizacion automatica
+  useEffect(() => {
+    const stopMonitor = startConnectionMonitor();
+    const removeSyncListener = addSyncListener((status, message) => {
+      setSyncStatus(status);
+      setSyncMessage(message || '');
+
+      //Limpiar mensaje de sincronizado despues de 3 segundos
+      if (status === 'synced') {
+        setTimeout(() => {
+          setSyncStatus('idle');
+          setSyncMessage('');
+        }, 3000);
+      }
+    });
+
+    return () => {
+      stopMonitor();
+      removeSyncListener();
+    };
+  }, []);
+
+  //Buscar productos por nombre
   const filteredItems = useMemo(
     () => items.filter(i => i.nombre.toLowerCase().includes(search.toLowerCase())),
     [items, search],
   );
 
-  // Calcular pendiente
+  //Calcular pendiente
   const totalPendiente = useMemo(
     () => items.filter(i => !i.comprado).reduce((s, i) => s + i.precio, 0),
     [items],
@@ -89,15 +121,30 @@ export default function ShoppingListScreen() {
     saveShoppingItems(nextItems);
   }
 
-  // --- acciones ---
+
+
+
+
+
+
+
+  //ACCIONES
   function toggleItem(id: string) {
     persistItems(items.map(i => i.id === id ? { ...i, comprado: !i.comprado } : i));
+    //Encolar para sincronizacion si está offline
+    if (!getIsConnected()) {
+      queueSync({ type: 'toggle_comprado', itemId: id });
+    }
   }
 
   function deleteItem(id: string) {
     persistItems(items.filter(i => i.id !== id));
+    //Encolar para sincronizacion si está offline
+    if (!getIsConnected()) {
+      queueSync({ type: 'delete_item', itemId: id });
+    }
   }
-  
+
   function requestReplacements() {
     const query = replacementRequest.trim();
     if (!query) {
@@ -158,6 +205,45 @@ export default function ShoppingListScreen() {
             </Text>
           </View>
         </View>
+
+        {/* HU-12: Banner de estado de conexión */}
+        {syncStatus !== 'idle' && (
+          <View style={[
+            styles.syncBanner,
+            syncStatus === 'offline' && styles.syncBannerOffline,
+            syncStatus === 'syncing' && styles.syncBannerSyncing,
+            syncStatus === 'synced' && styles.syncBannerSynced,
+            syncStatus === 'error' && styles.syncBannerError,
+          ]}>
+            <MaterialCommunityIcons
+              name={
+                syncStatus === 'offline' ? 'wifi-off' :
+                  syncStatus === 'syncing' ? 'cloud-sync-outline' :
+                    syncStatus === 'synced' ? 'cloud-check-outline' :
+                      'cloud-alert'
+              }
+              size={18}
+              color={
+                syncStatus === 'offline' ? '#EA580C' :
+                  syncStatus === 'syncing' ? '#0369A1' :
+                    syncStatus === 'synced' ? '#16A34A' :
+                      '#DC2626'
+              }
+            />
+            <Text style={[
+              styles.syncBannerText,
+              syncStatus === 'offline' && styles.syncBannerTextOffline,
+              syncStatus === 'syncing' && styles.syncBannerTextSyncing,
+              syncStatus === 'synced' && styles.syncBannerTextSynced,
+              syncStatus === 'error' && styles.syncBannerTextError,
+            ]}>
+              {syncStatus === 'offline' ? 'Sin conexión — Los cambios se guardan localmente' :
+                syncStatus === 'syncing' ? syncMessage || 'Sincronizando...' :
+                  syncStatus === 'synced' ? syncMessage || 'Datos sincronizados' :
+                    syncMessage || 'Error al sincronizar'}
+            </Text>
+          </View>
+        )}
 
         {isPreparationList && (
           <View
@@ -653,5 +739,58 @@ const styles = StyleSheet.create({
     color: '#064E2F',
     fontSize: 14,
     fontWeight: '900',
+  },
+
+
+
+
+
+
+
+
+
+
+  //estilos del banner de sincronizacion
+  syncBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: 12,
+  },
+  syncBannerOffline: {
+    backgroundColor: '#FFF7ED',
+    borderColor: '#FDBA74',
+  },
+  syncBannerSyncing: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#93C5FD',
+  },
+  syncBannerSynced: {
+    backgroundColor: '#F0FDF4',
+    borderColor: '#86EFAC',
+  },
+  syncBannerError: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FCA5A5',
+  },
+  syncBannerText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  syncBannerTextOffline: {
+    color: '#EA580C',
+  },
+  syncBannerTextSyncing: {
+    color: '#0369A1',
+  },
+  syncBannerTextSynced: {
+    color: '#16A34A',
+  },
+  syncBannerTextError: {
+    color: '#DC2626',
   },
 });
