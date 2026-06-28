@@ -3,6 +3,7 @@ import { BarcodeScanningResult, CameraView, useCameraPermissions } from 'expo-ca
 import { LinearGradient } from 'expo-linear-gradient';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Animated, Easing, Image, Modal, Pressable, ScrollView, StyleSheet, TextInput } from 'react-native';
+import WheelPickerExpo from 'react-native-wheel-picker-expo';
 
 import { Text, View } from '@/components/Themed';
 import { useAuth } from '@/contexts/AuthContext';
@@ -30,7 +31,7 @@ import {
   scheduleExpiryNotifications,
 } from '@/services/notificaciones';
 
-type ActiveView = 'categories' | 'category' | 'add' | 'search' | 'edit';
+type ActiveView = 'categories' | 'category' | 'add' | 'search' | 'edit' | 'nutrition';
 type FormMode = 'add' | 'edit';
 
 type CategoryDef = {
@@ -191,6 +192,24 @@ async function hydratePricesByCatalogId(items: DespensaItemData[]) {
 function cleanText(value: string) {
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function formatQuantityValue(value: number) {
+  return Number.isInteger(value) ? String(value) : String(value).replace('.', ',');
+}
+
+function getQuantityPickerValues(unit?: string) {
+  const normalizedUnit = (unit || 'unidad').trim().toLowerCase();
+  if (['g', 'ml'].includes(normalizedUnit)) {
+    return Array.from({ length: 40 }, (_, index) => (index + 1) * 50);
+  }
+  if (['kg', 'l'].includes(normalizedUnit)) {
+    return Array.from({ length: 40 }, (_, index) => Number(((index + 1) * 0.25).toFixed(2)));
+  }
+  if (['taza', 'cda'].includes(normalizedUnit)) {
+    return Array.from({ length: 24 }, (_, index) => Number(((index + 1) * 0.5).toFixed(1)));
+  }
+  return Array.from({ length: 30 }, (_, index) => index + 1);
 }
 
 function formFromItem(item: DespensaItemData): IngredientFormState {
@@ -410,6 +429,10 @@ export default function FridgeScreen() {
   const [authenticatingProductId, setAuthenticatingProductId] = useState<string | null>(null);
   const [authPromptItem, setAuthPromptItem] = useState<DespensaItemData | null>(null);
   const [authMessage, setAuthMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [quantityPromptItem, setQuantityPromptItem] = useState<DespensaItemData | null>(null);
+  const [quantityInput, setQuantityInput] = useState('');
+  const [quantityError, setQuantityError] = useState('');
+  const [updatingQuantityId, setUpdatingQuantityId] = useState<string | null>(null);
   const [catalogHelpVisible, setCatalogHelpVisible] = useState(false);
   const [pendingSaveMode, setPendingSaveMode] = useState<FormMode | null>(null);
   const [includeImageInGeneration, setIncludeImageInGeneration] = useState(false);
@@ -456,6 +479,12 @@ export default function FridgeScreen() {
     [categories, selectedCategoryId]
   );
 
+  const nutritionHeaderCategory = useMemo(() => {
+    if (!selectedItem) return selectedCategory;
+    const categoryId = slugifyCategory(selectedItem.categoria || 'otros');
+    return categories.find((category) => category.id === categoryId) ?? selectedCategory;
+  }, [categories, selectedCategory, selectedItem]);
+
   const itemsByCategory = useMemo(() => {
     const grouped: Record<string, DespensaItemData[]> = {};
     for (const category of categories) grouped[category.id] = [];
@@ -466,6 +495,22 @@ export default function FridgeScreen() {
     }
     return grouped;
   }, [categories, items]);
+
+  const quantityPickerValues = useMemo(
+    () => getQuantityPickerValues(quantityPromptItem?.unidad),
+    [quantityPromptItem?.unidad]
+  );
+
+  const quantityPickerItems = useMemo(
+    () => quantityPickerValues.map((value) => ({ label: formatQuantityValue(value), value })),
+    [quantityPickerValues]
+  );
+
+  const quantityPickerIndex = useMemo(() => {
+    const parsed = parseInputNumber(quantityInput);
+    const index = quantityPickerValues.findIndex((value) => value === parsed);
+    return index >= 0 ? index : 0;
+  }, [quantityInput, quantityPickerValues]);
 
   const loadDespensa = useCallback(async () => {
     if (!user?.id) return;
@@ -717,6 +762,20 @@ export default function FridgeScreen() {
     setActiveView('edit');
   }
 
+  function openNutritionView(item: DespensaItemData) {
+    setSelectedItem(item);
+    setForm(formFromItem(item));
+    setFormError('');
+    setDropdownOpen(false);
+    setUnitDropdownOpen(false);
+    setPendingSaveMode(null);
+    setIncludeImageInGeneration(false);
+    setCategorySuggestion(null);
+    setPendingCategoryOverride(undefined);
+    setCatalogHelpVisible(false);
+    setActiveView('nutrition');
+  }
+
   function closeToCategories() {
     setActiveView('categories');
     setSearchQuery('');
@@ -922,6 +981,45 @@ export default function FridgeScreen() {
     await continueSaveIngredient(mode, user.id, categoryOverride);
   }
 
+  async function saveNutritionDetails() {
+    if (!selectedItem || saving) return;
+
+    const parsedQuantity = parseInputNumber(form.cantidad);
+    if (parsedQuantity === undefined) {
+      setFormError('Agrega una cantidad valida.');
+      scrollToFirstFormPosition(['nutritionDetails']);
+      return;
+    }
+
+    setSaving(true);
+    setFormError('');
+    const payload: DespensaUpdateData = {
+      cantidad: parsedQuantity,
+      unidad: cleanText(form.unidad),
+      energia_kcal: parseInputNumber(form.energia_kcal),
+      proteinas_g: parseInputNumber(form.proteinas_g),
+      carbohidratos_g: parseInputNumber(form.carbohidratos_g),
+      grasas_g: parseInputNumber(form.grasas_g),
+      fibra_g: parseInputNumber(form.fibra_g),
+      sodio_mg: parseInputNumber(form.sodio_mg),
+      azucar_g: parseInputNumber(form.azucar_g),
+    };
+
+    const result = await actualizarIngrediente(selectedItem.id, payload);
+    setSaving(false);
+
+    if (result.error) {
+      setFormError(result.error);
+      return;
+    }
+
+    setSelectedItem(result);
+    setItems((prev) => prev.map((item) => (item.id === result.id ? result : item)));
+    setSearchResults((prev) => prev.map((item) => (item.id === result.id ? result : item)));
+    setSelectedCategoryId(slugifyCategory(result.categoria));
+    setActiveView('category');
+  }
+
   async function resolveCategorySuggestion(useSuggested: boolean) {
     if (!user?.id || !categorySuggestion) return;
     const suggestion = categorySuggestion;
@@ -983,6 +1081,45 @@ export default function FridgeScreen() {
     setAuthMessage(null);
   }
 
+  function openQuantityPrompt(item: DespensaItemData) {
+    const defaultValue = getQuantityPickerValues(item.unidad)[0] || 1;
+    setQuantityPromptItem(item);
+    setQuantityInput(formatQuantityValue(defaultValue));
+    setQuantityError('');
+    setFormError('');
+  }
+
+  function closeQuantityPrompt() {
+    setQuantityPromptItem(null);
+    setQuantityInput('');
+    setQuantityError('');
+  }
+
+  async function confirmAddQuantity() {
+    if (!quantityPromptItem || updatingQuantityId) return;
+    const amountToAdd = parseInputNumber(quantityInput);
+    if (amountToAdd === undefined || amountToAdd <= 0) {
+      setQuantityError('Ingresa una cantidad mayor a 0.');
+      return;
+    }
+
+    const currentAmount = Number(quantityPromptItem.cantidad || 0);
+    const nextAmount = Number((currentAmount + amountToAdd).toFixed(3));
+    setUpdatingQuantityId(quantityPromptItem.id);
+    const result = await actualizarIngrediente(quantityPromptItem.id, { cantidad: nextAmount });
+    setUpdatingQuantityId(null);
+
+    if (result.error) {
+      setQuantityError(result.error);
+      return;
+    }
+
+    setItems((prev) => prev.map((item) => (item.id === result.id ? result : item)));
+    setSearchResults((prev) => prev.map((item) => (item.id === result.id ? result : item)));
+    if (selectedItem?.id === result.id) setSelectedItem(result);
+    closeQuantityPrompt();
+  }
+
   async function handleAuthenticateProduct(item = authPromptItem || selectedItem) {
     if (!user?.id || !item?.producto_id || authenticatingProductId) return;
     setAuthMessage(null);
@@ -1041,7 +1178,7 @@ export default function FridgeScreen() {
       <Pressable
         accessibilityRole="button"
         key={item.id}
-        onPress={() => openEditView(item)}
+        onPress={() => openNutritionView(item)}
         style={[
           styles.ingredientRow,
           expiryStatus === 'expiring' && styles.ingredientRowExpiring,
@@ -1094,6 +1231,21 @@ export default function FridgeScreen() {
           )}
         </View>
         <View style={styles.ingredientActions}>
+          <Pressable
+            accessibilityLabel="Agregar cantidad"
+            accessibilityRole="button"
+            disabled={updatingQuantityId === item.id}
+            onPress={(event) => {
+              event.stopPropagation();
+              openQuantityPrompt(item);
+            }}
+            style={styles.ingredientQuantityButton}>
+            {updatingQuantityId === item.id ? (
+              <ActivityIndicator size="small" color="#064E2F" />
+            ) : (
+              <MaterialCommunityIcons name="plus" size={21} color="#064E2F" />
+            )}
+          </Pressable>
           <Pressable
             accessibilityLabel="Editar ingrediente"
             accessibilityRole="button"
@@ -1221,6 +1373,131 @@ export default function FridgeScreen() {
           </Pressable>
         )}
       </LinearGradient>
+    );
+  }
+
+  function renderNutritionDetails() {
+    if (!selectedItem) return null;
+
+    const imageUri = selectedItem.imagen_url || getPlaceholderUri(selectedItem.nombre_producto);
+    const macroSummary = [
+      { key: 'energia_kcal' as const, label: 'kcal', accent: '#00B86B', unit: '' },
+      { key: 'proteinas_g' as const, label: 'Proteina', accent: '#2563EB', unit: 'g' },
+      { key: 'carbohidratos_g' as const, label: 'Carbs', accent: '#F59E0B', unit: 'g' },
+      { key: 'grasas_g' as const, label: 'Grasa', accent: '#EC4899', unit: 'g' },
+    ];
+    const secondaryNutrients = [
+      { key: 'fibra_g' as const, label: 'Fibra', unit: 'g' },
+      { key: 'sodio_mg' as const, label: 'Sodio', unit: 'mg' },
+      { key: 'azucar_g' as const, label: 'Azucar', unit: 'g' },
+    ];
+
+    return (
+      <View
+        onLayout={(event) => registerFormPosition('nutritionDetails', event.nativeEvent.layout.y)}
+        style={styles.nutritionDetailScreen}>
+        {formError !== '' && (
+          <View style={styles.formErrorPanel}>
+            <MaterialCommunityIcons name="alert-circle-outline" size={20} color="#FF8A8A" />
+            <Text style={styles.formErrorText}>{formError}</Text>
+          </View>
+        )}
+
+        <View style={styles.nutritionDetailHero}>
+          <Image source={{ uri: imageUri }} style={styles.nutritionDetailImage} />
+        </View>
+
+        <View style={styles.macroSummaryGrid}>
+          {macroSummary.map((macro) => (
+            <View key={macro.key} style={[styles.macroSummaryItem, { borderColor: macro.accent + '55' }]}>
+              <View style={styles.macroSummaryValueRow}>
+                <TextInput
+                  keyboardType="decimal-pad"
+                  onChangeText={(value) => updateForm(macro.key, value)}
+                  placeholder="0"
+                  placeholderTextColor="#6B8F78"
+                  style={[styles.macroSummaryInput, { color: macro.accent }]}
+                  value={form[macro.key]}
+                />
+                {macro.unit ? <Text style={styles.macroSummaryUnit}>{macro.unit}</Text> : null}
+              </View>
+              <Text style={styles.macroSummaryLabel}>{macro.label}</Text>
+            </View>
+          ))}
+        </View>
+
+        <View style={styles.nutritionSoftSection}>
+          <Text style={styles.formSectionTitle}>Cantidad</Text>
+          <View style={styles.twoColumn}>
+            <Field
+              keyboardType="decimal-pad"
+              label="Cantidad"
+              onChangeText={(value) => updateForm('cantidad', value)}
+              placeholder="1,5"
+              required
+              value={form.cantidad}
+            />
+            <View style={styles.field}>
+              <Text style={styles.fieldLabel}>Unidad</Text>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setUnitDropdownOpen((prev) => !prev)}
+                style={styles.dropdownButton}>
+                <View style={styles.dropdownLeft}>
+                  <View style={[styles.dropdownDot, { backgroundColor: '#00B86B' }]} />
+                  <Text style={styles.dropdownText}>{form.unidad || 'Seleccionar unidad'}</Text>
+                </View>
+                <MaterialCommunityIcons name={unitDropdownOpen ? 'chevron-up' : 'chevron-down'} size={22} color="#064E2F" />
+              </Pressable>
+
+              {unitDropdownOpen && (
+                <View style={styles.dropdownMenu}>
+                  {UNIT_OPTIONS.map((unit) => (
+                    <Pressable
+                      accessibilityRole="button"
+                      key={unit}
+                      onPress={() => {
+                        updateForm('unidad', unit);
+                        setUnitDropdownOpen(false);
+                      }}
+                      style={[styles.dropdownOption, form.unidad === unit && styles.dropdownOptionSelected]}>
+                      <MaterialCommunityIcons name="scale-balance" size={20} color="#064E2F" />
+                      <Text style={styles.dropdownOptionText}>{unit}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.nutritionSoftSection}>
+          <Text style={styles.formSectionTitle}>Detalles nutricionales</Text>
+          <Text style={styles.nutritionDetailHint}>Valores aproximados por 100 g o 100 ml.</Text>
+          <View style={styles.nutritionGrid}>
+            {secondaryNutrients.map((field) => (
+              <Field
+                keyboardType="decimal-pad"
+                key={field.key}
+                label={`${field.label} (${field.unit})`}
+                onChangeText={(value) => updateForm(field.key, value)}
+                placeholder="0"
+                value={form[field.key]}
+              />
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.formActions}>
+          <Pressable accessibilityRole="button" disabled={saving} onPress={saveNutritionDetails} style={styles.primaryAction}>
+            {saving ? (
+              <ActivityIndicator size="small" color="#FBFFF8" />
+            ) : (
+              <Text style={styles.primaryActionText}>Guardar</Text>
+            )}
+          </Pressable>
+        </View>
+      </View>
     );
   }
 
@@ -1583,6 +1860,14 @@ export default function FridgeScreen() {
 
   return (
     <View style={styles.container}>
+      {activeView === 'nutrition' && (
+        <LinearGradient
+          colors={['#E7FFF0', '#FFF8E7', '#F3FAFF']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.nutritionBackground}
+        />
+      )}
       <ScrollView
         ref={scrollRef}
         contentContainerStyle={styles.content}
@@ -1595,13 +1880,20 @@ export default function FridgeScreen() {
                 <MaterialCommunityIcons name="chevron-left" size={24} color="#064E2F" />
               </Pressable>
             )}
+            {activeView === 'nutrition' && selectedItem && (
+              <View style={[styles.titleCategoryIcon, { backgroundColor: nutritionHeaderCategory.color + '33' }]}>
+                <MaterialCommunityIcons name={nutritionHeaderCategory.icon} size={22} color={nutritionHeaderCategory.color} />
+              </View>
+            )}
             <Text style={styles.title}>
               {activeView === 'category'
                 ? categoryDisplay(selectedCategory)
                 : activeView === 'add'
-                  ? 'Agregar'
-                  : activeView === 'edit'
-                    ? 'Editar'
+                ? 'Agregar'
+                : activeView === 'edit'
+                  ? 'Editar'
+                  : activeView === 'nutrition'
+                    ? selectedItem?.nombre_producto || 'Nutrición'
                     : activeView === 'search'
                       ? 'Buscar'
                       : 'Tu refri'}
@@ -1612,8 +1904,10 @@ export default function FridgeScreen() {
               ? 'Registra un ingrediente con datos de despensa y nutricion.'
               : activeView === 'edit'
                 ? 'Actualiza cantidad, categoria y características del ingrediente.'
+                : activeView === 'nutrition'
+                  ? ``
                 : activeView === 'search'
-                  ? 'Busca ingredientes y abre su pantalla de edición.'
+                  ? 'Busca ingredientes y abre su ficha nutricional.'
                   : 'Organiza ingredientes por categoria y características.'}
           </Text>
         </View>
@@ -1723,6 +2017,7 @@ export default function FridgeScreen() {
 
         {activeView === 'add' && renderIngredientForm('add')}
         {activeView === 'edit' && renderIngredientForm('edit')}
+        {activeView === 'nutrition' && renderNutritionDetails()}
 
         {activeView === 'search' && (
           <View style={styles.detailPanel}>
@@ -1798,6 +2093,87 @@ export default function FridgeScreen() {
                 </Pressable>
               )}
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal animationType="slide" transparent visible={!!quantityPromptItem} onRequestClose={closeQuantityPrompt}>
+        <View style={styles.quantityModalBackdrop}>
+          <View style={styles.quantityModalSheet}>
+            {quantityPromptItem && (
+              <>
+                <View style={styles.quantityModalHeader}>
+                  <Text style={styles.quantityModalTitle}>Añadir producto</Text>
+                  <Pressable accessibilityRole="button" onPress={closeQuantityPrompt} style={styles.quantityModalClose}>
+                    <MaterialCommunityIcons name="close" size={22} color="#064E2F" />
+                  </Pressable>
+                </View>
+
+                <Image
+                  source={{ uri: quantityPromptItem.imagen_url || getPlaceholderUri(quantityPromptItem.nombre_producto) }}
+                  style={styles.quantityProductImage}
+                />
+                <Text style={styles.quantityProductName} numberOfLines={1}>
+                  {quantityPromptItem.nombre_producto}
+                </Text>
+                <Text style={styles.quantityPromptText}>
+                  ¿Cuántos {quantityPromptItem.unidad || 'unidades'} quieres añadir?
+                </Text>
+
+                <TextInput
+                  keyboardType="decimal-pad"
+                  onChangeText={(value) => {
+                    setQuantityInput(value);
+                    setQuantityError('');
+                  }}
+                  placeholder="0"
+                  placeholderTextColor="#43A66C"
+                  style={styles.quantityInput}
+                  value={quantityInput}
+                />
+
+                <View style={styles.quantityPickerWrap}>
+                  <WheelPickerExpo
+                    key={`${quantityPromptItem.id}-${quantityPromptItem.unidad || 'unidad'}-${quantityPickerItems.length}`}
+                    backgroundColor="#FBFFF8"
+                    height={190}
+                    haptics
+                    initialSelectedIndex={quantityPickerIndex}
+                    items={quantityPickerItems}
+                    onChange={({ item }) => {
+                      if (typeof item.value === 'number') {
+                        setQuantityInput(formatQuantityValue(item.value));
+                        setQuantityError('');
+                      }
+                    }}
+                    selectedStyle={{ borderColor: '#00B86B', borderWidth: 1 }}
+                    width="100%"
+                  />
+                </View>
+
+                <Text style={styles.quantityCurrentText}>
+                  Actual: {formatQuantityValue(Number(quantityPromptItem.cantidad || 0))} {quantityPromptItem.unidad || 'unidades'}
+                </Text>
+                {quantityError ? <Text style={styles.quantityErrorText}>{quantityError}</Text> : null}
+
+                <View style={styles.quantityModalActions}>
+                  <Pressable accessibilityRole="button" onPress={closeQuantityPrompt} style={styles.quantitySecondaryButton}>
+                    <Text style={styles.quantitySecondaryButtonText}>Cancelar</Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={updatingQuantityId === quantityPromptItem.id}
+                    onPress={confirmAddQuantity}
+                    style={styles.quantityPrimaryButton}>
+                    {updatingQuantityId === quantityPromptItem.id ? (
+                      <ActivityIndicator size="small" color="#FBFFF8" />
+                    ) : (
+                      <Text style={styles.quantityPrimaryButtonText}>Añadir</Text>
+                    )}
+                  </Pressable>
+                </View>
+              </>
+            )}
           </View>
         </View>
       </Modal>
@@ -2592,6 +2968,125 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '900',
   },
+  quantityCurrentText: {
+    color: '#2F7A4F',
+    fontSize: 12,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  quantityErrorText: {
+    color: '#B91C1C',
+    fontSize: 13,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  quantityInput: {
+    width: 150,
+    minHeight: 58,
+    alignSelf: 'center',
+    color: '#064E2F',
+    fontSize: 28,
+    fontWeight: '900',
+    textAlign: 'center',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#9FE7B9',
+    backgroundColor: '#E9FBEF',
+  },
+  quantityModalActions: {
+    flexDirection: 'row',
+    gap: 10,
+    backgroundColor: 'transparent',
+  },
+  quantityModalBackdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(6, 78, 47, 0.28)',
+  },
+  quantityModalClose: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    backgroundColor: '#DDF8E7',
+  },
+  quantityModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'transparent',
+  },
+  quantityModalSheet: {
+    gap: 12,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 18,
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
+    backgroundColor: '#FBFFF8',
+  },
+  quantityModalTitle: {
+    color: '#064E2F',
+    fontSize: 22,
+    fontWeight: '900',
+  },
+  quantityPickerWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#9FE7B9',
+    overflow: 'hidden',
+    backgroundColor: '#FBFFF8',
+  },
+  quantityPrimaryButton: {
+    minHeight: 48,
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 15,
+    backgroundColor: '#00B86B',
+  },
+  quantityPrimaryButtonText: {
+    color: '#FBFFF8',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  quantityProductImage: {
+    width: 112,
+    height: 112,
+    alignSelf: 'center',
+    borderRadius: 24,
+    backgroundColor: '#9FE7B9',
+  },
+  quantityProductName: {
+    color: '#064E2F',
+    fontSize: 17,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  quantityPromptText: {
+    color: '#2F7A4F',
+    fontSize: 15,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  quantitySecondaryButton: {
+    minHeight: 48,
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: '#9FE7B9',
+    backgroundColor: '#E9FBEF',
+  },
+  quantitySecondaryButtonText: {
+    color: '#064E2F',
+    fontSize: 14,
+    fontWeight: '900',
+  },
   hero: {
     gap: 14,
     paddingVertical: 4,
@@ -2628,6 +3123,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#9FE7B9',
     backgroundColor: '#DDF8E7',
+  },
+  ingredientQuantityButton: {
+    width: 34,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#74D997',
+    backgroundColor: '#BDEFCF',
   },
   ingredientInfo: {
     flex: 1,
@@ -2734,6 +3239,131 @@ const styles = StyleSheet.create({
   nutritionGrid: {
     gap: 10,
     backgroundColor: 'transparent',
+  },
+  nutritionBackground: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  nutritionCategoryLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: 'transparent',
+  },
+  nutritionDetailHero: {
+    alignItems: 'center',
+    gap: 14,
+    backgroundColor: 'transparent',
+  },
+  nutritionDetailHint: {
+    color: '#2F7A4F',
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: -4,
+  },
+  nutritionDetailImage: {
+    width: 136,
+    height: 136,
+    borderRadius: 34,
+    borderWidth: 4,
+    borderColor: '#FBFFF8',
+    backgroundColor: '#9FE7B9',
+    shadowColor: '#00B86B',
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.18,
+    shadowRadius: 24,
+    elevation: 3,
+  },
+  nutritionDetailScreen: {
+    gap: 18,
+    marginHorizontal: -20,
+    marginTop: -4,
+    paddingHorizontal: 20,
+    paddingTop: 22,
+    paddingBottom: 24,
+    borderRadius: 0,
+    backgroundColor: 'transparent',
+  },
+  nutritionDetailSubtitle: {
+    color: '#2F7A4F',
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  nutritionDetailTitle: {
+    color: '#064E2F',
+    fontSize: 24,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  nutritionDetailTitleWrap: {
+    gap: 4,
+    backgroundColor: 'transparent',
+  },
+  macroSummaryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    backgroundColor: 'transparent',
+  },
+  macroSummaryItem: {
+    flexBasis: '48%',
+    flexGrow: 1,
+    minHeight: 112,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+    borderRadius: 24,
+    backgroundColor: 'rgba(251, 255, 248, 0.82)',
+    borderWidth: 1,
+    shadowColor: '#74D997',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    elevation: 1,
+  },
+  macroSummaryInput: {
+    width: 98,
+    minHeight: 48,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    fontSize: 34,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  macroSummaryLabel: {
+    color: '#2F7A4F',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  macroSummaryValue: {
+    color: '#064E2F',
+    fontSize: 20,
+    fontWeight: '900',
+  },
+  macroSummaryUnit: {
+    color: '#6B8F78',
+    fontSize: 14,
+    fontWeight: '900',
+    position: 'absolute',
+    left: '50%',
+    marginLeft: 42,
+    top: 13,
+  },
+  macroSummaryValueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    minHeight: 52,
+    gap: 4,
+    backgroundColor: 'transparent',
+  },
+  nutritionSoftSection: {
+    gap: 12,
+    padding: 14,
+    borderRadius: 24,
+    backgroundColor: 'rgba(251, 255, 248, 0.68)',
   },
   nutritionPill: {
     color: '#064E2F',
@@ -3128,6 +3758,14 @@ const styles = StyleSheet.create({
     fontSize: 34,
     fontWeight: '900',
     lineHeight: 38,
+  },
+  titleCategoryIcon: {
+    width: 42,
+    height: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 16,
+    backgroundColor: '#E9FBEF',
   },
   titleRow: {
     flexDirection: 'row',
