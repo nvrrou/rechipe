@@ -52,10 +52,27 @@ def _app_role(role: str | None) -> str:
 
 
 def _db_role_for_table(table: str, role: str) -> str:
-    clean_role = _app_role(role)
-    if table == "grupo_miembros":
-        return "admin" if clean_role in ("admin", "editor") else "miembro"
-    return clean_role
+    return _app_role(role)
+
+
+def _status_from_supabase(response: httpx.Response) -> int:
+    return response.status_code if 400 <= response.status_code < 500 else 500
+
+
+def _role_schema_hint(detail: str) -> str | None:
+    normalized = detail.lower()
+    role_error = "rol" in normalized and (
+        "check constraint" in normalized
+        or "violates check" in normalized
+        or "23514" in normalized
+        or "invalid input value" in normalized
+    )
+    if not role_error:
+        return None
+    return (
+        "La base de datos todavia no acepta los roles editor/espectador. "
+        "Ejecuta backend/sql/social_groups_roles.sql en Supabase y vuelve a intentar."
+    )
 
 
 def _can_edit(role: str | None) -> bool:
@@ -254,7 +271,9 @@ async def _update_member_role(
         json={"rol": _db_role_for_table(table, role)},
     )
     if response.status_code not in (200, 204):
-        raise HTTPException(status_code=500, detail=f"No se pudo actualizar rol. Detalle: {response.text}")
+        schema_hint = _role_schema_hint(response.text)
+        detail = schema_hint or f"No se pudo actualizar rol. Detalle: {response.text}"
+        raise HTTPException(status_code=_status_from_supabase(response), detail=detail)
 
 
 async def _update_member_accepted(
@@ -269,13 +288,19 @@ async def _update_member_accepted(
         json={"accepted": accepted},
     )
     if response.status_code not in (200, 204):
-        raise HTTPException(status_code=500, detail=f"No se pudo actualizar solicitud. Detalle: {response.text}")
+        raise HTTPException(
+            status_code=_status_from_supabase(response),
+            detail=f"No se pudo actualizar solicitud. Detalle: {response.text}",
+        )
 
 
 async def _delete_member(client: httpx.AsyncClient, table: str, group_id: str, user_id: str):
     response = await client.delete(f"/{table}?grupo_id=eq.{group_id}&user_id=eq.{user_id}")
     if response.status_code not in (200, 204):
-        raise HTTPException(status_code=500, detail=f"No se pudo expulsar miembro. Detalle: {response.text}")
+        raise HTTPException(
+            status_code=_status_from_supabase(response),
+            detail=f"No se pudo expulsar miembro. Detalle: {response.text}",
+        )
 
 
 async def _accepted_admin_count(client: httpx.AsyncClient, group_id: str) -> int:
@@ -611,16 +636,16 @@ async def cambiar_rol_miembro(
         if clean_role not in GROUP_ROLES:
             raise HTTPException(status_code=400, detail="Rol invalido")
 
-        table, actor_member = await _require_member(client, group_id, request.actor_user_id)
+        _, actor_member = await _require_member(client, group_id, request.actor_user_id)
         if not _can_manage(actor_member["rol"]):
             raise HTTPException(status_code=403, detail="Solo admins pueden cambiar roles")
 
-        _, target_member = await _require_member(client, group_id, member_user_id)
+        target_table, target_member = await _require_member(client, group_id, member_user_id)
         if target_member["rol"] == "admin" and clean_role != "admin":
             admin_count = await _accepted_admin_count(client, group_id)
             if admin_count <= 1:
                 raise HTTPException(status_code=400, detail="El grupo debe mantener al menos un admin")
-        await _update_member_role(client, table, group_id, member_user_id, request.rol)
+        await _update_member_role(client, target_table, group_id, member_user_id, clean_role)
         return {"ok": True, "rol": _app_role(request.rol)}
     except HTTPException:
         raise
@@ -636,12 +661,12 @@ async def cambiar_aceptacion_miembro(
     client: httpx.AsyncClient = Depends(get_supabase_client),
 ):
     try:
-        table, actor_member = await _require_member(client, group_id, request.actor_user_id)
+        _, actor_member = await _require_member(client, group_id, request.actor_user_id)
         if not _can_manage(actor_member["rol"]):
             raise HTTPException(status_code=403, detail="Solo admins pueden revisar solicitudes")
 
-        await _require_member(client, group_id, member_user_id, require_accepted=False)
-        await _update_member_accepted(client, table, group_id, member_user_id, request.accepted)
+        target_table, _ = await _require_member(client, group_id, member_user_id, require_accepted=False)
+        await _update_member_accepted(client, target_table, group_id, member_user_id, request.accepted)
         return {"ok": True, "accepted": request.accepted}
     except HTTPException:
         raise
@@ -657,19 +682,19 @@ async def expulsar_miembro(
     client: httpx.AsyncClient = Depends(get_supabase_client),
 ):
     try:
-        table, actor_member = await _require_member(client, group_id, actor_user_id)
+        _, actor_member = await _require_member(client, group_id, actor_user_id)
         if not _can_manage(actor_member["rol"]):
             raise HTTPException(status_code=403, detail="Solo admins pueden expulsar miembros")
         if actor_user_id == member_user_id:
             raise HTTPException(status_code=400, detail="No puedes expulsarte a ti mismo")
 
-        _, target_member = await _require_member(client, group_id, member_user_id, require_accepted=False)
+        target_table, target_member = await _require_member(client, group_id, member_user_id, require_accepted=False)
         if target_member["rol"] == "admin" and target_member["accepted"]:
             admin_count = await _accepted_admin_count(client, group_id)
             if admin_count <= 1:
                 raise HTTPException(status_code=400, detail="El grupo debe mantener al menos un admin")
 
-        await _delete_member(client, table, group_id, member_user_id)
+        await _delete_member(client, target_table, group_id, member_user_id)
         return {"ok": True}
     except HTTPException:
         raise

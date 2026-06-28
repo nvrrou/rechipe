@@ -1,12 +1,13 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, TextInput } from 'react-native';
 
 import { Text, View } from '@/components/Themed';
 import { useAuth } from '@/contexts/AuthContext';
 import { DespensaItemData, fetchDespensa } from '@/services/despensa';
-import { BudgetPurchaseSuggestion, GeneratedRecipe } from '@/services/recipes';
+import { savePreparationRecipe } from '@/services/preparation';
+import { BudgetPurchaseSuggestion, GeneratedRecipe, prepareRecipeForUser } from '@/services/recipes';
 import {
   GroupMember,
   SocialGroup,
@@ -82,6 +83,7 @@ function itemSubtitle(item: DespensaItemData) {
 
 export default function ProgressScreen() {
   const { user } = useAuth();
+  const router = useRouter();
   const [groups, setGroups] = useState<SocialGroup[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [activeGroup, setActiveGroup] = useState<SocialGroup | null>(null);
@@ -107,6 +109,8 @@ export default function ProgressScreen() {
   const [purchaseSuggestions, setPurchaseSuggestions] = useState<BudgetPurchaseSuggestion[]>([]);
   const [historyItems, setHistoryItems] = useState<GeneratedRecipe[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [usingRecipeKey, setUsingRecipeKey] = useState<string | null>(null);
   const [roleMenuMember, setRoleMenuMember] = useState<GroupMember | null>(null);
   const [statusMessage, setStatusMessage] = useState('');
   const [error, setError] = useState('');
@@ -189,12 +193,14 @@ export default function ProgressScreen() {
 
   const loadHistory = useCallback(async () => {
     if (!user?.id || !selectedGroupId) return;
+    setHistoryLoading(true);
     const result = await fetchGroupRecipeHistory(selectedGroupId, user.id);
     if (result.items) {
       setHistoryItems(result.items);
     } else if (result.error) {
       setError(result.error);
     }
+    setHistoryLoading(false);
   }, [selectedGroupId, user?.id]);
 
   useEffect(() => {
@@ -291,7 +297,13 @@ export default function ProgressScreen() {
     setRecipes([]);
     setPurchaseSuggestions([]);
     setHistoryOpen(false);
+    setUsingRecipeKey(null);
     setError('');
+  }
+
+  async function openHistory() {
+    setHistoryOpen(true);
+    await loadHistory();
   }
 
   function openRoleMenu(member: GroupMember) {
@@ -336,6 +348,37 @@ export default function ProgressScreen() {
     }
     setStatusMessage(`${member.nombre} fue expulsado del grupo.`);
     await loadGroupDetail();
+  }
+
+  async function prepareRecipe(recipe: GeneratedRecipe) {
+    if (!user?.id) return;
+    const key = recipe.id || recipe.titulo;
+    setUsingRecipeKey(key);
+    setError('');
+    setStatusMessage('');
+
+    const prepared = await prepareRecipeForUser({
+      user_id: user.id,
+      receta: recipe,
+    });
+
+    if (prepared.error) {
+      setError(prepared.error);
+      setUsingRecipeKey(null);
+      return;
+    }
+
+    await savePreparationRecipe({
+      receta: prepared.receta || recipe,
+      compras_sugeridas: prepared.compras_sugeridas || purchaseSuggestions,
+      compras_receta: prepared.compras_receta || [],
+      restricciones: activeRestrictions,
+      tipo_comida: selectedMeal,
+    });
+
+    setUsingRecipeKey(null);
+    setHistoryOpen(false);
+    router.push('/(navbarnt)/preparacion');
   }
 
   async function handleGeneratePack() {
@@ -607,15 +650,11 @@ export default function ProgressScreen() {
                   <Text style={styles.panelTitle}>Generador grupal</Text>
                   <Text style={styles.panelSubtitle}>Busca compatibilidades y adapta cada plato por persona.</Text>
                 </View>
-                <Pressable accessibilityRole="button" onPress={() => setHistoryOpen((current) => !current)} style={styles.historyButton}>
+                <Pressable accessibilityRole="button" onPress={openHistory} style={styles.historyButton}>
                   <MaterialCommunityIcons name="history" size={20} color="#064E2F" />
                   <Text style={styles.historyButtonText}>{historyItems.length}</Text>
                 </Pressable>
               </View>
-
-              {historyOpen && (
-                <RecipeList title="Historial grupal" items={historyItems} emptyText="Todavia no hay recetas grupales." compact />
-              )}
 
               <View style={styles.mealGrid}>
                 {MEAL_TYPES.map((meal) => {
@@ -776,9 +815,48 @@ export default function ProgressScreen() {
         )}
 
         {recipes.length > 0 && (
-          <RecipeList title="Pack generado" items={recipes} />
+          <RecipeList
+            title="Pack generado"
+            items={recipes}
+            onPrepare={prepareRecipe}
+            usingRecipeKey={usingRecipeKey}
+          />
         )}
       </ScrollView>
+
+      <Modal animationType="slide" transparent visible={historyOpen} onRequestClose={() => setHistoryOpen(false)}>
+        <View style={styles.historyBackdrop}>
+          <Pressable style={styles.historyDismiss} onPress={() => setHistoryOpen(false)} />
+          <View style={styles.historySheet}>
+            <View style={styles.historyHeader}>
+              <View style={styles.historyTitleWrap}>
+                <Text style={styles.historyTitle}>Historial grupal</Text>
+                <Text style={styles.historySubtitle}>Recetas generadas para este grupo.</Text>
+              </View>
+              <Pressable accessibilityRole="button" onPress={() => setHistoryOpen(false)} style={styles.historyCloseButton}>
+                <MaterialCommunityIcons name="close" size={22} color="#064E2F" />
+              </Pressable>
+            </View>
+
+            {historyLoading ? (
+              <View style={styles.historyEmpty}>
+                <ActivityIndicator size="large" color="#064E2F" />
+              </View>
+            ) : (
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.historyList}>
+                <RecipeList
+                  title="Historial"
+                  items={historyItems}
+                  emptyText="Todavia no hay recetas grupales."
+                  compact
+                  onPrepare={prepareRecipe}
+                  usingRecipeKey={usingRecipeKey}
+                />
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       <Modal transparent visible={!!roleMenuMember} onRequestClose={() => setRoleMenuMember(null)}>
         <View style={styles.roleModalBackdrop}>
@@ -845,11 +923,15 @@ function RecipeList({
   items,
   emptyText,
   compact = false,
+  onPrepare,
+  usingRecipeKey,
 }: {
   title: string;
   items: GeneratedRecipe[];
   emptyText?: string;
   compact?: boolean;
+  onPrepare?: (recipe: GeneratedRecipe) => void;
+  usingRecipeKey?: string | null;
 }) {
   return (
     <View style={[styles.resultsWrap, compact && styles.resultsCompact]}>
@@ -862,51 +944,76 @@ function RecipeList({
           <Text style={styles.emptyText}>{emptyText}</Text>
         </View>
       ) : (
-        items.map((recipe, index) => (
-          <View key={`${recipe.id || recipe.titulo}-${index}`} style={styles.recipeCard}>
-            <View style={styles.recipeHeader}>
-              <View style={styles.recipeNumber}>
-                <Text style={styles.recipeNumberText}>{index + 1}</Text>
+        items.map((recipe, index) => {
+          const actionKey = recipe.id || recipe.titulo;
+          const isPreparing = usingRecipeKey === actionKey;
+          return (
+            <View key={`${actionKey}-${index}`} style={styles.recipeCard}>
+              <View style={styles.recipeHeader}>
+                <View style={styles.recipeNumber}>
+                  <Text style={styles.recipeNumberText}>{index + 1}</Text>
+                </View>
+                <View style={styles.recipeHeaderCopy}>
+                  <Text style={styles.recipeTitle} numberOfLines={2}>{recipe.titulo}</Text>
+                  <Text style={styles.recipeMeta}>
+                    {[recipe.persona_nombre, recipe.tiempo_preparacion, recipe.presupuestada ? formatPrice(recipe.costo_estimado) : undefined]
+                      .filter(Boolean)
+                      .join(' - ') || formatHistoryDate(recipe.created_at)}
+                  </Text>
+                </View>
+                {!!onPrepare && (
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={isPreparing}
+                    onPress={() => onPrepare(recipe)}
+                    style={[styles.prepareButton, isPreparing && styles.prepareButtonDisabled]}>
+                    {isPreparing ? (
+                      <ActivityIndicator size="small" color="#FBFFF8" />
+                    ) : (
+                      <>
+                        <MaterialCommunityIcons name="play-circle-outline" size={17} color="#FBFFF8" />
+                        <Text style={styles.prepareButtonText}>Preparar</Text>
+                      </>
+                    )}
+                  </Pressable>
+                )}
               </View>
-              <View style={styles.recipeHeaderCopy}>
-                <Text style={styles.recipeTitle}>{recipe.titulo}</Text>
-                <Text style={styles.recipeMeta}>
-                  {[recipe.persona_nombre, recipe.tiempo_preparacion, recipe.presupuestada ? formatPrice(recipe.costo_estimado) : undefined]
-                    .filter(Boolean)
-                    .join(' - ') || formatHistoryDate(recipe.created_at)}
-                </Text>
-              </View>
+
+              {!!recipe.por_que_funciona && (
+                <View style={styles.whyBox}>
+                  <Text style={styles.whyText}>{recipe.por_que_funciona}</Text>
+                </View>
+              )}
+
+              {!!recipe.macros_totales && (
+                <View style={styles.macroRow}>
+                  <Text style={styles.macroPill}>{recipe.macros_totales.calorias ?? 0} kcal</Text>
+                  <Text style={styles.macroPill}>P {recipe.macros_totales.proteinas ?? 0}g</Text>
+                  <Text style={styles.macroPill}>C {recipe.macros_totales.carbohidratos ?? 0}g</Text>
+                  <Text style={styles.macroPill}>G {recipe.macros_totales.grasas ?? 0}g</Text>
+                </View>
+              )}
+
+              {!!recipe.ingredientes?.length && (
+                <View style={styles.recipeSection}>
+                  <Text style={styles.recipeSectionTitle}>Ingredientes</Text>
+                  {recipe.ingredientes.slice(0, compact ? 5 : 7).map((ingredient, ingredientIndex) => (
+                    <Text key={`${ingredient}-${ingredientIndex}`} style={styles.recipeLine}>- {ingredient}</Text>
+                  ))}
+                </View>
+              )}
+
+              {!!recipe.pasos?.length && (
+                <View style={styles.recipeSection}>
+                  <Text style={styles.recipeSectionTitle}>Pasos</Text>
+                  {recipe.pasos.slice(0, compact ? 4 : 8).map((step, stepIndex) => (
+                    <Text key={`${step}-${stepIndex}`} style={styles.recipeLine}>{step}</Text>
+                  ))}
+                </View>
+              )}
             </View>
-
-            <View style={styles.recipeTags}>
-              {!!recipe.ingrediente_comun && <Text style={styles.commonPill}>Base: {recipe.ingrediente_comun}</Text>}
-            </View>
-
-            {!!recipe.por_que_funciona && (
-              <View style={styles.whyBox}>
-                <Text style={styles.whyText}>{recipe.por_que_funciona}</Text>
-              </View>
-            )}
-
-            {!!recipe.macros_totales && (
-              <View style={styles.macroRow}>
-                <Text style={styles.macroPill}>{recipe.macros_totales.calorias ?? 0} kcal</Text>
-                <Text style={styles.macroPill}>P {recipe.macros_totales.proteinas ?? 0}g</Text>
-                <Text style={styles.macroPill}>C {recipe.macros_totales.carbohidratos ?? 0}g</Text>
-                <Text style={styles.macroPill}>G {recipe.macros_totales.grasas ?? 0}g</Text>
-              </View>
-            )}
-
-            {!!recipe.ingredientes?.length && (
-              <View style={styles.recipeSection}>
-                <Text style={styles.recipeSectionTitle}>Ingredientes</Text>
-                {recipe.ingredientes.slice(0, 7).map((ingredient, ingredientIndex) => (
-                  <Text key={`${ingredient}-${ingredientIndex}`} style={styles.recipeLine}>- {ingredient}</Text>
-                ))}
-              </View>
-            )}
-          </View>
-        ))
+          );
+        })
       )}
     </View>
   );
@@ -1016,16 +1123,6 @@ const styles = StyleSheet.create({
     borderColor: '#9FE7B9',
     backgroundColor: '#FBFFF8',
     letterSpacing: 0,
-  },
-  commonPill: {
-    color: '#064E2F',
-    fontSize: 12,
-    fontWeight: '900',
-    paddingHorizontal: 9,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: '#FFE8A3',
-    overflow: 'hidden',
   },
   container: {
     flex: 1,
@@ -1201,6 +1298,63 @@ const styles = StyleSheet.create({
     color: '#064E2F',
     fontSize: 13,
     fontWeight: '900',
+  },
+  historyBackdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(6, 78, 47, 0.26)',
+  },
+  historyCloseButton: {
+    width: 42,
+    height: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    backgroundColor: '#D8FBE3',
+  },
+  historyDismiss: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  historyEmpty: {
+    minHeight: 220,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
+  historyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: 'transparent',
+  },
+  historyList: {
+    gap: 12,
+    paddingBottom: 28,
+  },
+  historySheet: {
+    maxHeight: '82%',
+    gap: 15,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 12,
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
+    backgroundColor: '#FBFFF8',
+  },
+  historySubtitle: {
+    color: '#2F7A4F',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  historyTitle: {
+    color: '#064E2F',
+    fontSize: 24,
+    fontWeight: '900',
+  },
+  historyTitleWrap: {
+    flex: 1,
+    gap: 3,
+    backgroundColor: 'transparent',
   },
   ingredientCopy: {
     flex: 1,
@@ -1459,6 +1613,25 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFE8A3',
     overflow: 'hidden',
   },
+  prepareButton: {
+    minHeight: 38,
+    minWidth: 98,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    borderRadius: 14,
+    backgroundColor: '#00B86B',
+  },
+  prepareButtonDisabled: {
+    opacity: 0.72,
+  },
+  prepareButtonText: {
+    color: '#FBFFF8',
+    fontSize: 12,
+    fontWeight: '900',
+  },
   primaryButton: {
     minHeight: 50,
     flexDirection: 'row',
@@ -1550,12 +1723,6 @@ const styles = StyleSheet.create({
     color: '#064E2F',
     fontSize: 14,
     fontWeight: '900',
-  },
-  recipeTags: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 7,
-    backgroundColor: 'transparent',
   },
   recipeTitle: {
     color: '#064E2F',
