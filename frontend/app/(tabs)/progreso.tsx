@@ -1,7 +1,7 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, TextInput } from 'react-native';
 
 import { Text, View } from '@/components/Themed';
 import { useAuth } from '@/contexts/AuthContext';
@@ -43,11 +43,6 @@ function roleIcon(role: 'admin' | 'editor' | 'espectador'): keyof typeof Materia
   if (role === 'admin') return 'shield-account-outline';
   if (role === 'editor') return 'pencil';
   return 'eye-outline';
-}
-
-function nextRole(role: 'admin' | 'editor' | 'espectador') {
-  const index = ROLE_FLOW.indexOf(role);
-  return ROLE_FLOW[(index + 1) % ROLE_FLOW.length];
 }
 
 function parseBudget(value: string) {
@@ -112,6 +107,7 @@ export default function ProgressScreen() {
   const [purchaseSuggestions, setPurchaseSuggestions] = useState<BudgetPurchaseSuggestion[]>([]);
   const [historyItems, setHistoryItems] = useState<GeneratedRecipe[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [roleMenuMember, setRoleMenuMember] = useState<GroupMember | null>(null);
   const [statusMessage, setStatusMessage] = useState('');
   const [error, setError] = useState('');
 
@@ -298,15 +294,21 @@ export default function ProgressScreen() {
     setError('');
   }
 
-  async function toggleMemberRole(member: GroupMember) {
+  function openRoleMenu(member: GroupMember) {
+    if (!isAdmin || member.user_id === user?.id) return;
+    setRoleMenuMember(member);
+  }
+
+  async function changeMemberRole(member: GroupMember, role: 'admin' | 'editor' | 'espectador') {
     if (!user?.id || !selectedGroupId || !isAdmin || member.user_id === user.id) return;
-    const role = nextRole(member.rol);
     setError('');
+    setStatusMessage('');
     const result = await updateGroupMemberRole(selectedGroupId, member.user_id, user.id, role);
     if (result.error) {
       setError(result.error);
       return;
     }
+    setRoleMenuMember(null);
     await loadGroupDetail();
   }
 
@@ -541,7 +543,7 @@ export default function ProgressScreen() {
                         <Pressable
                           accessibilityRole="button"
                           disabled={!isAdmin || member.user_id === user.id}
-                          onPress={() => toggleMemberRole(member)}
+                          onPress={() => openRoleMenu(member)}
                           style={[
                             styles.rolePill,
                             member.rol === 'admin'
@@ -777,6 +779,63 @@ export default function ProgressScreen() {
           <RecipeList title="Pack generado" items={recipes} />
         )}
       </ScrollView>
+
+      <Modal transparent visible={!!roleMenuMember} onRequestClose={() => setRoleMenuMember(null)}>
+        <View style={styles.roleModalBackdrop}>
+          <Pressable style={styles.roleModalDismiss} onPress={() => setRoleMenuMember(null)} />
+          <View style={styles.roleModal}>
+            <View style={styles.roleModalHeader}>
+              <View style={styles.memberAvatar}>
+                <Text style={styles.memberAvatarText}>{initials(roleMenuMember?.nombre)}</Text>
+              </View>
+              <View style={styles.panelCopy}>
+                <Text style={styles.roleModalTitle}>{roleMenuMember?.nombre || 'Integrante'}</Text>
+                <Text style={styles.panelSubtitle}>Cambiar rol dentro del grupo</Text>
+              </View>
+            </View>
+
+            <View style={styles.roleOptionList}>
+              {ROLE_FLOW.map((role) => {
+                const isSelected = roleMenuMember?.rol === role;
+                return (
+                  <Pressable
+                    accessibilityRole="button"
+                    key={role}
+                    onPress={() => roleMenuMember && changeMemberRole(roleMenuMember, role)}
+                    style={[styles.roleOption, isSelected && styles.roleOptionSelected]}>
+                    <View
+                      style={[
+                        styles.roleOptionIcon,
+                        role === 'admin'
+                          ? styles.rolePillAdmin
+                          : role === 'editor'
+                            ? styles.rolePillEditor
+                            : styles.rolePillViewer,
+                      ]}>
+                      <MaterialCommunityIcons
+                        name={roleIcon(role)}
+                        size={18}
+                        color={role === 'espectador' ? '#064E2F' : '#FBFFF8'}
+                      />
+                    </View>
+                    <View style={styles.panelCopy}>
+                      <Text style={styles.roleOptionTitle}>{role}</Text>
+                      <Text style={styles.roleOptionText}>
+                        {role === 'admin'
+                          ? 'Administra miembros y roles'
+                          : role === 'editor'
+                            ? 'Puede generar y editar planes'
+                            : 'Solo puede ver el grupo'}
+                      </Text>
+                    </View>
+                    {isSelected && <MaterialCommunityIcons name="check-circle" size={21} color="#00B86B" />}
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1541,6 +1600,78 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#9FE7B9',
     backgroundColor: '#FBFFF8',
+  },
+  roleModal: {
+    width: '88%',
+    maxWidth: 380,
+    gap: 14,
+    padding: 16,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: '#9FE7B9',
+    backgroundColor: '#FBFFF8',
+    shadowColor: '#064E2F',
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.22,
+    shadowRadius: 24,
+    elevation: 12,
+  },
+  roleModalBackdrop: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+    backgroundColor: 'rgba(6, 78, 47, 0.22)',
+  },
+  roleModalDismiss: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  roleModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 11,
+    backgroundColor: 'transparent',
+  },
+  roleModalTitle: {
+    color: '#064E2F',
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  roleOption: {
+    minHeight: 62,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 11,
+    padding: 10,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: '#9FE7B9',
+    backgroundColor: '#E9FBEF',
+  },
+  roleOptionIcon: {
+    width: 38,
+    height: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 13,
+  },
+  roleOptionList: {
+    gap: 9,
+    backgroundColor: 'transparent',
+  },
+  roleOptionSelected: {
+    borderColor: '#00B86B',
+    backgroundColor: '#D8FBE3',
+  },
+  roleOptionText: {
+    color: '#2F7A4F',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  roleOptionTitle: {
+    color: '#064E2F',
+    fontSize: 15,
+    fontWeight: '900',
   },
   searchBar: {
     minHeight: 50,
