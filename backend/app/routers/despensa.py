@@ -92,6 +92,7 @@ def _singularize_search_text(value: str) -> str:
 
 def _score_catalog_product(product: dict, clean_name: str, clean_category: str, clean_barcode: str) -> int:
     product_name = _normalize_search_text(product.get("nombre"))
+    product_category = _normalize_search_text(product.get("categoria"))
     product_barcode = str(product.get("codigo_barra") or "").strip()
     query = _normalize_search_text(clean_name)
     singular_query = _singularize_search_text(query)
@@ -113,6 +114,9 @@ def _score_catalog_product(product: dict, clean_name: str, clean_category: str, 
             score += 230
         elif query in product_name:
             score += 130
+
+    if clean_category and product_category == clean_category:
+        score += 80
 
     return score
 
@@ -287,7 +291,7 @@ async def _get_catalog_products_by_barcodes(client, barcodes: list[str]):
     return catalog_by_barcode, None
 
 
-async def _get_prices_by_catalog_ids(client, catalog_ids: list[str]):
+async def _get_prices_by_catalog_ids(client, catalog_ids: list[str], include_catalog_id: bool = True):
     clean_ids = [catalog_id for catalog_id in catalog_ids if catalog_id]
     if not clean_ids:
         return {}, None
@@ -323,7 +327,7 @@ async def _get_prices_by_catalog_ids(client, catalog_ids: list[str]):
 
     return {
         product_id: {
-            "producto_catalogo_id": product_id,
+            **({"producto_catalogo_id": product_id} if include_catalog_id else {}),
             "precio": price.get("precio"),
             "unidad": price.get("unidad"),
             "supermercado_id": price.get("supermercado_id"),
@@ -338,11 +342,14 @@ async def _get_prices_by_product_ids(client, product_ids: list[str], products_by
     if not clean_ids:
         return {}, None
 
+    direct_prices_by_product_id, _ = await _get_prices_by_catalog_ids(client, clean_ids, include_catalog_id=False)
     if not products_by_id:
-        return {}, None
+        return direct_prices_by_product_id, None
 
     barcode_targets = {}
     for product_id in clean_ids:
+        if product_id in direct_prices_by_product_id:
+            continue
         product = products_by_id.get(product_id) or {}
         barcode = str(product.get("codigo_barra") or "").strip()
         if barcode:
@@ -354,7 +361,7 @@ async def _get_prices_by_product_ids(client, product_ids: list[str], products_by
         [catalog.get("id") for catalog in catalog_by_barcode.values()],
     )
 
-    prices_by_product_id = {}
+    prices_by_product_id = dict(direct_prices_by_product_id)
     for barcode, target_product_ids in barcode_targets.items():
         catalog_product = catalog_by_barcode.get(barcode) or {}
         price_info = prices_by_catalog_id.get(catalog_product.get("id"))
@@ -543,9 +550,10 @@ async def _create_pantry_item_from_payload(client, data, product_payload: dict) 
     if insertar.status_code != 201:
         return None, {"error": f"No se pudo agregar a la despensa. Detalle: {insertar.text}"}
 
+    price_product_id = product_payload.get("producto_catalogo_id") or producto_id
     price_error = await guardar_precio_supermercado(
         client,
-        producto_id,
+        price_product_id,
         data.supermercado_id,
         data.precio_supermercado,
         data.precio_unidad,
@@ -916,9 +924,14 @@ async def actualizar_ingrediente(item_id: str, data: DespensaUpdate):
                 if response.status_code not in (200, 204):
                     return {"error": f"No se pudo actualizar la despensa. Detalle: {response.text}"}
 
+            price_product_id = (
+                values.get("producto_catalogo_id")
+                or current_item.get("producto_catalogo_id")
+                or current_item["producto_id"]
+            )
             price_error = await guardar_precio_supermercado(
                 client,
-                current_item["producto_id"],
+                price_product_id,
                 values.get("supermercado_id"),
                 values.get("precio_supermercado"),
                 values.get("precio_unidad"),

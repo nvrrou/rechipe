@@ -460,6 +460,110 @@ async def generar_receta_presupuestada_con_ia(
       return {"error": str(e)}
 
 
+async def generar_pack_recetas_grupo_con_ia(
+    ingredientes_despensa: list,
+    miembros: list,
+    objetivo_nutricional: str,
+    tipo_comida: str,
+    ingredientes_obligatorios: list = None,
+    restricciones_alimentarias: list = None,
+    presupuestada: bool = False,
+    presupuesto: float | None = None,
+    compras_posibles: list = None,
+):
+    """
+    Genera un pack social: una receta por integrante, con una base comun y ajustes por persona.
+    """
+    lista_despensa = "\n".join(ingredientes_despensa)
+    obligatorios = ", ".join(ingredientes_obligatorios or [])
+    restricciones_extra = ", ".join(restricciones_alimentarias or [])
+    miembros_json = json.dumps(miembros, ensure_ascii=False)
+    compras = "\n".join(compras_posibles or [])
+    presupuesto_texto = (
+        f"Presupuesto maximo total para compras adicionales: CLP {int(presupuesto or 0)}."
+        if presupuestada
+        else "No hay presupuesto activo; usa solo despensa salvo agua, sal y aceite."
+    )
+
+    instrucciones = f"""
+    Eres chef, nutricionista y planificador de comidas sociales.
+    Debes crear un pack para {tipo_comida}: una receta para cada integrante del grupo.
+
+    Objetivo comun del plan: {objetivo_nutricional or "sin objetivo comun especifico"}.
+    Restricciones extra indicadas por quien genera: {restricciones_extra or "ninguna"}.
+    Ingredientes obligatorios que deben aparecer como base comun si existen: {obligatorios or "ninguno"}.
+    {presupuesto_texto}
+
+    INTEGRANTES DEL GRUPO JSON:
+    {miembros_json}
+
+    DESPENSA DISPONIBLE:
+    {lista_despensa}
+
+    COMPRAS POSIBLES CON PRECIO:
+    {compras or "ninguna"}
+
+    Reglas:
+    1. Devuelve una receta por cada integrante recibido, manteniendo persona_id y persona_nombre.
+    2. Intenta encontrar una base comun entre recetas cuando sea natural y util, por ejemplo arroz, avena, pasta, legumbres o verduras.
+    3. No fuerces la base comun si arruina las preferencias, restricciones, presupuesto o calidad culinaria del pack.
+    4. Ajusta cada receta segun restricciones, ingredientes favoritos y objetivos del integrante.
+    5. Si una persona no tiene preferencias y otra si, procura compartir algun componente y cambia el acompanamiento/proteina segun corresponda.
+    6. Respeta restricciones vegetarianas, alergias, sin lactosa, sin gluten u otras indicadas.
+    7. Usa ingredientes de despensa y extras basicos: agua, sal y aceite.
+    8. Si presupuestada=true, usa solo compras_posibles y que costo_total no supere el presupuesto.
+    9. Si hay ingredientes obligatorios, usalos en todas las recetas cuando sea culinariamente posible.
+    10. Responde solo JSON valido, sin markdown.
+
+    Formato:
+    {{
+      "recetas": [
+        {{
+          "persona_id": "uuid",
+          "persona_nombre": "Nombre",
+          "ingrediente_comun": "Base compartida",
+          "titulo": "Nombre",
+          "tiempo_preparacion": "Ej: 25 min",
+          "dificultad": "Facil",
+          "por_que_funciona": "Como responde a los gustos/objetivos de esta persona",
+          "costo_estimado": numero,
+          "macros_totales": {{"calorias": numero, "proteinas": numero, "carbohidratos": numero, "grasas": numero}},
+          "compras_usadas": ["Producto comprado usado en la receta"],
+          "ingredientes": ["Cantidad + ingrediente"],
+          "pasos": ["1. Paso..."]
+        }}
+      ],
+      "compras_sugeridas": [
+        {{"nombre": "Producto", "categoria": "Categoria", "cantidad": "1 kg", "precio": numero, "reason": "Motivo"}}
+      ],
+      "costo_total": numero
+    }}
+    """
+
+    contenido = ""
+    try:
+        response = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "Eres un asistente de cocina social que adapta comidas por persona."},
+                {"role": "user", "content": instrucciones},
+            ],
+            temperature=0.38,
+        )
+        contenido = response.choices[0].message.content.strip()
+        if contenido.startswith("```json"):
+            contenido = contenido.replace("```json", "", 1)
+        elif contenido.startswith("```"):
+            contenido = contenido.replace("```", "", 1)
+        if contenido.endswith("```"):
+            contenido = contenido.rsplit("```", 1)[0]
+        return json.loads(contenido.strip())
+    except json.JSONDecodeError:
+        return {"error": "La IA no devolvio un JSON valido", "texto_crudo": contenido}
+    except Exception as e:
+        return {"error": str(e)}
+
+
 async def modificar_receta_con_ia(
     receta: dict,
     cambios: str,

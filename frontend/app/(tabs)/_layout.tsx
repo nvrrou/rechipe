@@ -30,7 +30,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="progreso"
         options={{
-          title: 'Progreso',
+          title: 'Social',
         }}
       />
     </Tabs>

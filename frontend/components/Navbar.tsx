@@ -16,7 +16,7 @@ const TAB_CONFIG: Record<string, { label: string; icon: keyof typeof MaterialCom
   index: { label: 'Inicio', icon: 'home-outline' },
   fridge: { label: 'Refri', icon: 'fridge-outline' },
   recipe: { label: 'Receta', icon: 'chef-hat' },
-  progreso: { label: 'Progreso', icon: 'food-apple-outline' },
+  progreso: { label: 'Social', icon: 'account-group-outline' },
 };
 
 type NavbarRoute = {

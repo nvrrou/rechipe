@@ -13,6 +13,7 @@ import httpx
 import uuid
 import re
 import unicodedata
+import json
 
 
 router = APIRouter(
@@ -21,7 +22,7 @@ router = APIRouter(
 )
 
 PRODUCT_SELECT = "id,nombre,categoria,energia_kcal,proteinas_g,carbohidratos_g,grasas_totales_g"
-RECIPE_SELECT = "id,creado_por,titulo,descripcion,instrucciones,ingredientes,info_nutricional,tiempo_preparacion,porciones,costo_estimado,es_publica,generada_por_ia,prompt_usado,created_at,updated_at"
+RECIPE_SELECT = "id,creado_por,grupo_id,titulo,descripcion,instrucciones,ingredientes,info_nutricional,tiempo_preparacion,porciones,costo_estimado,es_publica,generada_por_ia,prompt_usado,created_at,updated_at"
 
 
 def _normalize_recipe_text(value: str | None) -> str:
@@ -90,15 +91,28 @@ def _db_recipe_to_generated(recipe: dict) -> dict:
         if step.strip()
     ]
     minutes = recipe.get("tiempo_preparacion")
+    metadata = {}
+    prompt_usado = recipe.get("prompt_usado") or ""
+    if isinstance(prompt_usado, str) and prompt_usado.strip().startswith("{"):
+        try:
+            metadata = json.loads(prompt_usado)
+        except json.JSONDecodeError:
+            metadata = {}
+
     return {
         "id": recipe.get("id"),
+        "grupo_id": recipe.get("grupo_id"),
+        "persona_id": metadata.get("persona_id"),
+        "persona_nombre": metadata.get("persona_nombre"),
+        "ingrediente_comun": metadata.get("ingrediente_comun"),
+        "presupuestada": metadata.get("presupuestada", False),
         "titulo": recipe.get("titulo"),
         "tiempo_preparacion": f"{minutes} min" if minutes else None,
         "dificultad": None,
         "por_que_funciona": recipe.get("descripcion"),
         "macros_totales": recipe.get("info_nutricional") or {},
         "ingredientes": recipe.get("ingredientes") or [],
-        "compras_usadas": [],
+        "compras_usadas": metadata.get("compras_usadas") or [],
         "pasos": pasos,
         "created_at": recipe.get("created_at"),
         "costo_estimado": recipe.get("costo_estimado"),

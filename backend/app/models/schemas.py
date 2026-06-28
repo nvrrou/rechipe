@@ -107,6 +107,37 @@ class RecipePrepareRequest(BaseModel):
     receta: dict[str, Any]
 
 
+class GroupCreateRequest(BaseModel):
+    user_id: str
+    nombre: str
+
+
+class GroupJoinRequest(BaseModel):
+    user_id: str
+    codigo_grupo: str
+
+
+class GroupRoleUpdateRequest(BaseModel):
+    actor_user_id: str
+    rol: str
+
+
+class GroupMemberAcceptedUpdateRequest(BaseModel):
+    actor_user_id: str
+    accepted: bool
+
+
+class GroupRecipeRequest(BaseModel):
+    user_id: str
+    tipo_comida: str
+    ingredientes: List[str] = []
+    objetivo_nutricional: Optional[str] = ""
+    restricciones: List[str] = []
+    usar_restricciones_perfil: bool = True
+    presupuestada: bool = False
+    presupuesto: Optional[float] = None
+
+
 class EsquemaAlimento(BaseModel):
     nombre: str
 

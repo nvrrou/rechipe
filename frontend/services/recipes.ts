@@ -2,6 +2,11 @@ import { API_URL } from './api';
 
 export interface GeneratedRecipe {
   id?: string;
+  grupo_id?: string;
+  persona_id?: string;
+  persona_nombre?: string;
+  ingrediente_comun?: string;
+  presupuestada?: boolean;
   titulo: string;
   tiempo_preparacion?: string;
   dificultad?: string;

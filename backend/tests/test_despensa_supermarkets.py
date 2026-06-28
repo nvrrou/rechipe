@@ -280,8 +280,14 @@ class DespensaAsyncHelperTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(error)
         self.assertEqual(prices["prod-user"]["precio"], 1800)
         self.assertEqual(prices["prod-user"]["supermercado_nombre"], "Central")
-        self.assertEqual(client.calls[0]["params"]["codigo_barra"], "in.(780123)")
-        self.assertEqual(client.calls[1]["params"]["producto_id"], "in.(cat-1)")
+        catalog_call = next(call for call in client.calls if call["url"] == "/productos_catalogo")
+        catalog_price_call = next(
+            call
+            for call in client.calls
+            if call["url"] == "/precios_productos" and call["params"]["producto_id"] == "in.(cat-1)"
+        )
+        self.assertEqual(catalog_call["params"]["codigo_barra"], "in.(780123)")
+        self.assertEqual(catalog_price_call["params"]["producto_id"], "in.(cat-1)")
 
     async def test_get_price_by_catalog_id_returns_best_registered_price(self):
         client = FakeClient(
