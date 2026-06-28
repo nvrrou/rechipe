@@ -259,6 +259,54 @@ class DespensaAsyncHelperTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(prices["prod-1"]["precio"], 900)
         self.assertEqual(prices["prod-1"]["supermercado_nombre"], "Central")
 
+    async def test_get_prices_by_product_ids_falls_back_to_matching_catalog_product(self):
+        client = FakeClient(
+            {
+                ("GET", "/productos_catalogo"): FakeResponse(200, [{"id": "cat-1", "codigo_barra": "780123"}]),
+                ("GET", "/precios_productos"): FakeResponse(
+                    200,
+                    [{"producto_id": "cat-1", "precio": 1800, "unidad": "unidad", "supermercado_id": "sup-1"}],
+                ),
+                ("GET", "/supermercados"): FakeResponse(200, [{"id": "sup-1", "nombre": "Central"}]),
+            }
+        )
+
+        prices, error = await despensa._get_prices_by_product_ids(
+            client,
+            ["prod-user"],
+            {"prod-user": {"codigo_barra": "780123"}},
+        )
+
+        self.assertIsNone(error)
+        self.assertEqual(prices["prod-user"]["precio"], 1800)
+        self.assertEqual(prices["prod-user"]["supermercado_nombre"], "Central")
+        self.assertEqual(client.calls[0]["params"]["codigo_barra"], "in.(780123)")
+        self.assertEqual(client.calls[1]["params"]["producto_id"], "in.(cat-1)")
+
+    async def test_get_price_by_catalog_id_returns_best_registered_price(self):
+        client = FakeClient(
+            {
+                ("GET", "/precios_productos"): FakeResponse(
+                    200,
+                    [
+                        {"producto_id": "cat-1", "precio": 1500, "unidad": "unidad", "supermercado_id": "sup-1"},
+                    ],
+                ),
+                ("GET", "/supermercados"): FakeResponse(
+                    200,
+                    [
+                        {"id": "sup-1", "nombre": "Central"},
+                    ],
+                ),
+            }
+        )
+
+        price, error = await despensa._get_price_by_catalog_id(client, "cat-1")
+
+        self.assertIsNone(error)
+        self.assertEqual(price["precio"], 1500)
+        self.assertEqual(price["supermercado_nombre"], "Central")
+
     async def test_resolve_barcode_add_data_uses_catalog_match_and_category(self):
         client = FakeClient(
             {

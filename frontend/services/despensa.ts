@@ -140,6 +140,15 @@ export interface CatalogProductData {
   azucar_g?: number;
 }
 
+export interface PriceByCatalogData {
+  producto_catalogo_id: string;
+  precio?: number | null;
+  unidad?: string | null;
+  supermercado_id?: string | null;
+  supermercado_nombre?: string | null;
+  error?: string;
+}
+
 // ---------- Funciones ----------
 
 /** Obtiene todos los ingredientes de la despensa del usuario */
@@ -196,6 +205,17 @@ export async function fetchSupermarkets(): Promise<{ items?: SupermarketData[]; 
     return data;
   } catch (e: any) {
     return { error: `Error de conexión: ${e.message}` };
+  }
+}
+
+/** Obtiene el mejor precio guardado en precios_productos usando producto_catalogo_id */
+export async function fetchPrecioPorCatalogo(productoCatalogoId: string): Promise<PriceByCatalogData> {
+  try {
+    const res = await fetch(`${API_URL}/despensa/precio-por-catalogo/${encodeURIComponent(productoCatalogoId)}`);
+    const data = await res.json();
+    return data;
+  } catch (e: any) {
+    return { producto_catalogo_id: productoCatalogoId, error: `Error de conexiÃ³n: ${e.message}` };
   }
 }
 

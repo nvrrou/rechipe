@@ -19,6 +19,7 @@ import {
   eliminarIngrediente,
   fetchCatalogProductSuggestions,
   fetchDespensa,
+  fetchPrecioPorCatalogo,
   fetchSupermarkets,
   solicitarAutenticacionProducto,
   verificarCategoriaProducto,
@@ -161,6 +162,30 @@ function parseInputNumber(value: string) {
 function formatPrice(value?: number | null) {
   if (value === undefined || value === null) return '-';
   return `CLP ${Math.round(value).toLocaleString('es-CL')}`;
+}
+
+function getDisplayPrice(item: DespensaItemData) {
+  return item.precio_supermercado ?? item.precio_aprox;
+}
+
+async function hydratePricesByCatalogId(items: DespensaItemData[]) {
+  return Promise.all(
+    items.map(async (item) => {
+      if (item.precio_supermercado !== undefined && item.precio_supermercado !== null) return item;
+      if (!item.producto_catalogo_id) return item;
+
+      const result = await fetchPrecioPorCatalogo(item.producto_catalogo_id);
+      if (result.error || result.precio === undefined || result.precio === null) return item;
+
+      return {
+        ...item,
+        precio_supermercado: result.precio,
+        precio_unidad: result.unidad || item.precio_unidad,
+        supermercado_id: result.supermercado_id || item.supermercado_id,
+        supermercado_nombre: result.supermercado_nombre || item.supermercado_nombre,
+      };
+    })
+  );
 }
 
 function cleanText(value: string) {
@@ -447,9 +472,10 @@ export default function FridgeScreen() {
     setLoading(true);
     const result = await fetchDespensa(user.id);
     if (result.items) {
-      setItems(result.items);
+      const itemsWithCatalogPrices = await hydratePricesByCatalogId(result.items);
+      setItems(itemsWithCatalogPrices);
       // HU-10: Programar notificaciones de vencimiento
-      scheduleExpiryNotifications(result.items).catch(() => {
+      scheduleExpiryNotifications(itemsWithCatalogPrices).catch(() => {
         // Silenciar errores de notificaciones - no son críticos
       });
     } else if (result.error) {
@@ -1027,7 +1053,7 @@ export default function FridgeScreen() {
             <Text style={styles.ingredientTitle} numberOfLines={1}>
               {item.nombre_producto}
             </Text>
-            <Text style={styles.pricePill}>{formatPrice(item.precio_aprox)}</Text>
+            <Text style={styles.pricePill}>{formatPrice(getDisplayPrice(item))}</Text>
           </View>
           {/*Badge de vencimiento*/}
           {isExpiring && expiryLabel && (
