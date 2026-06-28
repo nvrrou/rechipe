@@ -7,7 +7,6 @@ import { DespensaItemData } from './despensa';
 // Configuracion cuando la app está en primer plano para las nmotifiaciones
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
     shouldShowBanner: true,

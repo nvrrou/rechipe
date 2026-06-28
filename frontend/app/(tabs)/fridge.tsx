@@ -25,6 +25,7 @@ import {
   solicitarAutenticacionProducto,
   verificarCategoriaProducto,
 } from '@/services/despensa';
+import { loadDespensaCache, saveDespensaCache } from '@/services/despensaCache';
 import {
   getExpiryStatus,
   getExpiryLabel,
@@ -414,6 +415,7 @@ export default function FridgeScreen() {
   const [items, setItems] = useState<DespensaItemData[]>([]);
   const [supermarkets, setSupermarkets] = useState<SupermarketData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isOffline, setIsOffline] = useState(false);
   const [saving, setSaving] = useState(false);
   const [generatingImage, setGeneratingImage] = useState(false);
   const [activeView, setActiveView] = useState<ActiveView>('categories');
@@ -515,17 +517,32 @@ export default function FridgeScreen() {
   const loadDespensa = useCallback(async () => {
     if (!user?.id) return;
     setLoading(true);
+
     const result = await fetchDespensa(user.id);
+
     if (result.items) {
+      // Hay conexión: cargar desde backend y guardar en caché
+      setIsOffline(false);
       const itemsWithCatalogPrices = await hydratePricesByCatalogId(result.items);
       setItems(itemsWithCatalogPrices);
+      await saveDespensaCache(user.id, itemsWithCatalogPrices);
       // HU-10: Programar notificaciones de vencimiento
       scheduleExpiryNotifications(itemsWithCatalogPrices).catch(() => {
         // Silenciar errores de notificaciones - no son críticos
       });
-    } else if (result.error) {
-      Alert.alert('Error', result.error);
+    } else {
+      // Sin conexión o error: intentar cargar desde caché local
+      const cached = await loadDespensaCache(user.id);
+      if (cached) {
+        setIsOffline(true);
+        setItems(cached);
+      } else {
+        // No hay caché todavía
+        setIsOffline(true);
+        setItems([]);
+      }
     }
+
     setLoading(false);
   }, [user?.id]);
 
@@ -1912,6 +1929,16 @@ export default function FridgeScreen() {
           </Text>
         </View>
 
+        {/* Banner de sin conexión — datos desde caché local */}
+        {isOffline && (
+          <View style={styles.offlineBanner}>
+            <MaterialCommunityIcons name="wifi-off" size={18} color="#EA580C" />
+            <Text style={styles.offlineBannerText}>
+              Sin conexión — viendo datos guardados localmente
+            </Text>
+          </View>
+        )}
+
         {activeView === 'categories' && (
           <View style={styles.addBar}>
             <Pressable accessibilityRole="button" onPress={() => openAddView()} style={styles.addButton}>
@@ -3235,6 +3262,23 @@ const styles = StyleSheet.create({
     color: '#2F7A4F',
     fontSize: 16,
     fontWeight: '700',
+  },
+  offlineBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: 12,
+    backgroundColor: '#FFF7ED',
+    borderColor: '#FDBA74',
+  },
+  offlineBannerText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#EA580C',
   },
   nutritionGrid: {
     gap: 10,
