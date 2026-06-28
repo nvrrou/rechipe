@@ -20,10 +20,12 @@ CATALOG_FIELDS = (
 )
 
 PRODUCT_FIELDS = (
-    "id,user_id,producto_catalogo_id,nombre,codigo_barra,categoria,marca,imagen_url,"
+    "id,producto_catalogo_id,nombre,codigo_barra,categoria,marca,imagen_url,"
     "energia_kcal,proteinas_g,carbohidratos_g,grasas_totales_g,fibra_g,sodio_mg,"
     "azucares_totales_g,es_personalizado"
 )
+
+PRICE_FIELDS = "producto_id,supermercado_id,precio,unidad"
 
 DESPENSA_SELECT = (
     "id,cantidad,unidad,precio_aprox,cantidad_precio,unidad_precio,fecha_vencimiento,created_at,producto_id"
@@ -60,7 +62,6 @@ DEFAULT_CATEGORY_NAMES = [
     "Bebidas",
     "Otros",
 ]
-
 
 def _clean_payload(payload: dict) -> dict:
     return {key: value for key, value in payload.items() if value is not None}
@@ -225,15 +226,16 @@ async def _get_product(client, producto_id: str | None):
     return products[0], None
 
 
-async def _get_products_by_ids(client, product_ids: list[str]):
+async def _get_products_by_ids(client, product_ids: list[str], nombre_query: str = ""):
     clean_ids = [product_id for product_id in product_ids if product_id]
     if not clean_ids:
         return {}, None
 
-    response = await client.get(
-        "/productos",
-        params={"id": f"in.({','.join(clean_ids)})", "select": PRODUCT_FIELDS},
-    )
+    params = {"id": f"in.({','.join(clean_ids)})", "select": PRODUCT_FIELDS}
+    clean_query = nombre_query.strip()
+    if clean_query:
+        params["nombre"] = f"ilike.*{clean_query}*"
+    response = await client.get("/productos", params=params)
     if response.status_code != 200:
         return None, {"error": f"Error al obtener productos. Detalle: {response.text}"}
 
@@ -272,13 +274,11 @@ async def _get_catalog_products_by_barcodes(client, barcodes: list[str]):
     if not clean_barcodes:
         return {}, None
 
-    response = await client.get(
-        "/productos_catalogo",
-        params={
-            "codigo_barra": f"in.({','.join(clean_barcodes)})",
-            "select": "id,codigo_barra",
-        },
-    )
+    params = {
+        "codigo_barra": f"in.({','.join(clean_barcodes)})",
+        "select": "id,codigo_barra",
+    }
+    response = await client.get("/productos_catalogo", params=params)
     if response.status_code != 200:
         return {}, None
 
@@ -296,14 +296,12 @@ async def _get_prices_by_catalog_ids(client, catalog_ids: list[str], include_cat
     if not clean_ids:
         return {}, None
 
-    response = await client.get(
-        "/precios_productos",
-        params={
-            "producto_id": f"in.({','.join(clean_ids)})",
-            "select": "id,producto_id,supermercado_id,precio,unidad",
-            "order": "precio.asc",
-        },
-    )
+    params = {
+        "producto_id": f"in.({','.join(clean_ids)})",
+        "select": PRICE_FIELDS,
+        "order": "precio.asc",
+    }
+    response = await client.get("/precios_productos", params=params)
     if response.status_code != 200:
         return {}, None
 
@@ -318,10 +316,8 @@ async def _get_prices_by_catalog_ids(client, catalog_ids: list[str], include_cat
 
     supermarkets = {}
     if supermarket_ids:
-        supermarket_response = await client.get(
-            "/supermercados",
-            params={"id": f"in.({','.join(supermarket_ids)})", "select": "id,nombre"},
-        )
+        supermarket_params = {"id": f"in.({','.join(supermarket_ids)})", "select": "id,nombre"}
+        supermarket_response = await client.get("/supermercados", params=supermarket_params)
         if supermarket_response.status_code == 200:
             supermarkets = {item["id"]: item.get("nombre") for item in supermarket_response.json()}
 
@@ -342,29 +338,35 @@ async def _get_prices_by_product_ids(client, product_ids: list[str], products_by
     if not clean_ids:
         return {}, None
 
-    direct_prices_by_product_id, _ = await _get_prices_by_catalog_ids(client, clean_ids, include_catalog_id=False)
     if not products_by_id:
-        return direct_prices_by_product_id, None
+        prices_by_catalog_id, _ = await _get_prices_by_catalog_ids(client, clean_ids, include_catalog_id=False)
+        return prices_by_catalog_id, None
 
+    prices_by_product_id = {}
+    catalog_targets: dict[str, list[str]] = {}
     barcode_targets = {}
     for product_id in clean_ids:
-        if product_id in direct_prices_by_product_id:
-            continue
         product = products_by_id.get(product_id) or {}
         barcode = str(product.get("codigo_barra") or "").strip()
         if barcode:
             barcode_targets.setdefault(barcode, []).append(product_id)
+            continue
+
+        catalog_id = str(product.get("producto_catalogo_id") or "").strip()
+        if catalog_id:
+            catalog_targets.setdefault(catalog_id, []).append(product_id)
 
     catalog_by_barcode, _ = await _get_catalog_products_by_barcodes(client, list(barcode_targets.keys()))
-    prices_by_catalog_id, _ = await _get_prices_by_catalog_ids(
-        client,
-        [catalog.get("id") for catalog in catalog_by_barcode.values()],
-    )
-
-    prices_by_product_id = dict(direct_prices_by_product_id)
     for barcode, target_product_ids in barcode_targets.items():
         catalog_product = catalog_by_barcode.get(barcode) or {}
-        price_info = prices_by_catalog_id.get(catalog_product.get("id"))
+        catalog_id = catalog_product.get("id")
+        if catalog_id:
+            catalog_targets.setdefault(catalog_id, []).extend(target_product_ids)
+
+    prices_by_catalog_id, _ = await _get_prices_by_catalog_ids(client, list(catalog_targets.keys()))
+
+    for catalog_id, target_product_ids in catalog_targets.items():
+        price_info = prices_by_catalog_id.get(catalog_id)
         if not price_info:
             continue
         for product_id in target_product_ids:
@@ -511,6 +513,11 @@ async def _build_product_payload(client, data, catalog_product=None, current_pro
 
     payload = _clean_payload({
         "user_id": values.get("user_id") or (current_product or {}).get("user_id"),
+        "producto_catalogo_id": _first_value(
+            (catalog_product or {}).get("id"),
+            values.get("producto_catalogo_id"),
+            (current_product or {}).get("producto_catalogo_id"),
+        ),
         "nombre": _first_value(values.get("nombre_producto"), (catalog_product or {}).get("nombre"), (current_product or {}).get("nombre")),
         "codigo_barra": _first_value(*barcode_source),
         "categoria": _first_value(values.get("categoria"), (catalog_product or {}).get("categoria"), (current_product or {}).get("categoria")),
@@ -828,10 +835,8 @@ async def listar_despensa(user_id: str):
     """Obtiene todos los ingredientes de la despensa del usuario con datos del producto."""
     try:
         async with get_supabase_client() as client:
-            response = await client.get(
-                "/despensa",
-                params={"user_id": f"eq.{user_id}", "select": DESPENSA_SELECT},
-            )
+            pantry_params = {"user_id": f"eq.{user_id}", "select": DESPENSA_SELECT}
+            response = await client.get("/despensa", params=pantry_params)
 
             if response.status_code != 200:
                 return {"error": f"Error al obtener la despensa. Detalle: {response.text}"}
@@ -849,12 +854,11 @@ async def listar_despensa(user_id: str):
                 products_by_id,
             )
 
-            return {
-                "items": [
-                    _format_item({**item, "precio_info": prices_by_id.get(item.get("producto_id"))}, products_by_id.get(item.get("producto_id")))
-                    for item in pantry_items
-                ]
-            }
+            formatted_items = [
+                _format_item({**item, "precio_info": prices_by_id.get(item.get("producto_id"))}, products_by_id.get(item.get("producto_id")))
+                for item in pantry_items
+            ]
+            return {"items": formatted_items}
     except Exception as e:
         return {"error": str(e)}
 
@@ -1006,35 +1010,34 @@ async def buscar_ingredientes(user_id: str, q: str = ""):
     """Busca ingredientes en la despensa del usuario por nombre de producto."""
     try:
         async with get_supabase_client() as client:
-            pantry_response = await client.get(
-                "/despensa",
-                params={
-                    "user_id": f"eq.{user_id}",
-                    "select": DESPENSA_SELECT,
-                },
-            )
+            pantry_params = {
+                "user_id": f"eq.{user_id}",
+                "select": DESPENSA_SELECT,
+            }
+            pantry_response = await client.get("/despensa", params=pantry_params)
 
             if pantry_response.status_code != 200:
                 return {"error": f"Error en la búsqueda. Detalle: {pantry_response.text}"}
 
             pantry_items = pantry_response.json()
+            normalized_query = q.strip()
             products_by_id, error = await _get_products_by_ids(
                 client,
                 [item.get("producto_id") for item in pantry_items],
+                normalized_query,
             )
             if error:
                 return error
             prices_by_id, _ = await _get_prices_by_product_ids(
                 client,
-                [item.get("producto_id") for item in pantry_items],
+                list(products_by_id.keys()),
                 products_by_id,
             )
 
             items = []
-            normalized_query = q.strip().lower()
             for item in pantry_items:
                 producto = products_by_id.get(item.get("producto_id")) or {}
-                if normalized_query in (producto.get("nombre") or "").lower():
+                if producto:
                     items.append(_format_item({**item, "precio_info": prices_by_id.get(item.get("producto_id"))}, producto))
 
             return {"items": items}

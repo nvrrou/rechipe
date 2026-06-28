@@ -289,6 +289,37 @@ class DespensaAsyncHelperTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(catalog_call["params"]["codigo_barra"], "in.(780123)")
         self.assertEqual(catalog_price_call["params"]["producto_id"], "in.(cat-1)")
 
+    async def test_get_prices_by_product_ids_prefers_barcode_catalog_price_over_direct_price(self):
+        client = FakeClient(
+            {
+                ("GET", "/productos_catalogo"): FakeResponse(200, [{"id": "cat-1", "codigo_barra": "780123"}]),
+                ("GET", "/precios_productos"): [
+                    FakeResponse(
+                        200,
+                        [{"producto_id": "cat-1", "precio": 1800, "unidad": "unidad", "supermercado_id": "sup-1"}],
+                    ),
+                    FakeResponse(
+                        200,
+                        [{"producto_id": "prod-user", "precio": 2200, "unidad": "unidad", "supermercado_id": "sup-2"}],
+                    ),
+                ],
+                ("GET", "/supermercados"): [
+                    FakeResponse(200, [{"id": "sup-1", "nombre": "Central"}]),
+                    FakeResponse(200, [{"id": "sup-2", "nombre": "Esquina"}]),
+                ],
+            }
+        )
+
+        prices, error = await despensa._get_prices_by_product_ids(
+            client,
+            ["prod-user"],
+            {"prod-user": {"codigo_barra": "780123"}},
+        )
+
+        self.assertIsNone(error)
+        self.assertEqual(prices["prod-user"]["precio"], 1800)
+        self.assertEqual(prices["prod-user"]["supermercado_nombre"], "Central")
+
     async def test_get_price_by_catalog_id_returns_best_registered_price(self):
         client = FakeClient(
             {
