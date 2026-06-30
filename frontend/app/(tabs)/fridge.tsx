@@ -1191,6 +1191,8 @@ export default function FridgeScreen() {
     const expiryStatus = getExpiryStatus(item.fecha_vencimiento);
     const expiryLabel = getExpiryLabel(item.fecha_vencimiento);
     const isExpiring = expiryStatus === 'expiring' || expiryStatus === 'expired';
+    const displayPrice = getDisplayPrice(item);
+    const hasDisplayPrice = displayPrice !== undefined && displayPrice !== null;
     return (
       <Pressable
         accessibilityRole="button"
@@ -1207,7 +1209,21 @@ export default function FridgeScreen() {
             <Text style={styles.ingredientTitle} numberOfLines={1}>
               {item.nombre_producto}
             </Text>
-            <Text style={styles.pricePill}>{formatPrice(getDisplayPrice(item))}</Text>
+            {hasDisplayPrice && (
+              <View style={styles.priceCluster}>
+                <Text style={styles.pricePill} numberOfLines={1}>
+                  {formatPrice(displayPrice)}
+                </Text>
+                {item.supermercado_nombre && (
+                  <View style={styles.supermarketChip}>
+                    <MaterialCommunityIcons name="storefront-outline" size={12} color="#064E2F" />
+                    <Text style={styles.supermarketChipText} numberOfLines={1}>
+                      {item.supermercado_nombre}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
           </View>
           {/*Badge de vencimiento*/}
           {isExpiring && expiryLabel && (
@@ -1227,11 +1243,6 @@ export default function FridgeScreen() {
                 {expiryLabel}
               </Text>
             </View>
-          )}
-          {item.supermercado_nombre && (
-            <Text style={styles.supermarketMeta} numberOfLines={1}>
-              {item.supermercado_nombre}
-            </Text>
           )}
           <Text style={styles.ingredientMeta} numberOfLines={1}>
             {[item.marca, item.cantidad ? `${item.cantidad} ${item.unidad || ''}`.trim() : undefined]
@@ -3425,10 +3436,20 @@ const styles = StyleSheet.create({
     gap: 5,
     backgroundColor: 'transparent',
   },
+  priceCluster: {
+    maxWidth: 190,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 5,
+    backgroundColor: 'transparent',
+  },
   pricePill: {
-    color: '#008A50',
+    minWidth: 76,
+    color: '#FBFFF8',
     fontSize: 11,
     fontWeight: '900',
+    textAlign: 'center',
     paddingHorizontal: 8,
     paddingVertical: 5,
     borderRadius: 999,
@@ -3762,9 +3783,22 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     lineHeight: 21,
   },
-  supermarketMeta: {
-    color: '#0369A1',
-    fontSize: 12,
+  supermarketChip: {
+    maxWidth: 86,
+    minHeight: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 7,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#74D997',
+    backgroundColor: '#FBFFF8',
+  },
+  supermarketChipText: {
+    flexShrink: 1,
+    color: '#064E2F',
+    fontSize: 10,
     fontWeight: '900',
   },
   supermarketPriceCopy: {
