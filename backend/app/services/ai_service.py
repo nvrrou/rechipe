@@ -332,15 +332,28 @@ async def generar_receta_con_ia(
         return {"error": f"Ups, hubo un error al generar la receta: {str(e)}"}
 
 
-async def estimar_precio_producto_chile(nombre_producto: str, categoria: str = ""):
+async def estimar_precio_producto_chile(nombre_producto: str, categoria: str = "", supermercados: list[dict] | None = None):
     """
     Estima un precio minorista chileno para un producto cuando no hay precio en BD.
     """
+    supermercados_disponibles = [
+        {
+            "id": item.get("id"),
+            "nombre": item.get("nombre"),
+            "cadena": item.get("cadena"),
+            "direccion": item.get("direccion"),
+        }
+        for item in (supermercados or [])
+        if item.get("id") and item.get("nombre")
+    ]
     instrucciones = f"""
     Estima un precio de supermercado en Chile para el producto "{nombre_producto}".
     Categoria: "{categoria}".
+    Supermercados registrados disponibles: {supermercados_disponibles or "ninguno"}.
 
     Usa precios realistas en pesos chilenos para una compra domestica común.
+    Si hay supermercados registrados, elige el supermercado más razonable para ese producto
+    usando exclusivamente uno de la lista y devuelve su id y nombre exactos.
     Responde solo JSON valido, sin markdown.
 
     Formato:
@@ -349,6 +362,8 @@ async def estimar_precio_producto_chile(nombre_producto: str, categoria: str = "
       "categoria": "{categoria}",
       "cantidad": "ej: 1 kg, 500 g, 12 unidades",
       "precio": numero_entero_en_CLP,
+      "supermercado_id": "id exacto de supermercado o null",
+      "supermercado_nombre": "nombre exacto de supermercado o null",
       "razon": "breve motivo de la estimacion"
     }}
     """
@@ -399,7 +414,7 @@ async def generar_receta_presupuestada_con_ia(
     DESPENSA DISPONIBLE:
     {lista_despensa}
 
-    COMPRAS POSIBLES CON PRECIO:
+    COMPRAS POSIBLES CON PRECIO Y SUPERMERCADO:
     {lista_compras}
 
     Reglas:
@@ -409,7 +424,7 @@ async def generar_receta_presupuestada_con_ia(
     4. Si la despensa permite una receta razonable, una de las 3 recetas debe ser "solo despensa", sin compras_usadas y con costo_estimado 0. No es obligatorio si culinariamente no alcanza.
     5. Las compras_sugeridas NO son opcionales ni decorativas: toda compra sugerida debe aparecer explícitamente en los ingredientes de al menos una receta.
     6. Si una compra no aporta a ninguna receta, no la sugieras.
-    7. Devuelve una lista "compras_sugeridas" con precio, cantidad y reason explicando qué rol cumple en las recetas.
+    7. Devuelve una lista "compras_sugeridas" con precio, cantidad, supermercado_id, supermercado_nombre y reason explicando qué rol cumple en las recetas.
     8. Ingredientes obligatorios de despensa: {obligatorios or "ninguno"}.
     9. Si hay ingredientes obligatorios, deben aparecer en todas las recetas finales.
     10. Respeta las restricciones alimentarias: no uses ni sugieras productos que las contradigan.
@@ -432,7 +447,7 @@ async def generar_receta_presupuestada_con_ia(
         }}
       ],
       "compras_sugeridas": [
-        {{"nombre": "Producto", "categoria": "Categoria", "cantidad": "1 kg", "precio": numero, "reason": "Motivo"}}
+        {{"nombre": "Producto", "categoria": "Categoria", "cantidad": "1 kg", "precio": numero, "supermercado_id": "id o null", "supermercado_nombre": "Nombre o null", "reason": "Motivo"}}
       ],
       "costo_total": numero
     }}
@@ -458,6 +473,128 @@ async def generar_receta_presupuestada_con_ia(
       return {"error": "La IA no devolvió un JSON válido", "texto_crudo": contenido}
     except Exception as e:
       return {"error": str(e)}
+
+
+async def generar_plan_semanal_con_ia(
+    contexto_usuario: dict,
+    ingredientes_despensa: list,
+    presupuesto_disponible: float,
+    preferencias_semana: str = "",
+    permitir_comidas_intermedias: bool = False,
+    dias: int = 7,
+    comidas_por_dia: int = 3,
+):
+    """
+    Genera un plan semanal en una sola llamada para mantener baja la latencia.
+    """
+    despensa = "\n".join(ingredientes_despensa[:60])
+    regla_comidas_intermedias = (
+        """
+    Comidas intermedias: ACTIVADAS por el usuario.
+    Si el perfil y objetivos requieren mayor cantidad de macros totales o energia, puedes agregar 1 o 2 comidas intermedias por dia.
+    Usa tipos como "Colacion media manana", "Merienda" o "Snack entre almuerzo y cena".
+    Deben ser simples y realistas, como pan, fruta, yogurt, frutos secos, huevo, avena u otro alimento SOLO si existe en despensa.
+    """
+        if permitir_comidas_intermedias
+        else """
+    Comidas intermedias: DESACTIVADAS por el usuario.
+    No agregues colaciones, meriendas ni snacks como comidas separadas. Usa solo las comidas principales solicitadas.
+    """
+    )
+    instrucciones = f"""
+    Eres planificador nutricional y de compras en Chile.
+    Genera un plan de {dias} dias con al menos {comidas_por_dia} comidas principales por dia.
+
+    Perfil del usuario desde la tabla profiles JSON:
+    {json.dumps(contexto_usuario, ensure_ascii=False)}
+
+    Usa SOLO los datos reales del perfil para orientar la planificacion:
+    - objetivos: interpreta cada objetivo exactamente como viene en profiles.objetivos.
+    - edad, peso_kg, altura_cm y genero: usalos para ajustar porciones, densidad energetica y macros de forma razonable.
+    - restricciones: son obligatorias.
+    - ingredientes_favoritos: priorizalos si estan disponibles en despensa.
+    No apliques metas fijas universales ni sesgos por defecto. Si hay varios objetivos, balancealos y explica el criterio en el resumen.
+
+    Cosas que el usuario quiere esta semana:
+    {preferencias_semana.strip() or "sin preferencias semanales adicionales"}
+
+    Opcion de comidas intermedias:
+    {regla_comidas_intermedias}
+
+    Despensa disponible:
+    {despensa or "sin despensa registrada"}
+
+    Reglas:
+    1. Usa gustos, objetivos y restricciones del usuario como prioridad nutricional real, no decorativa.
+    2. Mantén variedad y comidas balanceadas.
+    3. Usa exclusivamente la despensa disponible y los ingredientes/gustos del perfil del usuario.
+    4. No sugieras compras adicionales ni ingredientes que no estén en la despensa, salvo básicos de cocina como agua, sal, pimienta o aceite.
+    5. Integra las preferencias semanales del usuario cuando no choquen con restricciones o ingredientes disponibles.
+    6. Genera al menos 3 recetas distintas en toda la semana y alternarlas entre dias; no repitas el mismo titulo en dias consecutivos.
+    7. Cada comida/receta debe incluir macros_totales con calorias, proteinas, carbohidratos y grasas calculadas segun sus ingredientes de despensa.
+    8. Cada dia debe incluir resumen de macros: calorias_estimadas, proteinas_g, carbohidratos_g y grasas_g, exactamente como suma de macros_totales de sus comidas.
+    9. Ajusta las porciones y la distribucion de macros al perfil completo; no fuerces todas las recetas hacia un unico objetivo si el perfil no lo pide.
+    10. Respeta la opcion de comidas intermedias: si esta desactivada, no agregues snacks ni colaciones; si esta activada, agregalas solo si ayudan al objetivo/perfil.
+    11. Las comidas intermedias tambien deben usar solo despensa y deben traer macros_totales.
+    12. No agregues colaciones si no son necesarias para el perfil o si la despensa no tiene ingredientes adecuados.
+    13. Devuelve solo JSON valido, sin markdown.
+    14. No hagas recetas largas: maximo 3 pasos por comida.
+
+    Formato:
+    {{
+      "resumen": "string",
+      "presupuesto_usado": 0,
+      "dias": [
+        {{
+          "dia": "Lunes",
+          "costo_estimado": numero,
+          "calorias_estimadas": numero,
+          "proteinas_g": numero,
+          "carbohidratos_g": numero,
+          "grasas_g": numero,
+          "comidas": [
+            {{
+              "tipo": "Desayuno",
+              "titulo": "string",
+              "ingredientes": ["string"],
+              "pasos": ["string"],
+              "costo_estimado": numero,
+              "macros_totales": {{
+                "calorias": numero,
+                "proteinas": numero,
+                "carbohidratos": numero,
+                "grasas": numero
+              }},
+              "por_que": "string"
+            }}
+          ]
+        }}
+      ],
+      "compras_sugeridas": []
+    }}
+    """
+    contenido = ""
+    try:
+        response = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "Eres un planificador semanal rapido, nutricional y presupuestario."},
+                {"role": "user", "content": instrucciones},
+            ],
+            temperature=0.35,
+        )
+        contenido = response.choices[0].message.content.strip()
+        if contenido.startswith("```json"):
+            contenido = contenido.replace("```json", "", 1)
+        elif contenido.startswith("```"):
+            contenido = contenido.replace("```", "", 1)
+        if contenido.endswith("```"):
+            contenido = contenido.rsplit("```", 1)[0]
+        return json.loads(contenido.strip())
+    except json.JSONDecodeError:
+        return {"error": "La IA no devolvio un JSON valido", "texto_crudo": contenido}
+    except Exception as e:
+        return {"error": str(e)}
 
 
 async def generar_pack_recetas_grupo_con_ia(
@@ -500,7 +637,7 @@ async def generar_pack_recetas_grupo_con_ia(
     DESPENSA DISPONIBLE:
     {lista_despensa}
 
-    COMPRAS POSIBLES CON PRECIO:
+    COMPRAS POSIBLES CON PRECIO Y SUPERMERCADO:
     {compras or "ninguna"}
 
     Reglas:
@@ -512,8 +649,9 @@ async def generar_pack_recetas_grupo_con_ia(
     6. Respeta restricciones vegetarianas, alergias, sin lactosa, sin gluten u otras indicadas.
     7. Usa ingredientes de despensa y extras basicos: agua, sal y aceite.
     8. Si presupuestada=true, usa solo compras_posibles y que costo_total no supere el presupuesto.
-    9. Si hay ingredientes obligatorios, usalos en todas las recetas cuando sea culinariamente posible.
-    10. Responde solo JSON valido, sin markdown.
+    9. Si sugieres compras, conserva supermercado_id y supermercado_nombre desde compras_posibles.
+    10. Si hay ingredientes obligatorios, usalos en todas las recetas cuando sea culinariamente posible.
+    11. Responde solo JSON valido, sin markdown.
 
     Formato:
     {{
@@ -534,7 +672,7 @@ async def generar_pack_recetas_grupo_con_ia(
         }}
       ],
       "compras_sugeridas": [
-        {{"nombre": "Producto", "categoria": "Categoria", "cantidad": "1 kg", "precio": numero, "reason": "Motivo"}}
+        {{"nombre": "Producto", "categoria": "Categoria", "cantidad": "1 kg", "precio": numero, "supermercado_id": "id o null", "supermercado_nombre": "Nombre o null", "reason": "Motivo"}}
       ],
       "costo_total": numero
     }}

@@ -8,15 +8,16 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text, View } from '@/components/Themed';
 import { useAuth } from '@/contexts/AuthContext';
+import { useThemePreference } from '@/contexts/ThemeContext';
 
 const NAVBAR_HORIZONTAL_PADDING = 10;
 const ACTIVE_INDICATOR_SIZE = 46;
 
 const TAB_CONFIG: Record<string, { label: string; icon: keyof typeof MaterialCommunityIcons.glyphMap }> = {
-  index: { label: 'Inicio', icon: 'home-outline' },
   fridge: { label: 'Refri', icon: 'fridge-outline' },
-  recipe: { label: 'Receta', icon: 'chef-hat' },
   progreso: { label: 'Social', icon: 'account-group-outline' },
+  recipe: { label: 'Recetas', icon: 'chef-hat' },
+  index: { label: 'Calendario', icon: 'calendar-week-outline' },
 };
 
 type NavbarRoute = {
@@ -33,6 +34,7 @@ export function Navbar({ state, descriptors, navigation, noSelection = false }: 
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
+  const { colorScheme } = useThemePreference();
   const [menuOpen, setMenuOpen] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
   const [navbarWidth, setNavbarWidth] = useState(0);
@@ -161,6 +163,9 @@ export function Navbar({ state, descriptors, navigation, noSelection = false }: 
   const profileInitial = (user?.nombre || user?.email || 'U').trim().charAt(0).toUpperCase();
   const profileName = user?.nombre || 'Usuario';
   const profileEmail = user?.email || 'Sin correo';
+  const isDark = colorScheme === 'dark';
+  const darkIconColor = isDark ? '#EAFBF0' : '#064E2F';
+  const darkSecondaryIconColor = isDark ? '#BDF7D2' : '#2F7A4F';
 
   return (
     <>
@@ -171,6 +176,7 @@ export function Navbar({ state, descriptors, navigation, noSelection = false }: 
           <Animated.View
             style={[
               styles.sidePanel,
+              isDark && styles.sidePanelDark,
               {
                 paddingTop: Math.max(insets.top + 20, 64),
                 transform: [{ translateX: slideAnim }],
@@ -178,13 +184,13 @@ export function Navbar({ state, descriptors, navigation, noSelection = false }: 
             ]}>
             <View style={styles.sideHeader}>
               <Text style={styles.sideTitle}>Mas opciones</Text>
-              <Pressable accessibilityRole="button" onPress={closeMenu} style={styles.closeButton}>
-                <MaterialCommunityIcons name="close" size={24} color="#064E2F" />
+              <Pressable accessibilityRole="button" onPress={closeMenu} style={[styles.closeButton, isDark && styles.closeButtonDark]}>
+                <MaterialCommunityIcons name="close" size={24} color={darkIconColor} />
               </Pressable>
             </View>
 
-            <Pressable accessibilityRole="button" onPress={openProfile} style={styles.profileCard}>
-              <View style={styles.avatar}>
+            <Pressable accessibilityRole="button" onPress={openProfile} style={[styles.profileCard, isDark && styles.profileCardDark]}>
+              <View style={[styles.avatar, isDark && styles.avatarDark]}>
                 <Text style={styles.avatarText}>{profileInitial}</Text>
               </View>
               <View style={styles.profileCopy}>
@@ -195,30 +201,30 @@ export function Navbar({ state, descriptors, navigation, noSelection = false }: 
                   {profileEmail}
                 </Text>
               </View>
-              <MaterialCommunityIcons name="chevron-right" size={22} color="#2F7A4F" />
+              <MaterialCommunityIcons name="chevron-right" size={22} color={darkSecondaryIconColor} />
             </Pressable>
 
             <View style={styles.optionsList}>
-              <Pressable accessibilityRole="button" onPress={openList} style={styles.optionButton}>
-                <View style={styles.optionIcon}>
-                  <MaterialCommunityIcons name="clipboard-list-outline" size={22} color="#064E2F" />
+              <Pressable accessibilityRole="button" onPress={openList} style={[styles.optionButton, isDark && styles.optionButtonDark]}>
+                <View style={[styles.optionIcon, isDark && styles.optionIconDark]}>
+                  <MaterialCommunityIcons name="clipboard-list-outline" size={22} color={darkIconColor} />
                 </View>
                 <View style={styles.optionCopy}>
                   <Text style={styles.optionText}>Lista de compras</Text>
                   <Text style={styles.optionDescription}>Gestiona tu lista de compras</Text>
                 </View>
-                <MaterialCommunityIcons name="chevron-right" size={22} color="#2F7A4F" />
+                <MaterialCommunityIcons name="chevron-right" size={22} color={darkSecondaryIconColor} />
               </Pressable>
 
-              <Pressable accessibilityRole="button" onPress={openConfig} style={styles.optionButton}>
-                <View style={styles.optionIcon}>
-                  <MaterialCommunityIcons name="cog-outline" size={22} color="#064E2F" />
+              <Pressable accessibilityRole="button" onPress={openConfig} style={[styles.optionButton, isDark && styles.optionButtonDark]}>
+                <View style={[styles.optionIcon, isDark && styles.optionIconDark]}>
+                  <MaterialCommunityIcons name="cog-outline" size={22} color={darkIconColor} />
                 </View>
                 <View style={styles.optionCopy}>
                   <Text style={styles.optionText}>Configuracion</Text>
                   <Text style={styles.optionDescription}>Preferencias de la app</Text>
                 </View>
-                <MaterialCommunityIcons name="chevron-right" size={22} color="#2F7A4F" />
+                <MaterialCommunityIcons name="chevron-right" size={22} color={darkSecondaryIconColor} />
               </Pressable>
             </View>
           </Animated.View>
@@ -342,6 +348,9 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     backgroundColor: '#74D997',
   },
+  avatarDark: {
+    backgroundColor: '#245C38',
+  },
   avatarText: {
     color: '#0e6f45',
     fontSize: 22,
@@ -354,6 +363,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 14,
     backgroundColor: '#74D997',
+  },
+  closeButtonDark: {
+    backgroundColor: '#245C38',
   },
   iconButton: {
     flex: 1,
@@ -403,6 +415,11 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 2,
   },
+  optionButtonDark: {
+    borderColor: '#2F7A4F',
+    backgroundColor: '#102619',
+    shadowColor: '#07130D',
+  },
   optionCopy: {
     flex: 1,
     gap: 2,
@@ -420,6 +437,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 14,
     backgroundColor: '#74D997',
+  },
+  optionIconDark: {
+    backgroundColor: '#245C38',
   },
   optionText: {
     fontSize: 16,
@@ -445,6 +465,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.26,
     shadowRadius: 20,
     elevation: 2,
+  },
+  profileCardDark: {
+    borderColor: '#2F7A4F',
+    backgroundColor: '#102619',
+    shadowColor: '#07130D',
   },
   profileCopy: {
     flex: 1,
@@ -481,6 +506,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.34,
     shadowRadius: 24,
     elevation: 12,
+  },
+  sidePanelDark: {
+    backgroundColor: '#07130D',
+    shadowColor: '#000000',
   },
   sideTitle: {
     fontSize: 22,

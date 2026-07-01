@@ -5,6 +5,7 @@ import { ActivityIndicator, Animated, Easing, Pressable, ScrollView, StyleSheet,
 
 import { Text, View } from '@/components/Themed';
 import { useAuth } from '@/contexts/AuthContext';
+import { updateWeeklyMealRecipe } from '@/services/budget';
 import { actualizarIngrediente, DespensaItemData, fetchDespensa } from '@/services/despensa';
 import { getPreparationRecipe, PreparationPayload, savePreparationRecipe } from '@/services/preparation';
 import { adjustRecipe, BudgetPurchaseSuggestion, GeneratedRecipe } from '@/services/recipes';
@@ -167,6 +168,8 @@ export default function PreparationScreen() {
           categoria: item.categoria,
           cantidad: item.cantidad,
           precio: item.precio,
+          supermercado_id: item.supermercado_id,
+          supermercado_nombre: item.supermercado_nombre,
         })
         );
         addedCount += 1;
@@ -248,16 +251,43 @@ export default function PreparationScreen() {
     if (result.error) {
       setMessage(result.error);
     } else if (result.recetas?.[0]) {
-      const nextRecipe = result.recetas[0];
-      const nextPayload = {
+      let nextRecipe: GeneratedRecipe = {
+        ...result.recetas[0],
+        id: payload.receta.id,
+      };
+      let nextPayload = {
         ...payload,
         receta: nextRecipe,
         compras_receta: getRecipePurchaseItems(nextRecipe, payload.compras_sugeridas),
       };
+
+      if (payload.weekly_meal_id && user?.id) {
+        const weeklyResult = await updateWeeklyMealRecipe({
+          meal_id: payload.weekly_meal_id,
+          user_id: user.id,
+          receta: nextRecipe,
+        });
+
+        if (weeklyResult.error) {
+          setMessage(weeklyResult.error);
+          setAdjustingRecipe(false);
+          return;
+        }
+
+        if (weeklyResult.receta) {
+          nextRecipe = weeklyResult.receta;
+          nextPayload = {
+            ...nextPayload,
+            receta: nextRecipe,
+            compras_receta: getRecipePurchaseItems(nextRecipe, payload.compras_sugeridas),
+          };
+        }
+      }
+
       setPayload(nextPayload);
       await savePreparationRecipe(nextPayload);
       setRecipeChangeRequest('');
-      setMessage('Receta actualizada con IA.');
+      setMessage(payload.weekly_meal_id ? 'Receta semanal actualizada.' : 'Receta actualizada con IA.');
     } else {
       setMessage('La IA no devolvió una receta modificada.');
     }
@@ -447,7 +477,7 @@ export default function PreparationScreen() {
                 <View style={styles.chipRow}>
                   {activePurchases.map((purchase) => (
                     <Text key={purchase.nombre} style={styles.chip}>
-                      {purchase.nombre}
+                      {[purchase.nombre, purchase.supermercado_nombre].filter(Boolean).join(' · ')}
                     </Text>
                   ))}
                 </View>

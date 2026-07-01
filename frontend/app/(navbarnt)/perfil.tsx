@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
     StyleSheet,
@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
+import { UserBudget, fetchBudget, saveBudget } from '@/services/budget';
 
 // Opciones predefinidas (mismas que completar_perfil)
 
@@ -100,6 +101,12 @@ export default function PerfilScreen() {
     const router = useRouter();
 
     const [editing, setEditing] = useState(false);
+    const [budget, setBudget] = useState<UserBudget | null>(null);
+    const [budgetEditing, setBudgetEditing] = useState(false);
+    const [budgetAmount, setBudgetAmount] = useState('');
+    const [budgetPeriod, setBudgetPeriod] = useState('mensual');
+    const [budgetSaving, setBudgetSaving] = useState(false);
+    const [budgetSaved, setBudgetSaved] = useState(false);
     const [saving, setSaving] = useState(false);
     const [msg, setMsg] = useState('');
 
@@ -111,6 +118,27 @@ export default function PerfilScreen() {
     const [editObjetivos, setEditObjetivos] = useState<string[]>([]);
     const [editRestricciones, setEditRestricciones] = useState<string[]>([]);
     const [editIngFavoritos, setEditIngFavoritos] = useState('');
+
+    useEffect(() => {
+        let active = true;
+        async function loadBudget() {
+            if (!user?.id) return;
+            const result = await fetchBudget(user.id);
+            if (!active) return;
+            if (result.budget) {
+                setBudget(result.budget);
+                setBudgetAmount(String(result.budget.monto || ''));
+                setBudgetPeriod(result.budget.periodo || 'mensual');
+            } else {
+                setBudget(null);
+                setBudgetEditing(true);
+            }
+        }
+        loadBudget();
+        return () => {
+            active = false;
+        };
+    }, [user?.id]);
 
     const startEditing = () => {
         // inicializar con datos actuales del usuario
@@ -156,6 +184,34 @@ export default function PerfilScreen() {
         setSaving(false);
     };
 
+    const handleSaveBudget = async () => {
+        if (!user?.id) return;
+        const monto = Number(budgetAmount.replace(/[^\d]/g, ''));
+        if (!Number.isFinite(monto) || monto <= 0) {
+            setMsg('Ingresa un presupuesto valido');
+            return;
+        }
+
+        setBudgetSaving(true);
+        setMsg('');
+        const result = await saveBudget({
+            user_id: user.id,
+            monto,
+            periodo: budgetPeriod,
+            moneda: 'CLP',
+        });
+
+        if (result.budget) {
+            setBudget(result.budget);
+            setBudgetEditing(true);
+            setBudgetSaved(true);
+            setMsg('Presupuesto actualizado desde cero');
+        } else {
+            setMsg(result.error || 'Error al guardar presupuesto');
+        }
+        setBudgetSaving(false);
+    };
+
     const handleLogout = async () => {
         await logout();
         router.replace('/(auth)/login');
@@ -171,6 +227,7 @@ export default function PerfilScreen() {
     };
 
     const generos = ['masculino', 'femenino', 'otro'];
+    const budgetRemaining = budget ? Number(budget.monto || 0) - Number(budget.gastado || 0) : 0;
 
     return (
         <SafeAreaView style={styles.safeArea}>
@@ -324,6 +381,89 @@ export default function PerfilScreen() {
                     )}
                 </View>
 
+                <View style={styles.budgetCard}>
+                    <View style={styles.budgetHeader}>
+                        <View style={styles.budgetIcon}>
+                            <MaterialCommunityIcons name="cash-multiple" size={24} color="#064E2F" />
+                        </View>
+                        <View style={styles.budgetCopy}>
+                            <Text style={styles.sectionTitle}>Presupuesto</Text>
+                            <Text style={styles.budgetHint}>
+                                {budget ? 'Al editarlo se reinicia lo gastado para un nuevo periodo.' : 'Configuralo para planificar recetas y semana.'}
+                            </Text>
+                        </View>
+                    </View>
+
+                    {budget && !budgetEditing ? (
+                        <View style={styles.budgetStats}>
+                            <View style={styles.budgetStat}>
+                                <Text style={styles.label}>Inicial</Text>
+                                <Text style={styles.budgetValue}>${Math.round(Number(budget.monto || 0)).toLocaleString('es-CL')}</Text>
+                            </View>
+                            <View style={styles.budgetStat}>
+                                <Text style={styles.label}>Gastado</Text>
+                                <Text style={styles.budgetValue}>${Math.round(Number(budget.gastado || 0)).toLocaleString('es-CL')}</Text>
+                            </View>
+                            <View style={styles.budgetStat}>
+                                <Text style={styles.label}>Disponible</Text>
+                                <Text style={styles.budgetValue}>${Math.round(budgetRemaining).toLocaleString('es-CL')}</Text>
+                            </View>
+                            <TouchableOpacity style={styles.editBudgetButton} onPress={() => {
+                                setBudgetSaved(false);
+                                setBudgetEditing(true);
+                            }}>
+                                <MaterialCommunityIcons name="pencil-outline" size={18} color="#064E2F" />
+                                <Text style={styles.editButtonText}>Editar presupuesto</Text>
+                            </TouchableOpacity>
+                        </View>
+                    ) : (
+                        <View style={styles.editSection}>
+                            <Text style={styles.label}>Monto del periodo</Text>
+                            <TextInput
+                                style={styles.editInputFull}
+                                value={budgetAmount}
+                                onChangeText={(value) => {
+                                    setBudgetSaved(false);
+                                    setBudgetAmount(value);
+                                }}
+                                keyboardType="numeric"
+                                placeholder="Ej: 120000"
+                                placeholderTextColor="#4F9F70"
+                            />
+                            <View style={styles.genderRow}>
+                                {['semanal', 'mensual'].map((period) => (
+                                    <Pressable
+                                        key={period}
+                                        onPress={() => {
+                                            setBudgetSaved(false);
+                                            setBudgetPeriod(period);
+                                        }}
+                                        style={[styles.genderChip, budgetPeriod === period && styles.genderChipSelected]}>
+                                        <Text style={[styles.genderChipText, budgetPeriod === period && styles.genderChipTextSelected]}>
+                                            {period}
+                                        </Text>
+                                    </Pressable>
+                                ))}
+                            </View>
+                            <TouchableOpacity
+                                style={[styles.saveButton, budgetSaved && styles.budgetSavedButton]}
+                                onPress={handleSaveBudget}
+                                disabled={budgetSaving || budgetSaved}>
+                                {budgetSaving ? (
+                                    <ActivityIndicator color="#FBFFF8" />
+                                ) : (
+                                    <Text style={styles.saveButtonText}>{budgetSaved ? '¡Guardado!' : 'Guardar presupuesto'}</Text>
+                                )}
+                            </TouchableOpacity>
+                            {budget && (
+                                <TouchableOpacity style={styles.cancelButton} onPress={() => setBudgetEditing(false)}>
+                                    <Text style={styles.cancelButtonText}>Cancelar</Text>
+                                </TouchableOpacity>
+                            )}
+                        </View>
+                    )}
+                </View>
+
                 {/* botones de acción    */}
                 {editing ? (
                     <View style={styles.editActions}>
@@ -405,6 +545,62 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         borderColor: '#9FE7B9',
         gap: 14,
+    },
+    budgetCard: {
+        backgroundColor: '#E9FBEF',
+        borderRadius: 18,
+        padding: 18,
+        borderWidth: 1,
+        borderColor: '#9FE7B9',
+        gap: 14,
+        shadowColor: '#74D997',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.18,
+        shadowRadius: 14,
+        elevation: 2,
+    },
+    budgetCopy: {
+        flex: 1,
+        gap: 3,
+        backgroundColor: 'transparent',
+    },
+    budgetHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        backgroundColor: 'transparent',
+    },
+    budgetHint: {
+        color: '#2F7A4F',
+        fontSize: 13,
+        fontWeight: '700',
+        lineHeight: 18,
+    },
+    budgetIcon: {
+        width: 48,
+        height: 48,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: 16,
+        backgroundColor: '#9FE7B9',
+    },
+    budgetSavedButton: {
+        backgroundColor: '#16A34A',
+    },
+    budgetStat: {
+        gap: 4,
+        padding: 12,
+        borderRadius: 14,
+        backgroundColor: '#DDF8E7',
+    },
+    budgetStats: {
+        gap: 10,
+        backgroundColor: 'transparent',
+    },
+    budgetValue: {
+        color: '#064E2F',
+        fontSize: 18,
+        fontWeight: '900',
     },
     sectionTitle: {
         fontSize: 16,
@@ -516,6 +712,18 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.22,
         shadowRadius: 12,
         elevation: 2,
+    },
+    editBudgetButton: {
+        minHeight: 48,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        backgroundColor: '#D8FBE3',
+        paddingVertical: 13,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: '#9FE7B9',
     },
     editButtonText: {
         color: '#064E2F',

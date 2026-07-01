@@ -5,6 +5,7 @@ import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, TextInput 
 
 import { Text, View } from '@/components/Themed';
 import { useAuth } from '@/contexts/AuthContext';
+import { useThemePreference } from '@/contexts/ThemeContext';
 import { DespensaItemData, fetchDespensa } from '@/services/despensa';
 import { savePreparationRecipe } from '@/services/preparation';
 import { BudgetPurchaseSuggestion, GeneratedRecipe, prepareRecipeForUser } from '@/services/recipes';
@@ -83,7 +84,11 @@ function itemSubtitle(item: DespensaItemData) {
 
 export default function ProgressScreen() {
   const { user } = useAuth();
+  const { colorScheme } = useThemePreference();
   const router = useRouter();
+  const isDark = colorScheme === 'dark';
+  const darkIconColor = isDark ? '#EAFBF0' : '#064E2F';
+  const darkSecondaryIconColor = isDark ? '#BDF7D2' : '#2F7A4F';
   const [groups, setGroups] = useState<SocialGroup[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [activeGroup, setActiveGroup] = useState<SocialGroup | null>(null);
@@ -442,7 +447,7 @@ export default function ProgressScreen() {
           <>
             <View style={styles.hero}>
               <View style={styles.heroIcon}>
-                <MaterialCommunityIcons name="account-group-outline" size={28} color="#064E2F" />
+                <MaterialCommunityIcons name="account-group-outline" size={28} color={darkIconColor} />
               </View>
               <View style={styles.heroCopy}>
                 <Text style={styles.title}>Social</Text>
@@ -451,10 +456,10 @@ export default function ProgressScreen() {
             </View>
 
             <View style={styles.setupGrid}>
-              <View style={styles.panel}>
+              <View style={[styles.panel, isDark && styles.panelDark]}>
                 <View style={styles.panelHeader}>
-                  <View style={styles.panelIcon}>
-                    <MaterialCommunityIcons name="plus" size={22} color="#064E2F" />
+                  <View style={[styles.panelIcon, isDark && styles.panelIconDark]}>
+                    <MaterialCommunityIcons name="plus" size={22} color={darkIconColor} />
                   </View>
                   <View style={styles.panelCopy}>
                     <Text style={styles.panelTitle}>Crear grupo</Text>
@@ -465,7 +470,7 @@ export default function ProgressScreen() {
                   onChangeText={setGroupName}
                   placeholder="Nombre del grupo"
                   placeholderTextColor="#43A66C"
-                  style={styles.textInput}
+                  style={[styles.textInput, isDark && styles.textInputDark]}
                   value={groupName}
                 />
                 <Pressable accessibilityRole="button" disabled={creating} onPress={handleCreateGroup} style={styles.primaryButton}>
@@ -474,10 +479,10 @@ export default function ProgressScreen() {
                 </Pressable>
               </View>
 
-              <View style={styles.panel}>
+              <View style={[styles.panel, isDark && styles.panelDark]}>
                 <View style={styles.panelHeader}>
-                  <View style={styles.panelIconWarm}>
-                    <MaterialCommunityIcons name="login" size={22} color="#064E2F" />
+                  <View style={[styles.panelIconWarm, isDark && styles.panelIconWarmDark]}>
+                    <MaterialCommunityIcons name="login" size={22} color={darkIconColor} />
                   </View>
                   <View style={styles.panelCopy}>
                     <Text style={styles.panelTitle}>Unirse a grupo</Text>
@@ -490,11 +495,11 @@ export default function ProgressScreen() {
                   onChangeText={(value) => setJoinCode(value.toUpperCase())}
                   placeholder="ABC123"
                   placeholderTextColor="#43A66C"
-                  style={styles.codeInput}
+                  style={[styles.codeInput, isDark && styles.textInputDark]}
                   value={joinCode}
                 />
                 <Pressable accessibilityRole="button" disabled={joining} onPress={handleJoinGroup} style={styles.secondaryButton}>
-                  {joining ? <ActivityIndicator color="#064E2F" /> : <MaterialCommunityIcons name="account-arrow-right" size={20} color="#064E2F" />}
+                  {joining ? <ActivityIndicator color={darkIconColor} /> : <MaterialCommunityIcons name="account-arrow-right" size={20} color={darkIconColor} />}
                   <Text style={styles.secondaryButtonText}>Unirse</Text>
                 </Pressable>
               </View>
@@ -516,15 +521,20 @@ export default function ProgressScreen() {
                     accessibilityRole="button"
                     key={group.id}
                     onPress={() => openGroup(group)}
-                    style={[styles.groupRow, group.accepted === false && styles.groupRowPending]}>
-                    <View style={styles.groupRowIcon}>
-                      <MaterialCommunityIcons name="account-group-outline" size={22} color="#064E2F" />
+                    style={[
+                      styles.groupRow,
+                      isDark && styles.groupRowDark,
+                      group.accepted === false && styles.groupRowPending,
+                      isDark && group.accepted === false && styles.groupRowPendingDark,
+                    ]}>
+                    <View style={[styles.groupRowIcon, isDark && styles.groupRowIconDark]}>
+                      <MaterialCommunityIcons name="account-group-outline" size={22} color={darkIconColor} />
                     </View>
                     <View style={styles.groupHeaderCopy}>
                       <Text style={styles.groupChipTitle} numberOfLines={1}>{group.nombre}</Text>
                       <Text style={styles.groupChipCode}>{group.accepted === false ? 'Pendiente de aceptacion' : `Codigo ${group.codigo_grupo || 'sin codigo'}`}</Text>
                     </View>
-                    <MaterialCommunityIcons name={group.accepted === false ? 'clock-outline' : 'chevron-right'} size={22} color="#2F7A4F" />
+                    <MaterialCommunityIcons name={group.accepted === false ? 'clock-outline' : 'chevron-right'} size={22} color={darkSecondaryIconColor} />
                   </Pressable>
                 ))}
               </View>
@@ -540,9 +550,9 @@ export default function ProgressScreen() {
 
         {isGroupView && (
           <>
-            <View style={styles.groupHeader}>
+            <View style={[styles.groupHeader, isDark && styles.panelDark]}>
               <Pressable accessibilityRole="button" onPress={closeGroup} style={styles.backButton}>
-                <MaterialCommunityIcons name="chevron-left" size={24} color="#064E2F" />
+                <MaterialCommunityIcons name="chevron-left" size={24} color={darkIconColor} />
               </Pressable>
               <View style={styles.groupHeaderCopy}>
                 <Text style={styles.sectionTitle}>{currentGroup?.nombre || 'Grupo'}</Text>
@@ -554,7 +564,7 @@ export default function ProgressScreen() {
               </View>
             </View>
 
-            <View style={styles.panel}>
+            <View style={[styles.panel, isDark && styles.panelDark]}>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Participantes</Text>
                 <Text style={styles.sectionMeta}>{acceptedMembers.length} persona{acceptedMembers.length === 1 ? '' : 's'}</Text>
@@ -567,8 +577,8 @@ export default function ProgressScreen() {
               ) : (
                 <View style={styles.memberList}>
                   {acceptedMembers.map((member) => (
-                    <View key={member.user_id} style={styles.memberCard}>
-                      <View style={styles.memberAvatar}>
+                    <View key={member.user_id} style={[styles.memberCard, isDark && styles.memberCardDark]}>
+                      <View style={[styles.memberAvatar, isDark && styles.groupRowIconDark]}>
                         <Text style={styles.memberAvatarText}>{initials(member.nombre)}</Text>
                       </View>
                       <View style={styles.memberCopy}>
@@ -617,7 +627,7 @@ export default function ProgressScreen() {
                     <View style={styles.pendingWrap}>
                       <Text style={styles.pendingTitle}>Solicitudes pendientes</Text>
                       {pendingMembers.map((member) => (
-                        <View key={member.user_id} style={styles.memberCard}>
+                        <View key={member.user_id} style={[styles.memberCard, isDark && styles.memberCardDark]}>
                           <View style={styles.memberAvatarPending}>
                             <Text style={styles.memberAvatarText}>{initials(member.nombre)}</Text>
                           </View>
@@ -641,17 +651,17 @@ export default function ProgressScreen() {
               )}
             </View>
 
-            <View style={styles.panel}>
+            <View style={[styles.panel, isDark && styles.panelDark]}>
               <View style={styles.panelHeader}>
-                <View style={styles.panelIcon}>
-                  <MaterialCommunityIcons name="creation" size={22} color="#064E2F" />
+                <View style={[styles.panelIcon, isDark && styles.panelIconDark]}>
+                  <MaterialCommunityIcons name="creation" size={22} color={darkIconColor} />
                 </View>
                 <View style={styles.panelCopy}>
                   <Text style={styles.panelTitle}>Generador grupal</Text>
                   <Text style={styles.panelSubtitle}>Busca compatibilidades y adapta cada plato por persona.</Text>
                 </View>
-                <Pressable accessibilityRole="button" onPress={openHistory} style={styles.historyButton}>
-                  <MaterialCommunityIcons name="history" size={20} color="#064E2F" />
+                <Pressable accessibilityRole="button" onPress={openHistory} style={[styles.historyButton, isDark && styles.historyButtonDark]}>
+                  <MaterialCommunityIcons name="history" size={20} color={darkIconColor} />
                   <Text style={styles.historyButtonText}>{historyItems.length}</Text>
                 </Pressable>
               </View>
@@ -664,8 +674,8 @@ export default function ProgressScreen() {
                       accessibilityRole="button"
                       key={meal.id}
                       onPress={() => setSelectedMeal(meal.id)}
-                      style={[styles.mealChip, isSelected && styles.mealChipSelected]}>
-                      <MaterialCommunityIcons name={meal.icon} size={18} color={isSelected ? '#FBFFF8' : '#064E2F'} />
+                      style={[styles.mealChip, isDark && styles.chipDark, isSelected && styles.mealChipSelected]}>
+                      <MaterialCommunityIcons name={meal.icon} size={18} color={isSelected ? '#FBFFF8' : darkIconColor} />
                       <Text style={[styles.mealChipText, isSelected && styles.mealChipTextSelected]}>{meal.label}</Text>
                     </Pressable>
                   );
@@ -678,7 +688,12 @@ export default function ProgressScreen() {
                     accessibilityRole="button"
                     key={item}
                     onPress={() => setObjective((current) => (current === item ? '' : item))}
-                    style={[styles.objectiveChip, objective === item && styles.objectiveChipSelected]}>
+                    style={[
+                      styles.objectiveChip,
+                      isDark && styles.chipDark,
+                      objective === item && styles.objectiveChipSelected,
+                      isDark && objective === item && styles.objectiveChipSelectedDark,
+                    ]}>
                     <Text style={[styles.objectiveChipText, objective === item && styles.objectiveChipTextSelected]}>{item}</Text>
                   </Pressable>
                 ))}
@@ -688,7 +703,7 @@ export default function ProgressScreen() {
                 onChangeText={setObjective}
                 placeholder="Objetivo del pack, ej: base arroz y alta proteina"
                 placeholderTextColor="#43A66C"
-                style={styles.textInput}
+                style={[styles.textInput, isDark && styles.textInputDark]}
                 value={objective}
               />
 
@@ -696,17 +711,17 @@ export default function ProgressScreen() {
                 onChangeText={setExtraRestrictions}
                 placeholder="Restricciones extra separadas por coma"
                 placeholderTextColor="#43A66C"
-                style={styles.textInput}
+                style={[styles.textInput, isDark && styles.textInputDark]}
                 value={extraRestrictions}
               />
 
-              <View style={styles.searchBar}>
-                <MaterialCommunityIcons name="magnify" size={22} color="#2F7A4F" />
+              <View style={[styles.searchBar, isDark && styles.searchBarDark]}>
+                <MaterialCommunityIcons name="magnify" size={22} color={darkSecondaryIconColor} />
                 <TextInput
                   onChangeText={setIngredientSearch}
                   placeholder="Ingrediente sugerido, ej: arroz"
-                  placeholderTextColor="#2F7A4F"
-                  style={styles.searchInput}
+                  placeholderTextColor={isDark ? '#8EDBA9' : '#2F7A4F'}
+                  style={[styles.searchInput, isDark && styles.searchInputDark]}
                   value={ingredientSearch}
                 />
               </View>
@@ -724,8 +739,13 @@ export default function ProgressScreen() {
                         accessibilityRole="button"
                         key={item.id}
                         onPress={() => toggleIngredient(item.id)}
-                        style={[styles.ingredientRow, isSelected && styles.ingredientRowSelected]}>
-                        <View style={[styles.checkBox, isSelected && styles.checkBoxSelected]}>
+                        style={[
+                          styles.ingredientRow,
+                          isDark && styles.ingredientRowDark,
+                          isSelected && styles.ingredientRowSelected,
+                          isDark && isSelected && styles.ingredientRowSelectedDark,
+                        ]}>
+                        <View style={[styles.checkBox, isDark && styles.checkBoxDark, isSelected && styles.checkBoxSelected]}>
                           {isSelected && <MaterialCommunityIcons name="check" size={16} color="#FBFFF8" />}
                         </View>
                         <View style={styles.ingredientCopy}>
@@ -740,7 +760,7 @@ export default function ProgressScreen() {
               )}
 
               <View style={styles.budgetToggleRow}>
-                <Pressable accessibilityRole="button" onPress={() => setIsBudgeted((current) => !current)} style={styles.budgetToggle}>
+                <Pressable accessibilityRole="button" onPress={() => setIsBudgeted((current) => !current)} style={[styles.budgetToggle, isDark && styles.budgetToggleDark]}>
                   <View style={[styles.switchTrack, isBudgeted && styles.switchTrackOn]}>
                     <View style={[styles.switchKnob, isBudgeted && styles.switchKnobOn]} />
                   </View>
@@ -755,7 +775,7 @@ export default function ProgressScreen() {
                     onChangeText={setBudgetInput}
                     placeholder="CLP"
                     placeholderTextColor="#43A66C"
-                    style={styles.budgetInput}
+                    style={[styles.budgetInput, isDark && styles.textInputDark]}
                     value={budgetInput}
                   />
                 )}
@@ -794,19 +814,21 @@ export default function ProgressScreen() {
         )}
 
         {purchaseSuggestions.length > 0 && (
-          <View style={styles.panel}>
+          <View style={[styles.panel, isDark && styles.panelDark]}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Compras sugeridas</Text>
               <Text style={styles.sectionMeta}>{formatPrice(purchaseSuggestions.reduce((sum, item) => sum + Number(item.precio || 0), 0))}</Text>
             </View>
             {purchaseSuggestions.map((item, index) => (
-              <View key={`${item.nombre}-${index}`} style={styles.purchaseRow}>
-                <View style={styles.purchaseIcon}>
-                  <MaterialCommunityIcons name="cart-outline" size={18} color="#064E2F" />
+              <View key={`${item.nombre}-${index}`} style={[styles.purchaseRow, isDark && styles.ingredientRowDark]}>
+                <View style={[styles.purchaseIcon, isDark && styles.groupRowIconDark]}>
+                  <MaterialCommunityIcons name="cart-outline" size={18} color={darkIconColor} />
                 </View>
                 <View style={styles.ingredientCopy}>
                   <Text style={styles.ingredientTitle}>{item.nombre}</Text>
-                  <Text style={styles.ingredientSubtitle}>{item.cantidad} - {item.reason || item.categoria}</Text>
+                  <Text style={styles.ingredientSubtitle}>
+                    {[item.cantidad, item.supermercado_nombre, item.reason || item.categoria].filter(Boolean).join(' - ')}
+                  </Text>
                 </View>
                 <Text style={styles.pricePill}>{formatPrice(item.precio)}</Text>
               </View>
@@ -1048,6 +1070,10 @@ const styles = StyleSheet.create({
     borderColor: '#9FE7B9',
     backgroundColor: '#FBFFF8',
   },
+  budgetToggleDark: {
+    borderColor: '#2F7A4F',
+    backgroundColor: '#102619',
+  },
   budgetToggle: {
     flex: 1,
     minHeight: 58,
@@ -1088,6 +1114,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#74D997',
     backgroundColor: '#FBFFF8',
+  },
+  checkBoxDark: {
+    borderColor: '#2F7A4F',
+    backgroundColor: '#173321',
   },
   checkBoxSelected: {
     borderColor: '#00B86B',
@@ -1252,6 +1282,10 @@ const styles = StyleSheet.create({
     borderColor: '#9FE7B9',
     backgroundColor: '#E9FBEF',
   },
+  groupRowDark: {
+    borderColor: '#2F7A4F',
+    backgroundColor: '#102619',
+  },
   groupRowIcon: {
     width: 42,
     height: 42,
@@ -1260,9 +1294,16 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     backgroundColor: '#9FE7B9',
   },
+  groupRowIconDark: {
+    backgroundColor: '#245C38',
+  },
   groupRowPending: {
     borderColor: '#FFE8A3',
     backgroundColor: '#FFF8DE',
+  },
+  groupRowPendingDark: {
+    borderColor: '#7A5C16',
+    backgroundColor: '#2A210F',
   },
   hero: {
     flexDirection: 'row',
@@ -1293,6 +1334,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#74D997',
     backgroundColor: '#D8FBE3',
+  },
+  historyButtonDark: {
+    borderColor: '#2F7A4F',
+    backgroundColor: '#173321',
   },
   historyButtonText: {
     color: '#064E2F',
@@ -1375,9 +1420,17 @@ const styles = StyleSheet.create({
     borderColor: '#9FE7B9',
     backgroundColor: '#DDF8E7',
   },
+  ingredientRowDark: {
+    borderColor: '#2F7A4F',
+    backgroundColor: '#102619',
+  },
   ingredientRowSelected: {
     borderColor: '#00B86B',
     backgroundColor: '#D8FBE3',
+  },
+  ingredientRowSelectedDark: {
+    borderColor: '#20D684',
+    backgroundColor: '#183C27',
   },
   ingredientScroller: {
     maxHeight: 230,
@@ -1437,6 +1490,10 @@ const styles = StyleSheet.create({
     borderColor: '#9FE7B9',
     backgroundColor: '#DDF8E7',
   },
+  chipDark: {
+    borderColor: '#2F7A4F',
+    backgroundColor: '#102619',
+  },
   mealChipSelected: {
     borderColor: '#00B86B',
     backgroundColor: '#00B86B',
@@ -1490,6 +1547,9 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     backgroundColor: '#DDF8E7',
   },
+  memberCardDark: {
+    backgroundColor: '#173321',
+  },
   memberCopy: {
     flex: 1,
     gap: 2,
@@ -1528,6 +1588,10 @@ const styles = StyleSheet.create({
     borderColor: '#00B86B',
     backgroundColor: '#9FE7B9',
   },
+  objectiveChipSelectedDark: {
+    borderColor: '#20D684',
+    backgroundColor: '#183C27',
+  },
   objectiveChipText: {
     color: '#2F7A4F',
     fontSize: 12,
@@ -1555,6 +1619,11 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
     elevation: 2,
   },
+  panelDark: {
+    borderColor: '#2F7A4F',
+    backgroundColor: '#102619',
+    shadowColor: '#000000',
+  },
   panelCopy: {
     flex: 1,
     gap: 3,
@@ -1574,6 +1643,9 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     backgroundColor: '#9FE7B9',
   },
+  panelIconDark: {
+    backgroundColor: '#245C38',
+  },
   panelIconWarm: {
     width: 44,
     height: 44,
@@ -1581,6 +1653,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 15,
     backgroundColor: '#FFE8A3',
+  },
+  panelIconWarmDark: {
+    backgroundColor: '#4A3714',
   },
   panelSubtitle: {
     color: '#2F7A4F',
@@ -1851,11 +1926,18 @@ const styles = StyleSheet.create({
     borderColor: '#9FE7B9',
     backgroundColor: '#FBFFF8',
   },
+  searchBarDark: {
+    borderColor: '#2F7A4F',
+    backgroundColor: '#102619',
+  },
   searchInput: {
     flex: 1,
     color: '#064E2F',
     fontSize: 14,
     fontWeight: '800',
+  },
+  searchInputDark: {
+    color: '#EAFBF0',
   },
   secondaryButton: {
     minHeight: 50,
@@ -1946,6 +2028,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#9FE7B9',
     backgroundColor: '#FBFFF8',
+  },
+  textInputDark: {
+    borderColor: '#2F7A4F',
+    backgroundColor: '#173321',
+    color: '#EAFBF0',
   },
   title: {
     color: '#064E2F',

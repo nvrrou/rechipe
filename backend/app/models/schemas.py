@@ -87,6 +87,34 @@ class BudgetRecipeRequest(BaseModel):
     usar_restricciones_perfil: bool = True
 
 
+class BudgetUpsertRequest(BaseModel):
+    user_id: str
+    monto: float
+    periodo: str = "mensual"
+    moneda: str = "CLP"
+
+
+class BudgetSpendRequest(BaseModel):
+    user_id: str
+    monto: float
+    descripcion: Optional[str] = ""
+
+
+class WeeklyPlanRequest(BaseModel):
+    user_id: str
+    presupuesto: Optional[float] = None
+    preferencias_semana: Optional[str] = ""
+    permitir_comidas_intermedias: bool = False
+    dias: int = 7
+    comidas_por_dia: int = 3
+    usar_presupuesto_perfil: bool = True
+
+
+class WeeklyMealRecipeUpdateRequest(BaseModel):
+    user_id: str
+    receta: dict[str, Any]
+
+
 class RecipeAdjustRequest(BaseModel):
     receta: dict[str, Any]
     cambios: str

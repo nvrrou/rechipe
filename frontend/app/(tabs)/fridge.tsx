@@ -7,6 +7,7 @@ import WheelPickerExpo from 'react-native-wheel-picker-expo';
 
 import { Text, View } from '@/components/Themed';
 import { useAuth } from '@/contexts/AuthContext';
+import { useThemePreference } from '@/contexts/ThemeContext';
 import {
   CatalogProductData,
   DespensaAddData,
@@ -25,6 +26,7 @@ import {
   solicitarAutenticacionProducto,
   verificarCategoriaProducto,
 } from '@/services/despensa';
+import { loadDespensaCache, saveDespensaCache } from '@/services/despensaCache';
 import {
   getExpiryStatus,
   getExpiryLabel,
@@ -409,11 +411,16 @@ function SlidingMetaText({ text }: { text: string }) {
 
 export default function FridgeScreen() {
   const { user } = useAuth();
+  const { colorScheme } = useThemePreference();
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const isDark = colorScheme === 'dark';
+  const darkIconColor = isDark ? '#EAFBF0' : '#064E2F';
+  const darkSecondaryIconColor = isDark ? '#BDF7D2' : '#2F7A4F';
 
   const [items, setItems] = useState<DespensaItemData[]>([]);
   const [supermarkets, setSupermarkets] = useState<SupermarketData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isOffline, setIsOffline] = useState(false);
   const [saving, setSaving] = useState(false);
   const [generatingImage, setGeneratingImage] = useState(false);
   const [activeView, setActiveView] = useState<ActiveView>('categories');
@@ -517,14 +524,24 @@ export default function FridgeScreen() {
     setLoading(true);
     const result = await fetchDespensa(user.id);
     if (result.items) {
+      setIsOffline(false);
       const itemsWithCatalogPrices = await hydratePricesByCatalogId(result.items);
       setItems(itemsWithCatalogPrices);
+      await saveDespensaCache(user.id, itemsWithCatalogPrices);
       // HU-10: Programar notificaciones de vencimiento
       scheduleExpiryNotifications(itemsWithCatalogPrices).catch(() => {
         // Silenciar errores de notificaciones - no son críticos
       });
-    } else if (result.error) {
-      Alert.alert('Error', result.error);
+    } else {
+      const cached = await loadDespensaCache(user.id);
+      setIsOffline(true);
+
+      if (cached) {
+        setItems(cached);
+      } else {
+        setItems([]);
+        if (result.error) Alert.alert('Error', result.error);
+      }
     }
     setLoading(false);
   }, [user?.id]);
@@ -1923,23 +1940,32 @@ export default function FridgeScreen() {
           </Text>
         </View>
 
+        {isOffline && (
+          <View style={styles.offlineBanner}>
+            <MaterialCommunityIcons name="wifi-off" size={18} color="#EA580C" />
+            <Text style={styles.offlineBannerText}>
+              Sin conexión — viendo datos guardados localmente
+            </Text>
+          </View>
+        )}
+
         {activeView === 'categories' && (
-          <View style={styles.addBar}>
+          <View style={[styles.addBar, isDark && styles.addBarDark]}>
             <Pressable accessibilityRole="button" onPress={() => openAddView()} style={styles.addButton}>
-              <MaterialCommunityIcons name="plus" size={22} color="#064E2F" />
+              <MaterialCommunityIcons name="plus" size={22} color={darkIconColor} />
             </Pressable>
             <Text style={styles.addBarText}>Agregar ingrediente</Text>
-            <Pressable accessibilityRole="button" onPress={scanFromCurrentCategory} style={styles.scanButton}>
-              <MaterialCommunityIcons name="barcode-scan" size={22} color="#064E2F" />
+            <Pressable accessibilityRole="button" onPress={scanFromCurrentCategory} style={[styles.scanButton, isDark && styles.scanButtonDark]}>
+              <MaterialCommunityIcons name="barcode-scan" size={22} color={darkIconColor} />
             </Pressable>
-            <Pressable accessibilityRole="button" onPress={() => setActiveView('search')} style={styles.searchButton}>
-              <MaterialCommunityIcons name="magnify" size={22} color="#064E2F" />
+            <Pressable accessibilityRole="button" onPress={() => setActiveView('search')} style={[styles.searchButton, isDark && styles.searchButtonDark]}>
+              <MaterialCommunityIcons name="magnify" size={22} color={darkIconColor} />
             </Pressable>
           </View>
         )}
 
         {activeView === 'search' && (
-          <View style={styles.addBar}>
+          <View style={[styles.addBar, isDark && styles.addBarDark]}>
             <View style={styles.searchIconStatic}>
               <MaterialCommunityIcons name="magnify" size={22} color="#2F7A4F" />
             </View>
@@ -1974,7 +2000,7 @@ export default function FridgeScreen() {
                       setSelectedCategoryId(category.id);
                       setActiveView('category');
                     }}
-                    style={styles.categoryCard}>
+                    style={[styles.categoryCard, isDark && styles.categoryCardDark]}>
                     <View style={[styles.categoryIcon, { backgroundColor: category.color + '33' }]}>
                       <MaterialCommunityIcons name={category.icon} size={24} color={category.color} />
                     </View>
@@ -1983,7 +2009,7 @@ export default function FridgeScreen() {
                         <Text style={styles.categoryName}>{category.name}</Text>
                         <Text style={styles.categoryCount}>{count} ingredientes</Text>
                       </View>
-                      <MaterialCommunityIcons name="chevron-right" size={22} color="#2F7A4F" />
+                      <MaterialCommunityIcons name="chevron-right" size={22} color={darkSecondaryIconColor} />
                     </View>
                   </Pressable>
                 );
@@ -2268,6 +2294,11 @@ const styles = StyleSheet.create({
     shadowRadius: 22,
     elevation: 2,
   },
+  addBarDark: {
+    borderColor: '#2F7A4F',
+    backgroundColor: '#102619',
+    shadowColor: '#000000',
+  },
   addBarText: {
     flex: 1,
     color: '#064E2F',
@@ -2481,6 +2512,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.24,
     shadowRadius: 18,
     elevation: 1,
+  },
+  categoryCardDark: {
+    borderColor: '#2F7A4F',
+    backgroundColor: '#102619',
+    shadowColor: '#000000',
   },
   categoryCopy: {
     gap: 3,
@@ -3247,6 +3283,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
+  offlineBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: 12,
+    backgroundColor: '#FFF7ED',
+    borderColor: '#FDBA74',
+  },
+  offlineBannerText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#EA580C',
+  },
   nutritionGrid: {
     gap: 10,
     backgroundColor: 'transparent',
@@ -3472,6 +3525,10 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 2,
   },
+  searchButtonDark: {
+    backgroundColor: '#173321',
+    shadowColor: '#000000',
+  },
   scanButton: {
     width: 38,
     height: 38,
@@ -3486,6 +3543,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.22,
     shadowRadius: 12,
     elevation: 2,
+  },
+  scanButtonDark: {
+    borderColor: '#2F7A4F',
+    backgroundColor: '#173321',
+    shadowColor: '#000000',
   },
   scanCodeAction: {
     minHeight: 58,

@@ -6,6 +6,7 @@
 import { Text as DefaultText, View as DefaultView } from 'react-native';
 
 import Colors from '@/constants/Colors';
+import { mapThemeStyle } from '@/contexts/ThemeContext';
 import { useColorScheme } from './useColorScheme';
 
 type ThemeProps = {
@@ -32,14 +33,18 @@ export function useThemeColor(
 
 export function Text(props: TextProps) {
   const { style, lightColor, darkColor, ...otherProps } = props;
+  const theme = useColorScheme() ?? 'light';
   const color = useThemeColor({ light: lightColor, dark: darkColor }, 'text');
+  const mappedStyle = mapThemeStyle(style, theme);
 
-  return <DefaultText style={[{ color }, style]} {...otherProps} />;
+  return <DefaultText style={[{ color }, mappedStyle]} {...otherProps} />;
 }
 
 export function View(props: ViewProps) {
   const { style, lightColor, darkColor, ...otherProps } = props;
+  const theme = useColorScheme() ?? 'light';
   const backgroundColor = useThemeColor({ light: lightColor, dark: darkColor }, 'background');
+  const mappedStyle = mapThemeStyle(style, theme);
 
-  return <DefaultView style={[{ backgroundColor }, style]} {...otherProps} />;
+  return <DefaultView style={[{ backgroundColor }, mappedStyle]} {...otherProps} />;
 }

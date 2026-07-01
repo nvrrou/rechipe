@@ -23,6 +23,7 @@ router = APIRouter(
 
 PRODUCT_SELECT = "id,nombre,categoria,energia_kcal,proteinas_g,carbohidratos_g,grasas_totales_g"
 RECIPE_SELECT = "id,creado_por,grupo_id,titulo,descripcion,instrucciones,ingredientes,info_nutricional,tiempo_preparacion,porciones,costo_estimado,es_publica,generada_por_ia,prompt_usado,created_at,updated_at"
+SUPERMARKET_SELECT = "id,nombre,cadena,direccion"
 
 
 def _normalize_recipe_text(value: str | None) -> str:
@@ -204,7 +205,67 @@ async def _get_best_price(client: httpx.AsyncClient, producto_id: str):
     return {
         "precio": price.get("precio"),
         "unidad": price.get("unidad"),
+        "supermercado_id": price.get("supermercado_id"),
         "supermercado_nombre": supermercado_nombre,
+    }
+
+
+async def _get_registered_supermarkets(client: httpx.AsyncClient):
+    response = await client.get(
+        "/supermercados",
+        params={"select": SUPERMARKET_SELECT, "order": "nombre.asc"},
+    )
+    if response.status_code != 200:
+        return []
+    return response.json()
+
+
+def _normalize_purchase_name(value: str | None):
+    return _normalize_recipe_text(value).strip()
+
+
+def _attach_registered_supermarket(purchase: dict, candidates: list[dict]):
+    supermarket_id = purchase.get("supermercado_id")
+    supermarket_name = purchase.get("supermercado_nombre")
+    if supermarket_id or supermarket_name:
+        known_supermarket = next(
+            (
+                candidate
+                for candidate in candidates
+                if (
+                    supermarket_id
+                    and candidate.get("supermercado_id") == supermarket_id
+                )
+                or (
+                    supermarket_name
+                    and candidate.get("supermercado_nombre") == supermarket_name
+                )
+            ),
+            None,
+        )
+        if known_supermarket:
+            return {
+                **purchase,
+                "supermercado_id": known_supermarket.get("supermercado_id"),
+                "supermercado_nombre": known_supermarket.get("supermercado_nombre"),
+            }
+
+    purchase_name = _normalize_purchase_name(purchase.get("nombre"))
+    match = next(
+        (
+            candidate
+            for candidate in candidates
+            if purchase_name and _recipe_text_matches(purchase_name, candidate.get("nombre") or "")
+        ),
+        None,
+    )
+    if not match:
+        return purchase
+
+    return {
+        **purchase,
+        "supermercado_id": match.get("supermercado_id"),
+        "supermercado_nombre": match.get("supermercado_nombre"),
     }
 
 
@@ -230,7 +291,9 @@ async def _find_purchase_candidates(client: httpx.AsyncClient, pantry_names: set
             "categoria": product.get("categoria") or "Otros",
             "cantidad": price.get("unidad") or "1 unidad",
             "precio": price.get("precio"),
-            "reason": f"Precio encontrado en {price.get('supermercado_nombre') or 'supermercado'}",
+            "supermercado_id": price.get("supermercado_id"),
+            "supermercado_nombre": price.get("supermercado_nombre"),
+            "reason": f"Precio encontrado en {price.get('supermercado_nombre') or 'supermercado registrado'}",
         })
 
         if len(candidates) >= limit:
@@ -239,7 +302,7 @@ async def _find_purchase_candidates(client: httpx.AsyncClient, pantry_names: set
     return candidates
 
 
-async def _build_estimated_candidates(existing_names: set[str], needed_count: int = 6):
+async def _build_estimated_candidates(existing_names: set[str], needed_count: int = 6, supermarkets: list[dict] | None = None):
     fallback_products = [
         ("Huevos", "Proteínas"),
         ("Avena", "Cereales"),
@@ -255,7 +318,7 @@ async def _build_estimated_candidates(existing_names: set[str], needed_count: in
     for name, category in fallback_products:
         if name.lower() in existing_names:
             continue
-        estimate = await estimar_precio_producto_chile(name, category)
+        estimate = await estimar_precio_producto_chile(name, category, supermarkets)
         if "error" in estimate:
             continue
         candidates.append({
@@ -263,6 +326,8 @@ async def _build_estimated_candidates(existing_names: set[str], needed_count: in
             "categoria": estimate.get("categoria") or category,
             "cantidad": estimate.get("cantidad") or "1 unidad",
             "precio": estimate.get("precio") or 0,
+            "supermercado_id": estimate.get("supermercado_id"),
+            "supermercado_nombre": estimate.get("supermercado_nombre"),
             "reason": estimate.get("razon") or "Precio estimado para Chile",
         })
         if len(candidates) >= needed_count:
@@ -292,16 +357,21 @@ async def _build_purchase_for_missing_ingredient(client: httpx.AsyncClient, ingr
                 "categoria": product.get("categoria") or "Otros",
                 "cantidad": price.get("unidad") or "1 unidad",
                 "precio": price.get("precio") or 0,
-                "reason": "Faltante detectado al comparar la receta con tu despensa.",
+                "supermercado_id": price.get("supermercado_id"),
+                "supermercado_nombre": price.get("supermercado_nombre"),
+                "reason": f"Faltante detectado; precio encontrado en {price.get('supermercado_nombre') or 'supermercado registrado'}.",
             }
 
-    estimate = await estimar_precio_producto_chile(clean_name, "Otros")
+    supermarkets = await _get_registered_supermarkets(client)
+    estimate = await estimar_precio_producto_chile(clean_name, "Otros", supermarkets)
     if "error" in estimate:
         return {
             "nombre": clean_name,
             "categoria": "Otros",
             "cantidad": "1 unidad",
             "precio": 0,
+            "supermercado_id": None,
+            "supermercado_nombre": None,
             "reason": "Faltante detectado al comparar la receta con tu despensa.",
         }
 
@@ -310,6 +380,8 @@ async def _build_purchase_for_missing_ingredient(client: httpx.AsyncClient, ingr
         "categoria": estimate.get("categoria") or "Otros",
         "cantidad": estimate.get("cantidad") or "1 unidad",
         "precio": estimate.get("precio") or 0,
+        "supermercado_id": estimate.get("supermercado_id"),
+        "supermercado_nombre": estimate.get("supermercado_nombre"),
         "reason": estimate.get("razon") or "Precio estimado con IA para un ingrediente faltante.",
     }
 
@@ -638,10 +710,11 @@ async def generar_receta_presupuestada(
             )
 
         db_candidates = await _find_purchase_candidates(client, pantry_names)
+        supermarkets = await _get_registered_supermarkets(client)
         estimated_candidates = []
         if len(db_candidates) < 5:
             used_names = pantry_names.union({candidate["nombre"].lower() for candidate in db_candidates if candidate.get("nombre")})
-            estimated_candidates = await _build_estimated_candidates(used_names, 6 - len(db_candidates))
+            estimated_candidates = await _build_estimated_candidates(used_names, 6 - len(db_candidates), supermarkets)
 
         all_candidates = [*db_candidates, *estimated_candidates]
         affordable_candidates = [
@@ -653,7 +726,11 @@ async def generar_receta_presupuestada(
             affordable_candidates = sorted(all_candidates, key=lambda item: item.get("precio") or 0)[:4]
 
         compras_posibles = [
-            f"- {item['nombre']} ({item['cantidad']}): CLP {int(item.get('precio') or 0)}. {item.get('reason') or ''}"
+            (
+                f"- {item['nombre']} ({item['cantidad']}): CLP {int(item.get('precio') or 0)}"
+                f" en {item.get('supermercado_nombre') or 'supermercado registrado'}"
+                f" [supermercado_id={item.get('supermercado_id') or 'null'}]. {item.get('reason') or ''}"
+            )
             for item in affordable_candidates
         ]
 
@@ -670,7 +747,11 @@ async def generar_receta_presupuestada(
         if "error" in receta:
             return receta
 
-        compras_ia = receta.get("compras_sugeridas") or []
+        compras_ia = [
+            _attach_registered_supermarket(item, affordable_candidates)
+            for item in (receta.get("compras_sugeridas") or [])
+        ]
+        receta["compras_sugeridas"] = compras_ia
         costo_total = sum(float(item.get("precio") or 0) for item in compras_ia)
 
         if costo_total > request.presupuesto:

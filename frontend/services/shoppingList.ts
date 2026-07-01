@@ -6,6 +6,8 @@ export type ShoppingItem = {
   categoria: string;
   cantidad: string;
   precio: number;
+  supermercado_id?: string | null;
+  supermercado_nombre?: string | null;
   comprado: boolean;
 };
 

@@ -2,11 +2,14 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
-import { useEffect } from 'react';
+import { StatusBar } from 'expo-status-bar';
+import { useEffect, useRef, useState } from 'react';
+import { Animated, Easing, StyleSheet } from 'react-native';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/components/useColorScheme';
 import { AuthProvider } from '@/contexts/AuthContext';
+import { ThemePreferenceProvider } from '@/contexts/ThemeContext';
 
 export {
   ErrorBoundary,
@@ -39,21 +42,86 @@ export default function RootLayout() {
 }
 
 function RootLayoutNav() {
+  return (
+    <ThemePreferenceProvider>
+      <ThemedRoot />
+    </ThemePreferenceProvider>
+  );
+}
+
+function ThemedRoot() {
   const colorScheme = useColorScheme();
 
   return (
     <AuthProvider>
       <ProtectedLayout>
         <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+          <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
           <Stack>
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen name="(auth)" options={{ headerShown: false }} />
             <Stack.Screen name="(navbarnt)" options={{ headerShown: false }} />
             <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
           </Stack>
+          <IntroSplash colorScheme={colorScheme} />
         </ThemeProvider>
       </ProtectedLayout>
     </AuthProvider>
+  );
+}
+
+function IntroSplash({ colorScheme }: { colorScheme: 'light' | 'dark' | null | undefined }) {
+  const [visible, setVisible] = useState(true);
+  const opacity = useRef(new Animated.Value(0)).current;
+  const scale = useRef(new Animated.Value(0.96)).current;
+  const isDark = colorScheme === 'dark';
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.sequence([
+        Animated.timing(opacity, {
+          toValue: 1,
+          duration: 1700,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.delay(500),
+        Animated.timing(opacity, {
+          toValue: 0,
+          duration: 300,
+          easing: Easing.in(Easing.cubic),
+          useNativeDriver: true,
+        }),
+      ]),
+      Animated.timing(scale, {
+        toValue: 1,
+        duration: 1700,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start(() => setVisible(false));
+  }, [opacity, scale]);
+
+  if (!visible) return null;
+
+  return (
+    <Animated.View
+      pointerEvents="auto"
+      style={[
+        styles.introSplash,
+        { backgroundColor: isDark ? '#07130D' : '#FBFFF8', opacity },
+      ]}>
+      <Animated.Text
+        style={[
+          styles.introLogo,
+          {
+            color: isDark ? '#20D684' : '#00B86B',
+            transform: [{ scale }],
+          },
+        ]}>
+        Rechipe
+      </Animated.Text>
+    </Animated.View>
   );
 }
 
@@ -105,3 +173,21 @@ function ProtectedLayout({ children }: { children: React.ReactNode }) {
 
   return <>{children}</>;
 }
+
+const styles = StyleSheet.create({
+  introLogo: {
+    fontSize: 44,
+    fontWeight: '900',
+    letterSpacing: 0,
+  },
+  introSplash: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 999,
+  },
+});

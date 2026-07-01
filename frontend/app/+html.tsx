@@ -33,6 +33,6 @@ body {
 }
 @media (prefers-color-scheme: dark) {
   body {
-    background-color: #FBFFF8;
+    background-color: #07130D;
   }
 }`;

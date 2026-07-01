@@ -354,7 +354,9 @@ export default function ShoppingListScreen() {
               <Text style={[styles.itemName, item.comprado && styles.itemNameDone]}>
                 {item.nombre}
               </Text>
-              <Text style={styles.itemDetail}>{item.categoria} · {item.cantidad}</Text>
+              <Text style={styles.itemDetail}>
+                {[item.categoria, item.cantidad, item.supermercado_nombre].filter(Boolean).join(' · ')}
+              </Text>
             </View>
 
             <View style={styles.priceBox}>

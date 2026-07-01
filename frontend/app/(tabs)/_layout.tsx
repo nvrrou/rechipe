@@ -10,27 +10,27 @@ export default function TabLayout() {
         headerShown: false,
       }}>
       <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Inicio',
-        }}
-      />
-      <Tabs.Screen
         name="fridge"
         options={{
           title: 'Refri',
         }}
       />
       <Tabs.Screen
-        name="recipe"
-        options={{
-          title: 'Receta',
-        }}
-      />
-      <Tabs.Screen
         name="progreso"
         options={{
           title: 'Social',
+        }}
+      />
+      <Tabs.Screen
+        name="recipe"
+        options={{
+          title: 'Recetas',
+        }}
+      />
+      <Tabs.Screen
+        name="index"
+        options={{
+          title: 'Calendario',
         }}
       />
     </Tabs>

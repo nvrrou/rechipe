@@ -15,8 +15,10 @@ from app.models.schemas import (
 from app.routers.rechipes import (
     RECIPE_SELECT,
     _build_estimated_candidates,
+    _attach_registered_supermarket,
     _db_recipe_to_generated,
     _find_purchase_candidates,
+    _get_registered_supermarkets,
     _get_user_pantry,
     _merge_unique_text,
     _parse_preparation_minutes,
@@ -388,6 +390,7 @@ async def _build_budget_options(client: httpx.AsyncClient, pantry_items: list[di
         if item.get("producto")
     }
     db_candidates = await _find_purchase_candidates(client, pantry_names)
+    supermarkets = await _get_registered_supermarkets(client)
     estimated_candidates = []
     if len(db_candidates) < 5:
         used_names = pantry_names.union({
@@ -395,7 +398,7 @@ async def _build_budget_options(client: httpx.AsyncClient, pantry_items: list[di
             for candidate in db_candidates
             if candidate.get("nombre")
         })
-        estimated_candidates = await _build_estimated_candidates(used_names, 6 - len(db_candidates))
+        estimated_candidates = await _build_estimated_candidates(used_names, 6 - len(db_candidates), supermarkets)
 
     all_candidates = [*db_candidates, *estimated_candidates]
     affordable_candidates = [
@@ -408,7 +411,11 @@ async def _build_budget_options(client: httpx.AsyncClient, pantry_items: list[di
         affordable_candidates = sorted(all_candidates, key=lambda item: item.get("precio") or 0)[:4]
 
     compras_posibles = [
-        f"- {item['nombre']} ({item['cantidad']}): CLP {int(item.get('precio') or 0)}. {item.get('reason') or ''}"
+        (
+            f"- {item['nombre']} ({item['cantidad']}): CLP {int(item.get('precio') or 0)}"
+            f" en {item.get('supermercado_nombre') or 'supermercado registrado'}"
+            f" [supermercado_id={item.get('supermercado_id') or 'null'}]. {item.get('reason') or ''}"
+        )
         for item in affordable_candidates
     ]
     return compras_posibles, affordable_candidates
@@ -538,7 +545,10 @@ async def _generate_group_recipes(
     return {
         "grupo_id": group_id,
         "recetas": saved_recipes,
-        "compras_sugeridas": recipe_pack.get("compras_sugeridas") or compras_sugeridas,
+        "compras_sugeridas": [
+            _attach_registered_supermarket(item, compras_sugeridas)
+            for item in (recipe_pack.get("compras_sugeridas") or compras_sugeridas)
+        ],
         "costo_total": recipe_pack.get("costo_total"),
     }
 

@@ -17,6 +17,7 @@ import {
 } from '@/services/recipes';
 import { savePreparationRecipe } from '@/services/preparation';
 import { appendShoppingItems, createShoppingItem } from '@/services/shoppingList';
+import { UserBudget, fetchBudget, spendBudget } from '@/services/budget';
 
 type MealType = {
   id: string;
@@ -33,6 +34,8 @@ type PurchaseSuggestion = {
   categoria: string;
   cantidad: string;
   precio: number;
+  supermercado_id?: string | null;
+  supermercado_nombre?: string | null;
   mealTypes: string[];
   reason: string;
 };
@@ -129,6 +132,8 @@ export default function RecipeScreen() {
   const [mealDropdownOpen, setMealDropdownOpen] = useState(false);
   const [selectedIngredientIds, setSelectedIngredientIds] = useState<string[]>([]);
   const [budgetInput, setBudgetInput] = useState('');
+  const [profileBudget, setProfileBudget] = useState<UserBudget | null>(null);
+  const [useProfileBudget, setUseProfileBudget] = useState(true);
   const [purchaseSuggestions, setPurchaseSuggestions] = useState<PurchaseSuggestion[]>([]);
   const [selectedPurchaseIds, setSelectedPurchaseIds] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -139,6 +144,7 @@ export default function RecipeScreen() {
   const [recipes, setRecipes] = useState<GeneratedRecipe[]>([]);
   const [generationTimeMs, setGenerationTimeMs] = useState<number | null>(null);
   const [error, setError] = useState('');
+  const [budgetSpendMessage, setBudgetSpendMessage] = useState('');
   const [historyVisible, setHistoryVisible] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyItems, setHistoryItems] = useState<GeneratedRecipe[]>([]);
@@ -159,14 +165,28 @@ export default function RecipeScreen() {
     setLoadingItems(false);
   }, [user?.id]);
 
+  const loadProfileBudget = useCallback(async () => {
+    if (!user?.id) return;
+    const result = await fetchBudget(user.id);
+    if (result.budget) {
+      setProfileBudget(result.budget);
+      setUseProfileBudget(true);
+    } else {
+      setProfileBudget(null);
+      setUseProfileBudget(false);
+    }
+  }, [user?.id]);
+
   useEffect(() => {
     loadDespensa();
-  }, [loadDespensa]);
+    loadProfileBudget();
+  }, [loadDespensa, loadProfileBudget]);
 
   useFocusEffect(
     useCallback(() => {
       loadDespensa();
-    }, [loadDespensa])
+      loadProfileBudget();
+    }, [loadDespensa, loadProfileBudget])
   );
 
   const filteredItems = useMemo(() => {
@@ -195,6 +215,10 @@ export default function RecipeScreen() {
   const selectedPurchaseTotal = useMemo(
     () => selectedPurchaseSuggestions.reduce((sum, item) => sum + item.precio, 0),
     [selectedPurchaseSuggestions]
+  );
+  const profileBudgetAvailable = useMemo(
+    () => profileBudget ? Number(profileBudget.monto || 0) - Number(profileBudget.gastado || 0) : 0,
+    [profileBudget]
   );
 
   const userRestrictions = useMemo(
@@ -341,7 +365,7 @@ export default function RecipeScreen() {
   }
 
   async function buildPurchaseSuggestions() {
-    const budget = parseBudget(budgetInput);
+    const budget = useProfileBudget && profileBudget ? profileBudgetAvailable : parseBudget(budgetInput);
     if (budget <= 0) {
       setError('Ingresa un presupuesto para recomendar compras.');
       return;
@@ -379,6 +403,8 @@ export default function RecipeScreen() {
         categoria: item.categoria,
         cantidad: item.cantidad,
         precio: item.precio,
+        supermercado_id: item.supermercado_id,
+        supermercado_nombre: item.supermercado_nombre,
         mealTypes: [selectedMeal],
         reason: item.reason || 'Complementa tu despensa para esta receta.',
       }));
@@ -416,11 +442,37 @@ export default function RecipeScreen() {
           categoria: item.categoria,
           cantidad: item.cantidad,
           precio: item.precio,
+          supermercado_id: item.supermercado_id,
+          supermercado_nombre: item.supermercado_nombre,
         })
       )
     );
     setError('');
     router.push('/(navbarnt)/lista');
+  }
+
+  async function discountSelectedFromBudget() {
+    if (!user?.id) {
+      setError('No hay usuario activo.');
+      return;
+    }
+    if (selectedPurchaseTotal <= 0) {
+      setError('No hay compras seleccionadas para descontar.');
+      return;
+    }
+
+    const result = await spendBudget({
+      user_id: user.id,
+      monto: selectedPurchaseTotal,
+      descripcion: 'Compras sugeridas desde receta presupuestada',
+    });
+
+    if (result.error) {
+      setError(result.error);
+    } else {
+      setBudgetSpendMessage(`Se descontaron ${formatPrice(selectedPurchaseTotal)} de tu presupuesto.`);
+      setError('');
+    }
   }
 
   async function openHistory() {
@@ -957,12 +1009,24 @@ export default function RecipeScreen() {
             </View>
 
             <View style={styles.budgetInputRow}>
+              {profileBudget && (
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => setUseProfileBudget((prev) => !prev)}
+                  style={[styles.profileBudgetToggle, useProfileBudget && styles.profileBudgetToggleActive]}>
+                  <MaterialCommunityIcons name={useProfileBudget ? 'check-circle' : 'circle-outline'} size={20} color="#064E2F" />
+                  <Text style={styles.profileBudgetToggleText}>
+                    Usar perfil: {formatPrice(profileBudgetAvailable)}
+                  </Text>
+                </Pressable>
+              )}
               <View style={styles.budgetInputBox}>
                 <Text style={styles.budgetLabel}>Presupuesto</Text>
                 <TextInput
+                  editable={!useProfileBudget}
                   keyboardType="numeric"
                   onChangeText={setBudgetInput}
-                  placeholder="Ej: 12000"
+                  placeholder={useProfileBudget && profileBudget ? formatPrice(profileBudgetAvailable) : 'Ej: 12000'}
                   placeholderTextColor="#43A66C"
                   style={styles.budgetInput}
                   value={budgetInput}
@@ -1016,7 +1080,9 @@ export default function RecipeScreen() {
                       </View>
                       <View style={styles.ingredientCopy}>
                         <Text style={styles.ingredientTitle}>{item.nombre}</Text>
-                        <Text style={styles.ingredientSubtitle}>{item.cantidad} · {item.reason}</Text>
+                        <Text style={styles.ingredientSubtitle}>
+                          {[item.cantidad, item.supermercado_nombre, item.reason].filter(Boolean).join(' · ')}
+                        </Text>
                         {isUsedInRecipe && (
                           <View style={styles.purchaseRecipeBadge}>
                             <MaterialCommunityIcons name="silverware-fork-knife" size={13} color="#FBFFF8" />
@@ -1033,6 +1099,10 @@ export default function RecipeScreen() {
                   <MaterialCommunityIcons name="cart-arrow-right" size={20} color="#FBFFF8" />
                   <Text style={styles.budgetLinkText}>Mandar a lista de compras</Text>
                 </Pressable>
+                <Pressable accessibilityRole="button" onPress={discountSelectedFromBudget} style={styles.listGhostLink}>
+                  <Text style={styles.listGhostLinkText}>Descontar del presupuesto</Text>
+                </Pressable>
+                {budgetSpendMessage !== '' && <Text style={styles.ingredientSubtitle}>{budgetSpendMessage}</Text>}
                 <Pressable accessibilityRole="button" onPress={() => router.push('/(navbarnt)/lista')} style={styles.listGhostLink}>
                   <Text style={styles.listGhostLinkText}>Ver lista actual</Text>
                 </Pressable>
@@ -1321,6 +1391,7 @@ const styles = StyleSheet.create({
   },
   budgetInputRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'stretch',
     gap: 10,
     backgroundColor: 'transparent',
@@ -2012,6 +2083,26 @@ const styles = StyleSheet.create({
   preparationTitle: {
     color: '#064E2F',
     fontSize: 18,
+    fontWeight: '900',
+  },
+  profileBudgetToggle: {
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#9FE7B9',
+    backgroundColor: '#DDF8E7',
+  },
+  profileBudgetToggleActive: {
+    borderColor: '#00B86B',
+    backgroundColor: '#D8FBE3',
+  },
+  profileBudgetToggleText: {
+    color: '#064E2F',
+    fontSize: 13,
     fontWeight: '900',
   },
   purchaseList: {

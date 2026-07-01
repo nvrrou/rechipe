@@ -46,6 +46,8 @@ export interface BudgetPurchaseSuggestion {
   categoria: string;
   cantidad: string;
   precio: number;
+  supermercado_id?: string | null;
+  supermercado_nombre?: string | null;
   reason?: string;
 }
 
