@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
+import { useThemePreference } from '@/contexts/ThemeContext';
 import { UserBudget, fetchBudget, saveBudget } from '@/services/budget';
 
 // Opciones predefinidas (mismas que completar_perfil)
@@ -42,14 +43,16 @@ const RESTRICCIONES_OPTIONS = [
 // Componente Tag (solo lectura)
 
 function TagList({ items, color }: { items: string[]; color: string }) {
+    const { colorScheme } = useThemePreference();
+    const isDark = colorScheme === 'dark';
     if (items.length === 0) {
-        return <Text style={styles.emptyTag}>No configurado</Text>;
+        return <Text style={[styles.emptyTag, isDark && styles.textMutedDark]}>No configurado</Text>;
     }
     return (
         <View style={styles.tagsContainer}>
             {items.map((item) => (
-                <View key={item} style={[styles.tag, { borderColor: color + '55', backgroundColor: color + '15' }]}>
-                    <Text style={[styles.tagText, { color }]}>{item}</Text>
+                <View key={item} style={[styles.tag, isDark && styles.tagDark, { borderColor: color + '77', backgroundColor: color + (isDark ? '24' : '15') }]}>
+                    <Text style={[styles.tagText, { color: isDark ? '#EAFBF0' : color }]}>{item}</Text>
                 </View>
             ))}
         </View>
@@ -69,6 +72,8 @@ function ChipSelector({
     onToggle: (option: string) => void;
     accentColor?: string;
 }) {
+    const { colorScheme } = useThemePreference();
+    const isDark = colorScheme === 'dark';
     return (
         <View style={styles.tagsContainer}>
             {options.map((option) => {
@@ -80,11 +85,11 @@ function ChipSelector({
                         style={[
                             styles.tag,
                             {
-                                borderColor: isSelected ? accentColor : '#9FE7B9',
-                                backgroundColor: isSelected ? accentColor + '22' : '#DDF8E7',
+                                borderColor: isSelected ? accentColor : isDark ? '#2F7A4F' : '#9FE7B9',
+                                backgroundColor: isSelected ? accentColor + '33' : isDark ? '#173321' : '#DDF8E7',
                             },
                         ]}>
-                        <Text style={[styles.tagText, { color: isSelected ? accentColor : '#2F7A4F' }]}>
+                        <Text style={[styles.tagText, { color: isSelected ? (isDark ? '#EAFBF0' : accentColor) : isDark ? '#BDF7D2' : '#2F7A4F' }]}>
                             {isSelected ? `✓ ${option}` : option}
                         </Text>
                     </Pressable>
@@ -99,6 +104,9 @@ function ChipSelector({
 export default function PerfilScreen() {
     const { user, logout, updateProfile } = useAuth();
     const router = useRouter();
+    const { colorScheme } = useThemePreference();
+    const isDark = colorScheme === 'dark';
+    const controlIconColor = isDark ? '#EAFBF0' : '#064E2F';
 
     const [editing, setEditing] = useState(false);
     const [budget, setBudget] = useState<UserBudget | null>(null);
@@ -230,13 +238,13 @@ export default function PerfilScreen() {
     const budgetRemaining = budget ? Number(budget.monto || 0) - Number(budget.gastado || 0) : 0;
 
     return (
-        <SafeAreaView style={styles.safeArea}>
+        <SafeAreaView style={[styles.safeArea, isDark && styles.safeAreaDark]}>
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
                 <View style={styles.header}>
-                    <Pressable accessibilityRole="button" onPress={goBack} style={styles.backButton}>
-                        <MaterialCommunityIcons name="chevron-left" size={24} color="#064E2F" />
+                    <Pressable accessibilityRole="button" onPress={goBack} style={[styles.backButton, isDark && styles.backButtonDark]}>
+                        <MaterialCommunityIcons name="chevron-left" size={24} color={controlIconColor} />
                     </Pressable>
-                    <Text style={styles.title}>Mi Perfil</Text>
+                    <Text style={[styles.title, isDark && styles.textStrongDark]}>Mi Perfil</Text>
                 </View>
 
                 {msg !== '' && (
@@ -244,15 +252,15 @@ export default function PerfilScreen() {
                 )}
 
                 {/* datos personales */}
-                <View style={styles.card}>
-                    <Text style={styles.sectionTitle}>Datos personales</Text>
+                <View style={[styles.card, isDark && styles.cardDark]}>
+                    <Text style={[styles.sectionTitle, isDark && styles.textStrongDark]}>Datos personales</Text>
 
                     {editing ? (
                         <View style={styles.editSection}>
                             <View style={styles.editRow}>
-                                <Text style={styles.label}>Edad</Text>
+                                <Text style={[styles.label, isDark && styles.textMutedDark]}>Edad</Text>
                                 <TextInput
-                                    style={styles.editInput}
+                                    style={[styles.editInput, isDark && styles.inputDark]}
                                     value={editEdad}
                                     onChangeText={setEditEdad}
                                     keyboardType="numeric"
@@ -260,9 +268,9 @@ export default function PerfilScreen() {
                                 />
                             </View>
                             <View style={styles.editRow}>
-                                <Text style={styles.label}>Peso (kg)</Text>
+                                <Text style={[styles.label, isDark && styles.textMutedDark]}>Peso (kg)</Text>
                                 <TextInput
-                                    style={styles.editInput}
+                                    style={[styles.editInput, isDark && styles.inputDark]}
                                     value={editPeso}
                                     onChangeText={setEditPeso}
                                     keyboardType="numeric"
@@ -270,16 +278,16 @@ export default function PerfilScreen() {
                                 />
                             </View>
                             <View style={styles.editRow}>
-                                <Text style={styles.label}>Altura (cm)</Text>
+                                <Text style={[styles.label, isDark && styles.textMutedDark]}>Altura (cm)</Text>
                                 <TextInput
-                                    style={styles.editInput}
+                                    style={[styles.editInput, isDark && styles.inputDark]}
                                     value={editAltura}
                                     onChangeText={setEditAltura}
                                     keyboardType="numeric"
                                     placeholderTextColor="#4F9F70"
                                 />
                             </View>
-                            <Text style={styles.label}>Género</Text>
+                            <Text style={[styles.label, isDark && styles.textMutedDark]}>Género</Text>
                             <View style={styles.genderRow}>
                                 {generos.map((g) => (
                                     <Pressable
@@ -287,10 +295,13 @@ export default function PerfilScreen() {
                                         onPress={() => setEditGenero(g)}
                                         style={[
                                             styles.genderChip,
+                                            isDark && styles.genderChipDark,
                                             editGenero === g && styles.genderChipSelected,
+                                            isDark && editGenero === g && styles.genderChipSelectedDark,
                                         ]}>
                                         <Text style={[
                                             styles.genderChipText,
+                                            isDark && styles.genderChipTextDark,
                                             editGenero === g && styles.genderChipTextSelected,
                                         ]}>
                                             {g.charAt(0).toUpperCase() + g.slice(1)}
@@ -302,36 +313,36 @@ export default function PerfilScreen() {
                     ) : (
                         <>
                             <View style={styles.infoRow}>
-                                <Text style={styles.label}>Nombre</Text>
-                                <Text style={styles.value}>{user?.nombre || '—'}</Text>
+                                <Text style={[styles.label, isDark && styles.textMutedDark]}>Nombre</Text>
+                                <Text style={[styles.value, isDark && styles.textStrongDark]}>{user?.nombre || '—'}</Text>
                             </View>
                             <View style={styles.infoRow}>
-                                <Text style={styles.label}>Email</Text>
-                                <Text style={styles.value}>{user?.email || '—'}</Text>
+                                <Text style={[styles.label, isDark && styles.textMutedDark]}>Email</Text>
+                                <Text style={[styles.value, isDark && styles.textStrongDark]}>{user?.email || '—'}</Text>
                             </View>
                             <View style={styles.infoRow}>
-                                <Text style={styles.label}>Edad</Text>
-                                <Text style={styles.value}>{user?.edad || '—'}</Text>
+                                <Text style={[styles.label, isDark && styles.textMutedDark]}>Edad</Text>
+                                <Text style={[styles.value, isDark && styles.textStrongDark]}>{user?.edad || '—'}</Text>
                             </View>
                             <View style={styles.infoRow}>
-                                <Text style={styles.label}>Peso</Text>
-                                <Text style={styles.value}>{user?.peso ? `${user.peso} kg` : '—'}</Text>
+                                <Text style={[styles.label, isDark && styles.textMutedDark]}>Peso</Text>
+                                <Text style={[styles.value, isDark && styles.textStrongDark]}>{user?.peso ? `${user.peso} kg` : '—'}</Text>
                             </View>
                             <View style={styles.infoRow}>
-                                <Text style={styles.label}>Altura</Text>
-                                <Text style={styles.value}>{user?.altura ? `${user.altura} cm` : '—'}</Text>
+                                <Text style={[styles.label, isDark && styles.textMutedDark]}>Altura</Text>
+                                <Text style={[styles.value, isDark && styles.textStrongDark]}>{user?.altura ? `${user.altura} cm` : '—'}</Text>
                             </View>
                             <View style={styles.infoRow}>
-                                <Text style={styles.label}>Género</Text>
-                                <Text style={styles.value}>{user?.genero || '—'}</Text>
+                                <Text style={[styles.label, isDark && styles.textMutedDark]}>Género</Text>
+                                <Text style={[styles.value, isDark && styles.textStrongDark]}>{user?.genero || '—'}</Text>
                             </View>
                         </>
                     )}
                 </View>
 
                 {/* Objetivos */}
-                <View style={styles.card}>
-                    <Text style={styles.sectionTitle}>Objetivos nutricionales</Text>
+                <View style={[styles.card, isDark && styles.cardDark]}>
+                    <Text style={[styles.sectionTitle, isDark && styles.textStrongDark]}>Objetivos nutricionales</Text>
                     {editing ? (
                         <ChipSelector
                             options={OBJETIVOS_OPTIONS}
@@ -347,8 +358,8 @@ export default function PerfilScreen() {
                 </View>
 
                 {/* Restricciones */}
-                <View style={styles.card}>
-                    <Text style={styles.sectionTitle}>Restricciones alimentarias</Text>
+                <View style={[styles.card, isDark && styles.cardDark]}>
+                    <Text style={[styles.sectionTitle, isDark && styles.textStrongDark]}>Restricciones alimentarias</Text>
                     {editing ? (
                         <ChipSelector
                             options={RESTRICCIONES_OPTIONS}
@@ -364,12 +375,12 @@ export default function PerfilScreen() {
                 </View>
 
                 {/* ingredientes favoritos */}
-                <View style={styles.card}>
-                    <Text style={styles.sectionTitle}>Ingredientes favoritos</Text>
+                <View style={[styles.card, isDark && styles.cardDark]}>
+                    <Text style={[styles.sectionTitle, isDark && styles.textStrongDark]}>Ingredientes favoritos</Text>
                     {editing ? (
-                        <View style={styles.editInputGroup}>
+                        <View style={[styles.editInputGroup, isDark && styles.inputDark]}>
                             <TextInput
-                                style={styles.editInputFull}
+                                style={[styles.editInputFull, isDark && styles.inputTextDark]}
                                 value={editIngFavoritos}
                                 onChangeText={setEditIngFavoritos}
                                 placeholder="Ej: pollo, arroz, tomate"
@@ -381,14 +392,14 @@ export default function PerfilScreen() {
                     )}
                 </View>
 
-                <View style={styles.budgetCard}>
+                <View style={[styles.budgetCard, isDark && styles.cardDark]}>
                     <View style={styles.budgetHeader}>
-                        <View style={styles.budgetIcon}>
-                            <MaterialCommunityIcons name="cash-multiple" size={24} color="#064E2F" />
+                        <View style={[styles.budgetIcon, isDark && styles.budgetIconDark]}>
+                            <MaterialCommunityIcons name="cash-multiple" size={24} color={controlIconColor} />
                         </View>
                         <View style={styles.budgetCopy}>
-                            <Text style={styles.sectionTitle}>Presupuesto</Text>
-                            <Text style={styles.budgetHint}>
+                            <Text style={[styles.sectionTitle, isDark && styles.textStrongDark]}>Presupuesto</Text>
+                            <Text style={[styles.budgetHint, isDark && styles.textMutedDark]}>
                                 {budget ? 'Al editarlo se reinicia lo gastado para un nuevo periodo.' : 'Configuralo para planificar recetas y semana.'}
                             </Text>
                         </View>
@@ -396,31 +407,31 @@ export default function PerfilScreen() {
 
                     {budget && !budgetEditing ? (
                         <View style={styles.budgetStats}>
-                            <View style={styles.budgetStat}>
-                                <Text style={styles.label}>Inicial</Text>
-                                <Text style={styles.budgetValue}>${Math.round(Number(budget.monto || 0)).toLocaleString('es-CL')}</Text>
+                            <View style={[styles.budgetStat, isDark && styles.budgetStatDark]}>
+                                <Text style={[styles.label, isDark && styles.textMutedDark]}>Inicial</Text>
+                                <Text style={[styles.budgetValue, isDark && styles.textStrongDark]}>${Math.round(Number(budget.monto || 0)).toLocaleString('es-CL')}</Text>
                             </View>
-                            <View style={styles.budgetStat}>
-                                <Text style={styles.label}>Gastado</Text>
-                                <Text style={styles.budgetValue}>${Math.round(Number(budget.gastado || 0)).toLocaleString('es-CL')}</Text>
+                            <View style={[styles.budgetStat, isDark && styles.budgetStatDark]}>
+                                <Text style={[styles.label, isDark && styles.textMutedDark]}>Gastado</Text>
+                                <Text style={[styles.budgetValue, isDark && styles.textStrongDark]}>${Math.round(Number(budget.gastado || 0)).toLocaleString('es-CL')}</Text>
                             </View>
-                            <View style={styles.budgetStat}>
-                                <Text style={styles.label}>Disponible</Text>
-                                <Text style={styles.budgetValue}>${Math.round(budgetRemaining).toLocaleString('es-CL')}</Text>
+                            <View style={[styles.budgetStat, isDark && styles.budgetStatDark]}>
+                                <Text style={[styles.label, isDark && styles.textMutedDark]}>Disponible</Text>
+                                <Text style={[styles.budgetValue, isDark && styles.textStrongDark]}>${Math.round(budgetRemaining).toLocaleString('es-CL')}</Text>
                             </View>
-                            <TouchableOpacity style={styles.editBudgetButton} onPress={() => {
+                            <TouchableOpacity style={[styles.editBudgetButton, isDark && styles.secondaryButtonDark]} onPress={() => {
                                 setBudgetSaved(false);
                                 setBudgetEditing(true);
                             }}>
-                                <MaterialCommunityIcons name="pencil-outline" size={18} color="#064E2F" />
-                                <Text style={styles.editButtonText}>Editar presupuesto</Text>
+                                <MaterialCommunityIcons name="pencil-outline" size={18} color={controlIconColor} />
+                                <Text style={[styles.editButtonText, isDark && styles.textStrongDark]}>Editar presupuesto</Text>
                             </TouchableOpacity>
                         </View>
                     ) : (
                         <View style={styles.editSection}>
-                            <Text style={styles.label}>Monto del periodo</Text>
+                            <Text style={[styles.label, isDark && styles.textMutedDark]}>Monto del periodo</Text>
                             <TextInput
-                                style={styles.editInputFull}
+                                style={[styles.editInputFull, styles.editInputFullBox, isDark && styles.inputDark]}
                                 value={budgetAmount}
                                 onChangeText={(value) => {
                                     setBudgetSaved(false);
@@ -438,8 +449,8 @@ export default function PerfilScreen() {
                                             setBudgetSaved(false);
                                             setBudgetPeriod(period);
                                         }}
-                                        style={[styles.genderChip, budgetPeriod === period && styles.genderChipSelected]}>
-                                        <Text style={[styles.genderChipText, budgetPeriod === period && styles.genderChipTextSelected]}>
+                                        style={[styles.genderChip, isDark && styles.genderChipDark, budgetPeriod === period && styles.genderChipSelected, isDark && budgetPeriod === period && styles.genderChipSelectedDark]}>
+                                        <Text style={[styles.genderChipText, isDark && styles.genderChipTextDark, budgetPeriod === period && styles.genderChipTextSelected]}>
                                             {period}
                                         </Text>
                                     </Pressable>
@@ -456,8 +467,8 @@ export default function PerfilScreen() {
                                 )}
                             </TouchableOpacity>
                             {budget && (
-                                <TouchableOpacity style={styles.cancelButton} onPress={() => setBudgetEditing(false)}>
-                                    <Text style={styles.cancelButtonText}>Cancelar</Text>
+                                <TouchableOpacity style={[styles.cancelButton, isDark && styles.secondaryButtonDark]} onPress={() => setBudgetEditing(false)}>
+                                    <Text style={[styles.cancelButtonText, isDark && styles.textMutedDark]}>Cancelar</Text>
                                 </TouchableOpacity>
                             )}
                         </View>
@@ -477,17 +488,17 @@ export default function PerfilScreen() {
                                 <Text style={styles.saveButtonText}>Guardar cambios</Text>
                             )}
                         </TouchableOpacity>
-                        <TouchableOpacity style={styles.cancelButton} onPress={cancelEditing}>
-                            <Text style={styles.cancelButtonText}>Cancelar</Text>
+                        <TouchableOpacity style={[styles.cancelButton, isDark && styles.secondaryButtonDark]} onPress={cancelEditing}>
+                            <Text style={[styles.cancelButtonText, isDark && styles.textMutedDark]}>Cancelar</Text>
                         </TouchableOpacity>
                     </View>
                 ) : (
-                    <TouchableOpacity style={styles.editButton} onPress={startEditing}>
-                        <Text style={styles.editButtonText}>Editar perfil</Text>
+                    <TouchableOpacity style={[styles.editButton, isDark && styles.secondaryButtonDark]} onPress={startEditing}>
+                        <Text style={[styles.editButtonText, isDark && styles.textStrongDark]}>Editar perfil</Text>
                     </TouchableOpacity>
                 )}
 
-                <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+                <TouchableOpacity style={[styles.logoutButton, isDark && styles.logoutButtonDark]} onPress={handleLogout}>
                     <Text style={styles.logoutText}>Cerrar sesión</Text>
                 </TouchableOpacity>
             </ScrollView>
@@ -776,5 +787,70 @@ const styles = StyleSheet.create({
         color: '#FF8A8A',
         fontSize: 16,
         fontWeight: '600',
+    },
+    safeAreaDark: {
+        backgroundColor: '#07130D',
+    },
+    backButtonDark: {
+        borderWidth: 1,
+        borderColor: '#2F7A4F',
+        backgroundColor: '#173321',
+        shadowColor: '#000000',
+    },
+    cardDark: {
+        borderColor: '#2F7A4F',
+        backgroundColor: '#102619',
+        shadowColor: '#000000',
+    },
+    budgetIconDark: {
+        backgroundColor: '#245C38',
+    },
+    budgetStatDark: {
+        borderWidth: 1,
+        borderColor: '#2F7A4F',
+        backgroundColor: '#173321',
+    },
+    tagDark: {
+        backgroundColor: '#173321',
+    },
+    inputDark: {
+        borderColor: '#2F7A4F',
+        backgroundColor: '#173321',
+        color: '#EAFBF0',
+    },
+    editInputFullBox: {
+        paddingHorizontal: 14,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#9FE7B9',
+        backgroundColor: '#DDF8E7',
+    },
+    inputTextDark: {
+        color: '#EAFBF0',
+    },
+    genderChipDark: {
+        borderColor: '#2F7A4F',
+        backgroundColor: '#173321',
+    },
+    genderChipSelectedDark: {
+        borderColor: '#20D684',
+        backgroundColor: '#245C38',
+    },
+    genderChipTextDark: {
+        color: '#BDF7D2',
+    },
+    secondaryButtonDark: {
+        borderColor: '#2F7A4F',
+        backgroundColor: '#173321',
+    },
+    textStrongDark: {
+        color: '#EAFBF0',
+    },
+    textMutedDark: {
+        color: '#BDF7D2',
+    },
+    logoutButtonDark: {
+        backgroundColor: '#351818',
+        borderColor: '#EF4444',
     },
 });

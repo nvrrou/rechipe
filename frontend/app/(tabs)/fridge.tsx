@@ -263,6 +263,10 @@ function Field({
   required?: boolean;
   hasError?: boolean;
 }) {
+  const { colorScheme } = useThemePreference();
+  const isDark = colorScheme === 'dark';
+  const inputStyle = [styles.fieldInput, isDark && styles.fieldInputDark, hasError && styles.fieldInputError];
+
   return (
     <View style={styles.field}>
       <View style={styles.fieldLabelRow}>
@@ -274,7 +278,7 @@ function Field({
         onChangeText={onChangeText}
         placeholder={placeholder}
         placeholderTextColor="#43A66C"
-        style={[styles.fieldInput, hasError && styles.fieldInputError]}
+        style={inputStyle}
         value={value}
       />
     </View>
@@ -298,28 +302,31 @@ function CategoryDropdown({
   onSelect: (value: string) => void;
   onNewValueChange: (value: string) => void;
 }) {
+  const { colorScheme } = useThemePreference();
+  const isDark = colorScheme === 'dark';
+  const darkIconColor = isDark ? '#EAFBF0' : '#064E2F';
   const selected = categories.find((category) => category.id === value);
   const isCreating = value === '__new__';
 
   return (
     <View style={styles.dropdownWrap}>
       <Text style={styles.fieldLabel}>Categoria</Text>
-      <Pressable accessibilityRole="button" onPress={onToggle} style={styles.dropdownButton}>
+      <Pressable accessibilityRole="button" onPress={onToggle} style={[styles.dropdownButton, isDark && styles.dropdownButtonDark]}>
         <View style={styles.dropdownLeft}>
           <View style={[styles.dropdownDot, { backgroundColor: selected?.color || '#43A66C' }]} />
           <Text style={styles.dropdownText}>{isCreating ? 'Crear categoria' : selected?.name || 'Seleccionar'}</Text>
         </View>
-        <MaterialCommunityIcons name={expanded ? 'chevron-up' : 'chevron-down'} size={22} color="#064E2F" />
+        <MaterialCommunityIcons name={expanded ? 'chevron-up' : 'chevron-down'} size={22} color={darkIconColor} />
       </Pressable>
 
       {expanded && (
-        <View style={styles.dropdownMenu}>
+        <View style={[styles.dropdownMenu, isDark && styles.dropdownMenuDark]}>
           {categories.map((category) => (
             <Pressable
               accessibilityRole="button"
               key={category.id}
               onPress={() => onSelect(category.id)}
-              style={[styles.dropdownOption, value === category.id && styles.dropdownOptionSelected]}>
+              style={[styles.dropdownOption, value === category.id && styles.dropdownOptionSelected, isDark && value === category.id && styles.dropdownOptionSelectedDark]}>
               <MaterialCommunityIcons name={category.icon} size={20} color={category.color} />
               <Text style={styles.dropdownOptionText}>{category.name}</Text>
             </Pressable>
@@ -327,8 +334,8 @@ function CategoryDropdown({
           <Pressable
             accessibilityRole="button"
             onPress={() => onSelect('__new__')}
-            style={[styles.dropdownOption, isCreating && styles.dropdownOptionSelected]}>
-            <MaterialCommunityIcons name="plus-circle-outline" size={20} color="#064E2F" />
+            style={[styles.dropdownOption, isCreating && styles.dropdownOptionSelected, isDark && isCreating && styles.dropdownOptionSelectedDark]}>
+            <MaterialCommunityIcons name="plus-circle-outline" size={20} color={darkIconColor} />
             <Text style={styles.dropdownOptionText}>Crear categoria nueva</Text>
           </Pressable>
         </View>
@@ -340,7 +347,7 @@ function CategoryDropdown({
           onChangeText={onNewValueChange}
           placeholder="Nombre de la categoria"
           placeholderTextColor="#43A66C"
-          style={styles.fieldInputStandalone}
+          style={[styles.fieldInputStandalone, isDark && styles.fieldInputDark]}
           value={newValue}
         />
       )}
@@ -1200,8 +1207,11 @@ export default function FridgeScreen() {
         onPress={() => openNutritionView(item)}
         style={[
           styles.ingredientRow,
+          isDark && styles.ingredientRowDark,
           expiryStatus === 'expiring' && styles.ingredientRowExpiring,
           expiryStatus === 'expired' && styles.ingredientRowExpired,
+          isDark && expiryStatus === 'expiring' && styles.ingredientRowExpiringDark,
+          isDark && expiryStatus === 'expired' && styles.ingredientRowExpiredDark,
         ]}>
         <Image source={{ uri: imageUri }} style={styles.ingredientImage} />
         <View style={styles.ingredientInfo}>
@@ -1215,8 +1225,8 @@ export default function FridgeScreen() {
                   {formatPrice(displayPrice)}
                 </Text>
                 {item.supermercado_nombre && (
-                  <View style={styles.supermarketChip}>
-                    <MaterialCommunityIcons name="storefront-outline" size={12} color="#064E2F" />
+                  <View style={[styles.supermarketChip, isDark && styles.supermarketChipDark]}>
+                    <MaterialCommunityIcons name="storefront-outline" size={12} color={darkIconColor} />
                     <Text style={styles.supermarketChipText} numberOfLines={1}>
                       {item.supermercado_nombre}
                     </Text>
@@ -1267,11 +1277,11 @@ export default function FridgeScreen() {
               event.stopPropagation();
               openQuantityPrompt(item);
             }}
-            style={styles.ingredientQuantityButton}>
+            style={[styles.ingredientQuantityButton, isDark && styles.ingredientQuantityButtonDark]}>
             {updatingQuantityId === item.id ? (
-              <ActivityIndicator size="small" color="#064E2F" />
+              <ActivityIndicator size="small" color={darkIconColor} />
             ) : (
-              <MaterialCommunityIcons name="plus" size={21} color="#064E2F" />
+              <MaterialCommunityIcons name="plus" size={21} color={darkIconColor} />
             )}
           </Pressable>
           <Pressable
@@ -1281,8 +1291,8 @@ export default function FridgeScreen() {
               event.stopPropagation();
               openEditView(item);
             }}
-            style={styles.ingredientEditButton}>
-            <MaterialCommunityIcons name="pencil-outline" size={21} color="#2F7A4F" />
+            style={[styles.ingredientEditButton, isDark && styles.ingredientEditButtonDark]}>
+            <MaterialCommunityIcons name="pencil-outline" size={21} color={darkSecondaryIconColor} />
           </Pressable>
           <Pressable
             accessibilityLabel="Solicitar autenticacion"
@@ -1292,11 +1302,11 @@ export default function FridgeScreen() {
               event.stopPropagation();
               openAuthPrompt(item);
             }}
-            style={styles.ingredientAuthButton}>
+            style={[styles.ingredientAuthButton, isDark && styles.ingredientAuthButtonDark]}>
             {authenticatingProductId === item.producto_id ? (
-              <ActivityIndicator size="small" color="#0369A1" />
+              <ActivityIndicator size="small" color={isDark ? '#7DD3FC' : '#0369A1'} />
             ) : (
-              <MaterialCommunityIcons name="shield-check-outline" size={21} color="#0369A1" />
+              <MaterialCommunityIcons name="shield-check-outline" size={21} color={isDark ? '#7DD3FC' : '#0369A1'} />
             )}
           </Pressable>
         </View>
@@ -1534,7 +1544,7 @@ export default function FridgeScreen() {
     const quantityHasError = mode === 'add' && !!formError && parseInputNumber(form.cantidad) === undefined;
 
     return (
-      <View style={styles.formPanel} onLayout={(event) => registerFormPosition('form', event.nativeEvent.layout.y)}>
+      <View style={[styles.formPanel, isDark && styles.formPanelDark]} onLayout={(event) => registerFormPosition('form', event.nativeEvent.layout.y)}>
         {formError !== '' && (
           <View style={styles.formErrorPanel}>
             <MaterialCommunityIcons name="alert-circle-outline" size={20} color="#FF8A8A" />
@@ -1576,8 +1586,8 @@ export default function FridgeScreen() {
               value={form.codigo_barra}
             />
           </View>
-          <Pressable accessibilityRole="button" onPress={openBarcodeScanner} style={styles.scanCodeAction}>
-            <MaterialCommunityIcons name="barcode-scan" size={20} color="#064E2F" />
+          <Pressable accessibilityRole="button" onPress={openBarcodeScanner} style={[styles.scanCodeAction, isDark && styles.scanCodeActionDark]}>
+            <MaterialCommunityIcons name="barcode-scan" size={20} color={darkIconColor} />
             <View style={styles.scanCodeCopy}>
               <Text style={styles.scanCodeActionText}>Escanear codigo</Text>
               {form.codigo_barra ? <Text style={styles.scanCodeValue}>{form.codigo_barra}</Text> : null}
@@ -1626,16 +1636,16 @@ export default function FridgeScreen() {
               <Pressable
                 accessibilityRole="button"
                 onPress={() => setUnitDropdownOpen((prev) => !prev)}
-                style={styles.dropdownButton}>
+                style={[styles.dropdownButton, isDark && styles.dropdownButtonDark]}>
                 <View style={styles.dropdownLeft}>
                   <View style={[styles.dropdownDot, { backgroundColor: '#00B86B' }]} />
                   <Text style={styles.dropdownText}>{form.unidad || 'Seleccionar unidad'}</Text>
                 </View>
-                <MaterialCommunityIcons name={unitDropdownOpen ? 'chevron-up' : 'chevron-down'} size={22} color="#064E2F" />
+                <MaterialCommunityIcons name={unitDropdownOpen ? 'chevron-up' : 'chevron-down'} size={22} color={darkIconColor} />
               </Pressable>
 
               {unitDropdownOpen && (
-                <View style={styles.dropdownMenu}>
+                <View style={[styles.dropdownMenu, isDark && styles.dropdownMenuDark]}>
                   {UNIT_OPTIONS.map((unit) => (
                     <Pressable
                       accessibilityRole="button"
@@ -1644,8 +1654,8 @@ export default function FridgeScreen() {
                         updateForm('unidad', unit);
                         setUnitDropdownOpen(false);
                       }}
-                      style={[styles.dropdownOption, form.unidad === unit && styles.dropdownOptionSelected]}>
-                      <MaterialCommunityIcons name="scale-balance" size={20} color="#064E2F" />
+                      style={[styles.dropdownOption, form.unidad === unit && styles.dropdownOptionSelected, isDark && form.unidad === unit && styles.dropdownOptionSelectedDark]}>
+                      <MaterialCommunityIcons name="scale-balance" size={20} color={darkIconColor} />
                       <Text style={styles.dropdownOptionText}>{unit}</Text>
                     </Pressable>
                   ))}
@@ -1704,18 +1714,18 @@ export default function FridgeScreen() {
               <Pressable
                 accessibilityRole="button"
                 onPress={() => setSupermarketDropdownOpen((prev) => !prev)}
-                style={styles.dropdownButton}>
+                style={[styles.dropdownButton, isDark && styles.dropdownButtonDark]}>
                 <View style={styles.dropdownLeft}>
                   <View style={[styles.dropdownDot, { backgroundColor: '#7DD3FC' }]} />
                   <Text style={styles.dropdownText}>
                     {supermarkets.find((market) => market.id === form.supermercado_id)?.nombre || 'Seleccionar supermercado'}
                   </Text>
                 </View>
-                <MaterialCommunityIcons name={supermarketDropdownOpen ? 'chevron-up' : 'chevron-down'} size={22} color="#064E2F" />
+                <MaterialCommunityIcons name={supermarketDropdownOpen ? 'chevron-up' : 'chevron-down'} size={22} color={darkIconColor} />
               </Pressable>
 
               {supermarketDropdownOpen && (
-                <View style={styles.dropdownMenu}>
+                <View style={[styles.dropdownMenu, isDark && styles.dropdownMenuDark]}>
                   {supermarkets.map((market) => (
                     <Pressable
                       accessibilityRole="button"
@@ -1724,7 +1734,7 @@ export default function FridgeScreen() {
                         updateForm('supermercado_id', market.id);
                         setSupermarketDropdownOpen(false);
                       }}
-                      style={[styles.dropdownOption, form.supermercado_id === market.id && styles.dropdownOptionSelected]}>
+                      style={[styles.dropdownOption, form.supermercado_id === market.id && styles.dropdownOptionSelected, isDark && form.supermercado_id === market.id && styles.dropdownOptionSelectedDark]}>
                       <MaterialCommunityIcons name="store-outline" size={20} color="#0369A1" />
                       <Text style={styles.dropdownOptionText}>{market.nombre}</Text>
                     </Pressable>
@@ -2837,6 +2847,10 @@ const styles = StyleSheet.create({
     borderColor: '#9FE7B9',
     backgroundColor: '#DDF8E7',
   },
+  dropdownButtonDark: {
+    borderColor: '#2F7A4F',
+    backgroundColor: '#173321',
+  },
   dropdownDot: {
     width: 12,
     height: 12,
@@ -2856,6 +2870,10 @@ const styles = StyleSheet.create({
     borderColor: '#9FE7B9',
     backgroundColor: '#DDF8E7',
   },
+  dropdownMenuDark: {
+    borderColor: '#2F7A4F',
+    backgroundColor: '#102619',
+  },
   dropdownOption: {
     minHeight: 44,
     flexDirection: 'row',
@@ -2867,6 +2885,9 @@ const styles = StyleSheet.create({
   },
   dropdownOptionSelected: {
     backgroundColor: '#9FE7B9',
+  },
+  dropdownOptionSelectedDark: {
+    backgroundColor: '#245C38',
   },
   dropdownOptionText: {
     color: '#064E2F',
@@ -2926,6 +2947,11 @@ const styles = StyleSheet.create({
     borderColor: '#9FE7B9',
     backgroundColor: '#DDF8E7',
   },
+  fieldInputDark: {
+    borderColor: '#2F7A4F',
+    backgroundColor: '#173321',
+    color: '#EAFBF0',
+  },
   fieldInputError: {
     borderColor: '#FF8A8A',
     backgroundColor: '#351928',
@@ -2982,6 +3008,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#9FE7B9',
     backgroundColor: '#E9FBEF',
+  },
+  formPanelDark: {
+    borderColor: '#2F7A4F',
+    backgroundColor: '#102619',
   },
   formSection: {
     gap: 12,
@@ -3161,6 +3191,10 @@ const styles = StyleSheet.create({
     borderColor: '#7DD3FC',
     backgroundColor: '#E0F2FE',
   },
+  ingredientAuthButtonDark: {
+    borderColor: '#205270',
+    backgroundColor: '#13324A',
+  },
   ingredientEditButton: {
     width: 34,
     height: 34,
@@ -3171,6 +3205,10 @@ const styles = StyleSheet.create({
     borderColor: '#9FE7B9',
     backgroundColor: '#DDF8E7',
   },
+  ingredientEditButtonDark: {
+    borderColor: '#2F7A4F',
+    backgroundColor: '#173321',
+  },
   ingredientQuantityButton: {
     width: 34,
     height: 34,
@@ -3180,6 +3218,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#74D997',
     backgroundColor: '#BDEFCF',
+  },
+  ingredientQuantityButtonDark: {
+    borderColor: '#36B779',
+    backgroundColor: '#245C38',
   },
   ingredientInfo: {
     flex: 1,
@@ -3201,6 +3243,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#9FE7B9',
     backgroundColor: '#DDF8E7',
+  },
+  ingredientRowDark: {
+    borderColor: '#2F7A4F',
+    backgroundColor: '#102619',
   },
   ingredientTitle: {
     flexShrink: 1,
@@ -3561,6 +3607,10 @@ const styles = StyleSheet.create({
     borderColor: '#9FE7B9',
     backgroundColor: '#DDF8E7',
   },
+  scanCodeActionDark: {
+    borderColor: '#2F7A4F',
+    backgroundColor: '#173321',
+  },
   scanCodeActionText: {
     color: '#064E2F',
     fontSize: 14,
@@ -3813,6 +3863,10 @@ const styles = StyleSheet.create({
     borderColor: '#74D997',
     backgroundColor: '#FBFFF8',
   },
+  supermarketChipDark: {
+    borderColor: '#2F7A4F',
+    backgroundColor: '#173321',
+  },
   supermarketChipText: {
     flexShrink: 1,
     color: '#064E2F',
@@ -3909,10 +3963,18 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     backgroundColor: '#FFF7ED',
   },
+  ingredientRowExpiringDark: {
+    borderColor: '#F97316',
+    backgroundColor: '#332012',
+  },
   ingredientRowExpired: {
     borderColor: '#DC2626',
     borderWidth: 2,
     backgroundColor: '#FEF2F2',
+  },
+  ingredientRowExpiredDark: {
+    borderColor: '#EF4444',
+    backgroundColor: '#351818',
   },
   expiryBadge: {
     flexDirection: 'row',

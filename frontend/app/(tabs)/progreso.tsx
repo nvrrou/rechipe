@@ -498,9 +498,9 @@ export default function ProgressScreen() {
                   style={[styles.codeInput, isDark && styles.textInputDark]}
                   value={joinCode}
                 />
-                <Pressable accessibilityRole="button" disabled={joining} onPress={handleJoinGroup} style={styles.secondaryButton}>
+                <Pressable accessibilityRole="button" disabled={joining} onPress={handleJoinGroup} style={[styles.secondaryButton, isDark && styles.secondaryButtonDark]}>
                   {joining ? <ActivityIndicator color={darkIconColor} /> : <MaterialCommunityIcons name="account-arrow-right" size={20} color={darkIconColor} />}
-                  <Text style={styles.secondaryButtonText}>Unirse</Text>
+                  <Text style={[styles.secondaryButtonText, isDark && styles.secondaryButtonTextDark]}>Unirse</Text>
                 </Pressable>
               </View>
             </View>
@@ -1950,10 +1950,17 @@ const styles = StyleSheet.create({
     borderColor: '#74D997',
     backgroundColor: '#D8FBE3',
   },
+  secondaryButtonDark: {
+    borderColor: '#2F7A4F',
+    backgroundColor: '#173321',
+  },
   secondaryButtonText: {
     color: '#064E2F',
     fontSize: 15,
     fontWeight: '900',
+  },
+  secondaryButtonTextDark: {
+    color: '#EAFBF0',
   },
   sectionHeader: {
     flexDirection: 'row',

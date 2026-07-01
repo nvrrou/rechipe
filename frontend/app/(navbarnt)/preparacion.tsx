@@ -5,6 +5,7 @@ import { ActivityIndicator, Animated, Easing, Pressable, ScrollView, StyleSheet,
 
 import { Text, View } from '@/components/Themed';
 import { useAuth } from '@/contexts/AuthContext';
+import { useThemePreference } from '@/contexts/ThemeContext';
 import { updateWeeklyMealRecipe } from '@/services/budget';
 import { actualizarIngrediente, DespensaItemData, fetchDespensa } from '@/services/despensa';
 import { getPreparationRecipe, PreparationPayload, savePreparationRecipe } from '@/services/preparation';
@@ -58,6 +59,9 @@ type PrepSurface = 'preparacion' | 'lista';
 export default function PreparationScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { colorScheme } = useThemePreference();
+  const isDark = colorScheme === 'dark';
+  const controlIconColor = isDark ? '#EAFBF0' : '#064E2F';
   const [payload, setPayload] = useState<PreparationPayload | null>(null);
   const [items, setItems] = useState<DespensaItemData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -296,11 +300,11 @@ export default function PreparationScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, isDark && styles.containerDark]}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <Pressable accessibilityRole="button" onPress={goBack} style={styles.backButton}>
-            <MaterialCommunityIcons name="chevron-left" size={24} color="#064E2F" />
+          <Pressable accessibilityRole="button" onPress={goBack} style={[styles.backButton, isDark && styles.cardDark]}>
+            <MaterialCommunityIcons name="chevron-left" size={24} color={isDark ? '#EAFBF0' : '#064E2F'} />
           </Pressable>
           <View style={styles.headerCopy}>
             <Text style={styles.title}>Preparación</Text>
@@ -310,7 +314,7 @@ export default function PreparationScreen() {
 
         <View
           onLayout={(event) => setBridgeWidth(event.nativeEvent.layout.width)}
-          style={styles.topBridge}>
+          style={[styles.topBridge, isDark && styles.panelDark]}>
           {bridgeWidth > 0 && (
             <Animated.View
               pointerEvents="none"
@@ -331,11 +335,11 @@ export default function PreparationScreen() {
             />
           )}
           <Pressable accessibilityRole="button" style={styles.bridgeButton}>
-            <MaterialCommunityIcons name="chef-hat" size={18} color={bridgeTarget === 'preparacion' ? '#FBFFF8' : '#064E2F'} />
+            <MaterialCommunityIcons name="chef-hat" size={18} color={bridgeTarget === 'preparacion' ? '#FBFFF8' : isDark ? '#BDF7D2' : '#064E2F'} />
             <Text style={[styles.bridgeButtonText, bridgeTarget === 'preparacion' && styles.bridgeButtonTextActive]}>Preparación</Text>
           </Pressable>
           <Pressable accessibilityRole="button" onPress={() => switchPreparationSurface('lista')} style={styles.bridgeButton}>
-            <MaterialCommunityIcons name="clipboard-list-outline" size={18} color={bridgeTarget === 'lista' ? '#FBFFF8' : '#064E2F'} />
+            <MaterialCommunityIcons name="clipboard-list-outline" size={18} color={bridgeTarget === 'lista' ? '#FBFFF8' : isDark ? '#BDF7D2' : '#064E2F'} />
             <Text style={[styles.bridgeButtonText, bridgeTarget === 'lista' && styles.bridgeButtonTextActive]}>Lista de compras</Text>
           </Pressable>
         </View>
@@ -363,17 +367,17 @@ export default function PreparationScreen() {
           ]}>
 
         {loading ? (
-          <View style={styles.emptyState}>
+          <View style={[styles.emptyState, isDark && styles.panelDark]}>
             <ActivityIndicator size="large" color="#064E2F" />
           </View>
         ) : !recipe ? (
-          <View style={styles.emptyState}>
+          <View style={[styles.emptyState, isDark && styles.panelDark]}>
             <MaterialCommunityIcons name="chef-hat" size={42} color="#43A66C" />
             <Text style={styles.emptyText}>Elige una receta y toca Usar para prepararla.</Text>
           </View>
         ) : (
           <>
-            <View style={styles.recipeHero}>
+            <View style={[styles.recipeHero, isDark && styles.panelDark]}>
               <Text style={styles.recipeTitle}>{recipe.titulo}</Text>
               <Text style={styles.recipeMeta}>
                 {[recipe.tiempo_preparacion, recipe.dificultad].filter(Boolean).join(' · ') || payload?.tipo_comida}
@@ -381,7 +385,7 @@ export default function PreparationScreen() {
             </View>
 
             {!!recipe.macros_totales && (
-              <View style={styles.nutritionPanel}>
+              <View style={[styles.nutritionPanel, isDark && styles.panelDark]}>
                 <View style={styles.nutritionHeader}>
                   <View style={styles.nutritionIcon}>
                     <MaterialCommunityIcons name="chart-donut" size={18} color="#064E2F" />
@@ -392,19 +396,19 @@ export default function PreparationScreen() {
                   </View>
                 </View>
                 <View style={styles.nutritionGrid}>
-                  <View style={styles.nutritionItem}>
+                  <View style={[styles.nutritionItem, isDark && styles.cardDark]}>
                     <Text style={styles.nutritionValue}>{recipe.macros_totales.calorias ?? 0}</Text>
                     <Text style={styles.nutritionLabel}>kcal</Text>
                   </View>
-                  <View style={styles.nutritionItem}>
+                  <View style={[styles.nutritionItem, isDark && styles.cardDark]}>
                     <Text style={styles.nutritionValue}>{recipe.macros_totales.proteinas ?? 0}g</Text>
                     <Text style={styles.nutritionLabel}>Proteínas</Text>
                   </View>
-                  <View style={styles.nutritionItem}>
+                  <View style={[styles.nutritionItem, isDark && styles.cardDark]}>
                     <Text style={styles.nutritionValue}>{recipe.macros_totales.carbohidratos ?? 0}g</Text>
                     <Text style={styles.nutritionLabel}>Carbos</Text>
                   </View>
-                  <View style={styles.nutritionItem}>
+                  <View style={[styles.nutritionItem, isDark && styles.cardDark]}>
                     <Text style={styles.nutritionValue}>{recipe.macros_totales.grasas ?? 0}g</Text>
                     <Text style={styles.nutritionLabel}>Grasas</Text>
                   </View>
@@ -413,7 +417,7 @@ export default function PreparationScreen() {
             )}
 
             {!!recipe.ingredientes?.length && (
-              <View style={styles.ingredientsPanel}>
+              <View style={[styles.ingredientsPanel, isDark && styles.panelDark]}>
                 <View style={styles.ingredientsHeader}>
                   <View style={styles.ingredientsIcon}>
                     <MaterialCommunityIcons name="food-variant" size={18} color="#064E2F" />
@@ -425,7 +429,7 @@ export default function PreparationScreen() {
                 </View>
                 <View style={styles.ingredientsList}>
                   {recipe.ingredientes.map((ingredient, ingredientIndex) => (
-                    <View key={`${ingredient}-${ingredientIndex}`} style={styles.ingredientRow}>
+                    <View key={`${ingredient}-${ingredientIndex}`} style={[styles.ingredientRow, isDark && styles.cardDark]}>
                       <MaterialCommunityIcons name="check-circle" size={16} color="#00B86B" />
                       <Text style={styles.ingredientText}>{ingredient}</Text>
                     </View>
@@ -435,10 +439,10 @@ export default function PreparationScreen() {
             )}
 
             {!!recipe.pasos?.length && (
-              <View style={styles.stepsPanel}>
+              <View style={[styles.stepsPanel, isDark && styles.panelDark]}>
                 <Text style={styles.sectionTitle}>Instrucciones</Text>
                 {recipe.pasos.map((step, stepIndex) => (
-                  <View key={`${step}-${stepIndex}`} style={styles.stepRow}>
+                  <View key={`${step}-${stepIndex}`} style={[styles.stepRow, isDark && styles.cardDark]}>
                     <View style={styles.stepNumber}>
                       <Text style={styles.stepNumberText}>{stepIndex + 1}</Text>
                     </View>
@@ -453,30 +457,30 @@ export default function PreparationScreen() {
                 accessibilityRole="button"
                 disabled={deductingPantry}
                 onPress={deductRecipeFromPantry}
-                style={styles.secondaryButton}>
+                style={[styles.secondaryButton, isDark && styles.cardDark]}>
                 {deductingPantry ? (
-                  <ActivityIndicator size="small" color="#064E2F" />
+                  <ActivityIndicator size="small" color={controlIconColor} />
                 ) : (
-                  <MaterialCommunityIcons name="fridge-outline" size={19} color="#064E2F" />
+                  <MaterialCommunityIcons name="fridge-outline" size={19} color={controlIconColor} />
                 )}
                 <Text style={styles.secondaryButtonText}>Descontar despensa</Text>
               </Pressable>
             </View>
 
             {activePurchases.length > 0 && (
-              <View style={styles.purchasePanel}>
+              <View style={[styles.purchasePanel, isDark && styles.panelDark]}>
                 <View style={styles.purchaseHeader}>
                   <View style={styles.headerCopy}>
                     <Text style={styles.sectionTitle}>Compras para esta receta</Text>
                     <Text style={styles.purchaseSubtitle}>Ingredientes que faltan y pueden ir directo a tu lista.</Text>
                   </View>
                   <Pressable accessibilityRole="button" onPress={() => switchPreparationSurface('lista')} style={styles.purchaseListButton}>
-                    <MaterialCommunityIcons name="open-in-new" size={16} color="#064E2F" />
+                    <MaterialCommunityIcons name="open-in-new" size={16} color={controlIconColor} />
                   </Pressable>
                 </View>
                 <View style={styles.chipRow}>
                   {activePurchases.map((purchase) => (
-                    <Text key={purchase.nombre} style={styles.chip}>
+                    <Text key={purchase.nombre} style={[styles.chip, isDark && styles.chipDark]}>
                       {[purchase.nombre, purchase.supermercado_nombre].filter(Boolean).join(' · ')}
                     </Text>
                   ))}
@@ -486,15 +490,15 @@ export default function PreparationScreen() {
                     <MaterialCommunityIcons name="cart-plus" size={18} color="#FBFFF8" />
                     <Text style={styles.primaryButtonText}>Agregar faltantes</Text>
                   </Pressable>
-                  <Pressable accessibilityRole="button" onPress={() => switchPreparationSurface('lista')} style={styles.secondaryButton}>
-                    <MaterialCommunityIcons name="clipboard-list-outline" size={18} color="#064E2F" />
+                  <Pressable accessibilityRole="button" onPress={() => switchPreparationSurface('lista')} style={[styles.secondaryButton, isDark && styles.cardDark]}>
+                    <MaterialCommunityIcons name="clipboard-list-outline" size={18} color={controlIconColor} />
                     <Text style={styles.secondaryButtonText}>Ver lista</Text>
                   </Pressable>
                 </View>
               </View>
             )}
 
-            <View style={styles.adjustPanel}>
+            <View style={[styles.adjustPanel, isDark && styles.panelDark]}>
               <View style={styles.adjustHeader}>
                 <View style={styles.adjustIcon}>
                   <MaterialCommunityIcons name="creation" size={20} color="#064E2F" />
@@ -509,7 +513,7 @@ export default function PreparationScreen() {
                 onChangeText={setRecipeChangeRequest}
                 placeholder="¿Qué quieres cambiar?"
                 placeholderTextColor="#43A66C"
-                style={styles.adjustInput}
+                style={[styles.adjustInput, isDark && styles.cardDark]}
                 value={recipeChangeRequest}
               />
               <Pressable accessibilityRole="button" disabled={adjustingRecipe} onPress={handleAdjustRecipe} style={styles.primaryButton}>
@@ -644,6 +648,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#9FE7B9',
     overflow: 'hidden',
   },
+  chipDark: {
+    backgroundColor: '#245C38',
+  },
   chipRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -653,6 +660,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FBFFF8',
+  },
+  containerDark: {
+    backgroundColor: '#07130D',
   },
   content: {
     gap: 16,
@@ -674,6 +684,15 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '800',
     textAlign: 'center',
+  },
+  panelDark: {
+    borderColor: '#2F7A4F',
+    backgroundColor: '#102619',
+    shadowColor: '#000000',
+  },
+  cardDark: {
+    borderColor: '#2F7A4F',
+    backgroundColor: '#173321',
   },
   header: {
     flexDirection: 'row',

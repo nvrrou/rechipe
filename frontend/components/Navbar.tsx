@@ -146,11 +146,6 @@ export function Navbar({ state, descriptors, navigation, noSelection = false }: 
     router.push('/(navbarnt)/perfil');
   }
 
-  function openList() {
-    closeMenu();
-    router.push('/(navbarnt)/lista');
-  }
-
   function navigateStandalone(routeName: string) {
     if (routeName === 'index') {
       router.replace('/(tabs)');
@@ -205,17 +200,6 @@ export function Navbar({ state, descriptors, navigation, noSelection = false }: 
             </Pressable>
 
             <View style={styles.optionsList}>
-              <Pressable accessibilityRole="button" onPress={openList} style={[styles.optionButton, isDark && styles.optionButtonDark]}>
-                <View style={[styles.optionIcon, isDark && styles.optionIconDark]}>
-                  <MaterialCommunityIcons name="clipboard-list-outline" size={22} color={darkIconColor} />
-                </View>
-                <View style={styles.optionCopy}>
-                  <Text style={styles.optionText}>Lista de compras</Text>
-                  <Text style={styles.optionDescription}>Gestiona tu lista de compras</Text>
-                </View>
-                <MaterialCommunityIcons name="chevron-right" size={22} color={darkSecondaryIconColor} />
-              </Pressable>
-
               <Pressable accessibilityRole="button" onPress={openConfig} style={[styles.optionButton, isDark && styles.optionButtonDark]}>
                 <View style={[styles.optionIcon, isDark && styles.optionIconDark]}>
                   <MaterialCommunityIcons name="cog-outline" size={22} color={darkIconColor} />

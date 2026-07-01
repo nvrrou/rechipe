@@ -5,6 +5,7 @@ import { ActivityIndicator, Animated, Easing, Modal, Pressable, ScrollView, Styl
 
 import { Text, View } from '@/components/Themed';
 import { useAuth } from '@/contexts/AuthContext';
+import { useThemePreference } from '@/contexts/ThemeContext';
 import { DespensaItemData, fetchDespensa } from '@/services/despensa';
 import {
   BudgetPurchaseSuggestion,
@@ -125,6 +126,9 @@ function formatHistoryDate(value?: string) {
 export default function RecipeScreen() {
   const router = useRouter();
   const { user } = useAuth();
+  const { colorScheme } = useThemePreference();
+  const isDark = colorScheme === 'dark';
+  const controlIconColor = isDark ? '#EAFBF0' : '#064E2F';
   const [items, setItems] = useState<DespensaItemData[]>([]);
   const [loadingItems, setLoadingItems] = useState(true);
   const [recipeMode, setRecipeMode] = useState<RecipeMode>('despensa');
@@ -550,7 +554,7 @@ export default function RecipeScreen() {
     const iconStyle = compact ? styles.panelIconSmall : styles.panelIcon;
 
     return (
-      <View style={panelStyles}>
+      <View style={[panelStyles, isDark && styles.panelDark]}>
         <View style={styles.panelHeader}>
           <View style={iconStyle}>
             <MaterialCommunityIcons name="food-off-outline" size={iconSize} color="#064E2F" />
@@ -569,7 +573,7 @@ export default function RecipeScreen() {
           accessibilityRole="switch"
           accessibilityState={{ checked: useProfileRestrictions }}
           onPress={() => setUseProfileRestrictions((prev) => !prev)}
-          style={styles.restrictionToggle}>
+          style={[styles.restrictionToggle, isDark && styles.cardDark]}>
           <View style={[styles.restrictionSwitch, useProfileRestrictions && styles.restrictionSwitchOn]}>
             <View style={[styles.restrictionSwitchKnob, useProfileRestrictions && styles.restrictionSwitchKnobOn]} />
           </View>
@@ -585,7 +589,7 @@ export default function RecipeScreen() {
           onChangeText={setCustomRestrictionsInput}
           placeholder="Agregar para esta receta, ej: sin lactosa, sin gluten"
           placeholderTextColor="#43A66C"
-          style={styles.textInput}
+          style={[styles.textInput, isDark && styles.inputDark]}
           value={customRestrictionsInput}
         />
 
@@ -603,20 +607,20 @@ export default function RecipeScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, isDark && styles.containerDark]}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <View style={styles.hero}>
           <View style={styles.heroTitleRow}>
             <Text style={styles.title}>Generar receta</Text>
-            <Pressable accessibilityLabel="Historial de recetas" accessibilityRole="button" onPress={openHistory} style={styles.historyButton}>
-              <MaterialCommunityIcons name="history" size={23} color="#064E2F" />
+            <Pressable accessibilityLabel="Historial de recetas" accessibilityRole="button" onPress={openHistory} style={[styles.historyButton, isDark && styles.cardDark]}>
+              <MaterialCommunityIcons name="history" size={23} color={controlIconColor} />
             </Pressable>
           </View>
           <Text style={styles.subtitle}>Elige tipo de comida e ingredientes obligatorios que la IA debe usar, como arroz o pollo.</Text>
         </View>
 
         <View
-          style={styles.modeSwitch}
+          style={[styles.modeSwitch, isDark && styles.panelDark]}
           onLayout={(event) => setModeSwitchWidth(event.nativeEvent.layout.width)}>
           {modeSwitchWidth > 0 && (
             <Animated.View
@@ -688,7 +692,7 @@ export default function RecipeScreen() {
           ]}>
         {recipeMode === 'despensa' ? (
           <>
-            <View style={styles.detailPanel}>
+            <View style={[styles.detailPanel, isDark && styles.panelDark]}>
               <View style={styles.panelHeader}>
                 <View style={styles.panelIcon}>
                   <MaterialCommunityIcons name="silverware" size={22} color="#064E2F" />
@@ -703,18 +707,18 @@ export default function RecipeScreen() {
                 <Pressable
                   accessibilityRole="button"
                   onPress={() => setMealDropdownOpen((prev) => !prev)}
-                  style={styles.mealDropdownButton}>
+                  style={[styles.mealDropdownButton, isDark && styles.cardDark]}>
                   <View style={styles.mealDropdownLeft}>
                     <View style={[styles.mealIcon, { backgroundColor: selectedMealType.color + '33' }]}>
                       <MaterialCommunityIcons name={selectedMealType.icon} size={22} color={selectedMealType.color} />
                     </View>
                     <Text style={styles.mealDropdownText}>{selectedMealType.label}</Text>
                   </View>
-                  <MaterialCommunityIcons name={mealDropdownOpen ? 'chevron-up' : 'chevron-down'} size={22} color="#064E2F" />
+                  <MaterialCommunityIcons name={mealDropdownOpen ? 'chevron-up' : 'chevron-down'} size={22} color={controlIconColor} />
                 </Pressable>
 
                 {mealDropdownOpen && (
-                  <View style={styles.mealDropdownMenu}>
+                  <View style={[styles.mealDropdownMenu, isDark && styles.cardDark]}>
                     {MEAL_TYPES.map((meal) => {
                       const isSelected = selectedMeal === meal.id;
                       return (
@@ -725,7 +729,7 @@ export default function RecipeScreen() {
                             setSelectedMeal(meal.id);
                             setMealDropdownOpen(false);
                           }}
-                          style={[styles.mealDropdownOption, isSelected && styles.mealDropdownOptionSelected]}>
+                          style={[styles.mealDropdownOption, isSelected && styles.mealDropdownOptionSelected, isDark && isSelected && styles.chipSelectedDark]}>
                           <View style={[styles.mealOptionIcon, { backgroundColor: meal.color + '33' }]}>
                             <MaterialCommunityIcons name={meal.icon} size={19} color={meal.color} />
                           </View>
@@ -738,7 +742,7 @@ export default function RecipeScreen() {
               </View>
             </View>
 
-            <View style={styles.detailPanel}>
+            <View style={[styles.detailPanel, isDark && styles.panelDark]}>
               <View style={styles.panelHeader}>
                 <View style={styles.panelIcon}>
                   <MaterialCommunityIcons name="target" size={22} color="#064E2F" />
@@ -755,7 +759,7 @@ export default function RecipeScreen() {
                     accessibilityRole="button"
                     key={item}
                     onPress={() => toggleObjective(item)}
-                    style={[styles.objectiveChip, objective === item && styles.objectiveChipSelected]}>
+                    style={[styles.objectiveChip, isDark && styles.chipDark, objective === item && styles.objectiveChipSelected, isDark && objective === item && styles.chipSelectedDark]}>
                     <Text style={[styles.objectiveChipText, objective === item && styles.objectiveChipTextSelected]}>{item}</Text>
                   </Pressable>
                 ))}
@@ -765,14 +769,14 @@ export default function RecipeScreen() {
                 onChangeText={setObjective}
                 placeholder="O escribe algo más específico..."
                 placeholderTextColor="#43A66C"
-                style={styles.textInput}
+                style={[styles.textInput, isDark && styles.inputDark]}
                 value={objective}
               />
             </View>
 
             {renderRestrictionsSection()}
 
-            <View style={styles.detailPanel}>
+            <View style={[styles.detailPanel, isDark && styles.panelDark]}>
               <View style={styles.panelHeader}>
                 <View style={styles.panelIcon}>
                   <MaterialCommunityIcons name="fridge-outline" size={22} color="#064E2F" />
@@ -792,7 +796,7 @@ export default function RecipeScreen() {
                 )}
               </View>
 
-              <View style={styles.searchBar}>
+              <View style={[styles.searchBar, isDark && styles.inputDark]}>
                 <MaterialCommunityIcons name="magnify" size={22} color="#2F7A4F" />
                 <TextInput
                   onChangeText={setSearchQuery}
@@ -826,7 +830,7 @@ export default function RecipeScreen() {
                         accessibilityRole="button"
                         key={item.id}
                         onPress={() => toggleIngredient(item.id)}
-                        style={[styles.ingredientRow, isSelected && styles.ingredientRowSelected]}>
+                        style={[styles.ingredientRow, isDark && styles.cardDark, isSelected && styles.ingredientRowSelected, isDark && isSelected && styles.chipSelectedDark]}>
                         <View style={[styles.checkBox, isSelected && styles.checkBoxSelected]}>
                           {isSelected && <MaterialCommunityIcons name="check" size={17} color="#FBFFF8" />}
                         </View>
@@ -843,7 +847,7 @@ export default function RecipeScreen() {
             </View>
           </>
         ) : (
-          <View style={styles.detailPanel}>
+          <View style={[styles.detailPanel, isDark && styles.panelDark]}>
             <View style={styles.panelHeader}>
               <View style={styles.panelIcon}>
                 <MaterialCommunityIcons name="cash-multiple" size={22} color="#064E2F" />
@@ -854,7 +858,7 @@ export default function RecipeScreen() {
               </View>
             </View>
 
-            <View style={styles.budgetSharedSection}>
+            <View style={[styles.budgetSharedSection, isDark && styles.panelDark]}>
               <View style={styles.panelHeader}>
                 <View style={styles.panelIconSmall}>
                   <MaterialCommunityIcons name="silverware" size={20} color="#064E2F" />
@@ -869,18 +873,18 @@ export default function RecipeScreen() {
                 <Pressable
                   accessibilityRole="button"
                   onPress={() => setMealDropdownOpen((prev) => !prev)}
-                  style={styles.mealDropdownButton}>
+                  style={[styles.mealDropdownButton, isDark && styles.cardDark]}>
                   <View style={styles.mealDropdownLeft}>
                     <View style={[styles.mealIcon, { backgroundColor: selectedMealType.color + '33' }]}>
                       <MaterialCommunityIcons name={selectedMealType.icon} size={22} color={selectedMealType.color} />
                     </View>
                     <Text style={styles.mealDropdownText}>{selectedMealType.label}</Text>
                   </View>
-                  <MaterialCommunityIcons name={mealDropdownOpen ? 'chevron-up' : 'chevron-down'} size={22} color="#064E2F" />
+                  <MaterialCommunityIcons name={mealDropdownOpen ? 'chevron-up' : 'chevron-down'} size={22} color={controlIconColor} />
                 </Pressable>
 
                 {mealDropdownOpen && (
-                  <View style={styles.mealDropdownMenu}>
+                  <View style={[styles.mealDropdownMenu, isDark && styles.cardDark]}>
                     {MEAL_TYPES.map((meal) => {
                       const isSelected = selectedMeal === meal.id;
                       return (
@@ -891,7 +895,7 @@ export default function RecipeScreen() {
                             setSelectedMeal(meal.id);
                             setMealDropdownOpen(false);
                           }}
-                          style={[styles.mealDropdownOption, isSelected && styles.mealDropdownOptionSelected]}>
+                          style={[styles.mealDropdownOption, isSelected && styles.mealDropdownOptionSelected, isDark && isSelected && styles.chipSelectedDark]}>
                           <View style={[styles.mealOptionIcon, { backgroundColor: meal.color + '33' }]}>
                             <MaterialCommunityIcons name={meal.icon} size={19} color={meal.color} />
                           </View>
@@ -904,7 +908,7 @@ export default function RecipeScreen() {
               </View>
             </View>
 
-            <View style={styles.budgetSharedSection}>
+            <View style={[styles.budgetSharedSection, isDark && styles.panelDark]}>
               <View style={styles.panelHeader}>
                 <View style={styles.panelIconSmall}>
                   <MaterialCommunityIcons name="target" size={20} color="#064E2F" />
@@ -921,7 +925,7 @@ export default function RecipeScreen() {
                     accessibilityRole="button"
                     key={item}
                     onPress={() => toggleObjective(item)}
-                    style={[styles.objectiveChip, objective === item && styles.objectiveChipSelected]}>
+                    style={[styles.objectiveChip, isDark && styles.chipDark, objective === item && styles.objectiveChipSelected, isDark && objective === item && styles.chipSelectedDark]}>
                     <Text style={[styles.objectiveChipText, objective === item && styles.objectiveChipTextSelected]}>{item}</Text>
                   </Pressable>
                 ))}
@@ -931,14 +935,14 @@ export default function RecipeScreen() {
                 onChangeText={setObjective}
                 placeholder="O escribe algo más específico..."
                 placeholderTextColor="#43A66C"
-                style={styles.textInput}
+                style={[styles.textInput, isDark && styles.inputDark]}
                 value={objective}
               />
             </View>
 
             {renderRestrictionsSection(true)}
 
-            <View style={styles.budgetSharedSection}>
+            <View style={[styles.budgetSharedSection, isDark && styles.panelDark]}>
               <View style={styles.panelHeader}>
                 <View style={styles.panelIconSmall}>
                   <MaterialCommunityIcons name="fridge-outline" size={20} color="#064E2F" />
@@ -958,7 +962,7 @@ export default function RecipeScreen() {
                 )}
               </View>
 
-              <View style={styles.searchBar}>
+              <View style={[styles.searchBar, isDark && styles.inputDark]}>
                 <MaterialCommunityIcons name="magnify" size={22} color="#2F7A4F" />
                 <TextInput
                   onChangeText={setSearchQuery}
@@ -992,7 +996,7 @@ export default function RecipeScreen() {
                         accessibilityRole="button"
                         key={item.id}
                         onPress={() => toggleIngredient(item.id)}
-                        style={[styles.ingredientRow, isSelected && styles.ingredientRowSelected]}>
+                        style={[styles.ingredientRow, isDark && styles.cardDark, isSelected && styles.ingredientRowSelected, isDark && isSelected && styles.chipSelectedDark]}>
                         <View style={[styles.checkBox, isSelected && styles.checkBoxSelected]}>
                           {isSelected && <MaterialCommunityIcons name="check" size={17} color="#FBFFF8" />}
                         </View>
@@ -1013,14 +1017,14 @@ export default function RecipeScreen() {
                 <Pressable
                   accessibilityRole="button"
                   onPress={() => setUseProfileBudget((prev) => !prev)}
-                  style={[styles.profileBudgetToggle, useProfileBudget && styles.profileBudgetToggleActive]}>
-                  <MaterialCommunityIcons name={useProfileBudget ? 'check-circle' : 'circle-outline'} size={20} color="#064E2F" />
+                  style={[styles.profileBudgetToggle, isDark && styles.cardDark, useProfileBudget && styles.profileBudgetToggleActive, isDark && useProfileBudget && styles.chipSelectedDark]}>
+                  <MaterialCommunityIcons name={useProfileBudget ? 'check-circle' : 'circle-outline'} size={20} color={controlIconColor} />
                   <Text style={styles.profileBudgetToggleText}>
                     Usar perfil: {formatPrice(profileBudgetAvailable)}
                   </Text>
                 </Pressable>
               )}
-              <View style={styles.budgetInputBox}>
+              <View style={[styles.budgetInputBox, isDark && styles.cardDark]}>
                 <Text style={styles.budgetLabel}>Presupuesto</Text>
                 <TextInput
                   editable={!useProfileBudget}
@@ -1028,7 +1032,7 @@ export default function RecipeScreen() {
                   onChangeText={setBudgetInput}
                   placeholder={useProfileBudget && profileBudget ? formatPrice(profileBudgetAvailable) : 'Ej: 12000'}
                   placeholderTextColor="#43A66C"
-                  style={styles.budgetInput}
+                  style={[styles.budgetInput, isDark && styles.inputTextDark]}
                   value={budgetInput}
                 />
               </View>
@@ -1050,7 +1054,7 @@ export default function RecipeScreen() {
             </View>
 
             {purchaseSuggestions.length === 0 ? (
-              <View style={styles.budgetBox}>
+              <View style={[styles.budgetBox, isDark && styles.panelDark]}>
                 <MaterialCommunityIcons name="cart-plus" size={38} color="#00B86B" />
                 <Text style={styles.budgetTitle}>Genera receta y compras</Text>
                 <Text style={styles.budgetText}>
@@ -1074,7 +1078,7 @@ export default function RecipeScreen() {
                       accessibilityRole="button"
                       key={item.id}
                       onPress={() => togglePurchaseSuggestion(item.id)}
-                      style={[styles.purchaseRow, isSelected && styles.purchaseRowSelected]}>
+                      style={[styles.purchaseRow, isDark && styles.cardDark, isSelected && styles.purchaseRowSelected, isDark && isSelected && styles.chipSelectedDark]}>
                       <View style={[styles.checkBox, isSelected && styles.checkBoxSelected]}>
                         {isSelected && <MaterialCommunityIcons name="check" size={17} color="#FBFFF8" />}
                       </View>
@@ -1099,11 +1103,11 @@ export default function RecipeScreen() {
                   <MaterialCommunityIcons name="cart-arrow-right" size={20} color="#FBFFF8" />
                   <Text style={styles.budgetLinkText}>Mandar a lista de compras</Text>
                 </Pressable>
-                <Pressable accessibilityRole="button" onPress={discountSelectedFromBudget} style={styles.listGhostLink}>
+                <Pressable accessibilityRole="button" onPress={discountSelectedFromBudget} style={[styles.listGhostLink, isDark && styles.cardDark]}>
                   <Text style={styles.listGhostLinkText}>Descontar del presupuesto</Text>
                 </Pressable>
                 {budgetSpendMessage !== '' && <Text style={styles.ingredientSubtitle}>{budgetSpendMessage}</Text>}
-                <Pressable accessibilityRole="button" onPress={() => router.push('/(navbarnt)/lista')} style={styles.listGhostLink}>
+                <Pressable accessibilityRole="button" onPress={() => router.push('/(navbarnt)/lista')} style={[styles.listGhostLink, isDark && styles.cardDark]}>
                   <Text style={styles.listGhostLinkText}>Ver lista actual</Text>
                 </Pressable>
               </View>
@@ -1456,6 +1460,18 @@ const styles = StyleSheet.create({
     borderColor: '#00B86B',
     backgroundColor: '#00B86B',
   },
+  cardDark: {
+    borderColor: '#2F7A4F',
+    backgroundColor: '#173321',
+  },
+  chipDark: {
+    borderColor: '#2F7A4F',
+    backgroundColor: '#173321',
+  },
+  chipSelectedDark: {
+    borderColor: '#20D684',
+    backgroundColor: '#245C38',
+  },
   clearButton: {
     width: 38,
     height: 38,
@@ -1467,6 +1483,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FBFFF8',
+  },
+  containerDark: {
+    backgroundColor: '#07130D',
   },
   content: {
     gap: 18,
@@ -1486,6 +1505,18 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 24,
     elevation: 2,
+  },
+  inputDark: {
+    borderColor: '#2F7A4F',
+    backgroundColor: '#173321',
+  },
+  inputTextDark: {
+    color: '#EAFBF0',
+  },
+  panelDark: {
+    borderColor: '#2F7A4F',
+    backgroundColor: '#102619',
+    shadowColor: '#000000',
   },
   dropdownWrap: {
     gap: 8,

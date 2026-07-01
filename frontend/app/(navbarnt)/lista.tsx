@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 
 import { Text, View } from '@/components/Themed';
+import { useThemePreference } from '@/contexts/ThemeContext';
 import {
   INITIAL_SHOPPING_ITEMS,
   ShoppingItem,
@@ -35,6 +36,8 @@ type PrepSurface = 'preparacion' | 'lista';
 
 export default function ShoppingListScreen() {
   const router = useRouter();
+  const { colorScheme } = useThemePreference();
+  const isDark = colorScheme === 'dark';
   const params = useLocalSearchParams<{ modo?: string }>();
   const isPreparationList = params.modo === 'preparacion';
   const [items, setItems] = useState<ShoppingItem[]>(isPreparationList ? [] : INITIAL_SHOPPING_ITEMS);
@@ -188,13 +191,13 @@ export default function ShoppingListScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, isDark && styles.containerDark]}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
 
         {/* Encabezado */}
         <View style={styles.header}>
-          <Pressable accessibilityRole="button" onPress={goBack} style={styles.backButton}>
-            <MaterialCommunityIcons name="chevron-left" size={24} color="#064E2F" />
+          <Pressable accessibilityRole="button" onPress={goBack} style={[styles.backButton, isDark && styles.cardDark]}>
+            <MaterialCommunityIcons name="chevron-left" size={24} color={isDark ? '#EAFBF0' : '#064E2F'} />
           </Pressable>
           <View style={styles.headerCopy}>
             <Text style={styles.title}>{isPreparationList ? 'Lista de preparación' : 'Lista de compras'}</Text>
@@ -248,7 +251,7 @@ export default function ShoppingListScreen() {
         {isPreparationList && (
           <View
             onLayout={(event) => setBridgeWidth(event.nativeEvent.layout.width)}
-            style={styles.topBridge}>
+            style={[styles.topBridge, isDark && styles.panelDark]}>
             {bridgeWidth > 0 && (
               <Animated.View
                 pointerEvents="none"
@@ -269,11 +272,11 @@ export default function ShoppingListScreen() {
               />
             )}
             <Pressable accessibilityRole="button" onPress={() => switchPreparationSurface('preparacion')} style={styles.bridgeButton}>
-              <MaterialCommunityIcons name="chef-hat" size={18} color={bridgeTarget === 'preparacion' ? '#FBFFF8' : '#064E2F'} />
+              <MaterialCommunityIcons name="chef-hat" size={18} color={bridgeTarget === 'preparacion' ? '#FBFFF8' : isDark ? '#BDF7D2' : '#064E2F'} />
               <Text style={[styles.bridgeButtonText, bridgeTarget === 'preparacion' && styles.bridgeButtonTextActive]}>Preparación</Text>
             </Pressable>
             <Pressable accessibilityRole="button" style={styles.bridgeButton}>
-              <MaterialCommunityIcons name="clipboard-list-outline" size={18} color={bridgeTarget === 'lista' ? '#FBFFF8' : '#064E2F'} />
+              <MaterialCommunityIcons name="clipboard-list-outline" size={18} color={bridgeTarget === 'lista' ? '#FBFFF8' : isDark ? '#BDF7D2' : '#064E2F'} />
               <Text style={[styles.bridgeButtonText, bridgeTarget === 'lista' && styles.bridgeButtonTextActive]}>Lista de compras</Text>
             </Pressable>
           </View>
@@ -302,7 +305,7 @@ export default function ShoppingListScreen() {
           ]}>
 
         {/* Tarjeta resumen */}
-        <View style={styles.summaryCard}>
+        <View style={[styles.summaryCard, isDark && styles.panelDark]}>
           <View style={styles.summaryTextBox}>
             <Text style={styles.summaryLabel}>{isPreparationList ? 'Faltantes pendientes' : 'Total pendiente'}</Text>
             <Text style={styles.summaryTotal}>{formatPrice(totalPendiente)}</Text>
@@ -320,8 +323,8 @@ export default function ShoppingListScreen() {
         </View>
 
         {/* Búsqueda */}
-        <View style={styles.searchContainer}>
-          <MaterialCommunityIcons name="magnify" size={20} color="#2F7A4F" />
+        <View style={[styles.searchContainer, isDark && styles.cardDark]}>
+          <MaterialCommunityIcons name="magnify" size={20} color={isDark ? '#BDF7D2' : '#2F7A4F'} />
           <TextInput
             value={search}
             onChangeText={setSearch}
@@ -341,13 +344,13 @@ export default function ShoppingListScreen() {
         {filteredItems.map(item => (
           <Pressable
             key={item.id}
-            style={[styles.itemCard, item.comprado && styles.itemCardDone]}
+            style={[styles.itemCard, isDark && styles.cardDark, item.comprado && styles.itemCardDone]}
             onPress={() => toggleItem(item.id)}
           >
             <MaterialCommunityIcons
               name={item.comprado ? 'check-circle' : 'checkbox-blank-circle-outline'}
               size={26}
-              color={item.comprado ? '#00B86B' : '#2F7A4F'}
+              color={item.comprado ? '#00B86B' : isDark ? '#BDF7D2' : '#2F7A4F'}
             />
 
             <View style={styles.itemInfo}>
@@ -359,29 +362,29 @@ export default function ShoppingListScreen() {
               </Text>
             </View>
 
-            <View style={styles.priceBox}>
+            <View style={[styles.priceBox, isDark && styles.priceBoxDark]}>
               <Text style={styles.priceText}>{formatPrice(item.precio)}</Text>
             </View>
 
             {/* Eliminar */}
             <TouchableOpacity onPress={() => deleteItem(item.id)} hitSlop={8}>
-              <MaterialCommunityIcons name="trash-can-outline" size={20} color="#4B5563" />
+              <MaterialCommunityIcons name="trash-can-outline" size={20} color={isDark ? '#CBD5E1' : '#4B5563'} />
             </TouchableOpacity>
           </Pressable>
         ))}
 
         {filteredItems.length === 0 && (
-          <View style={styles.emptyBox}>
+          <View style={[styles.emptyBox, isDark && styles.panelDark]}>
             <MaterialCommunityIcons name="basket-off-outline" size={40} color="#43A66C" />
             <Text style={styles.emptyText}>No se encontraron productos.</Text>
           </View>
         )}
 
         {/* Reemplazos */}
-        {!isPreparationList && <View style={styles.replacementCard}>
+        {!isPreparationList && <View style={[styles.replacementCard, isDark && styles.panelDark]}>
           <View style={styles.replacementHeader}>
-            <View style={styles.replacementIcon}>
-              <MaterialCommunityIcons name="swap-horizontal" size={22} color="#00B86B" />
+            <View style={[styles.replacementIcon, isDark && styles.cardDark]}>
+              <MaterialCommunityIcons name="swap-horizontal" size={22} color={isDark ? '#20D684' : '#00B86B'} />
             </View>
             <View style={styles.replacementCopy}>
               <Text style={styles.replacementTitle}>Solicitar reemplazos</Text>
@@ -396,7 +399,7 @@ export default function ShoppingListScreen() {
             }}
             placeholder="Ej: reemplazar pollo por algo más barato"
             placeholderTextColor="#43A66C"
-            style={styles.replacementInput}
+            style={[styles.replacementInput, isDark && styles.cardDark]}
           />
           {replacementMessage !== '' && <Text style={styles.replacementMessage}>{replacementMessage}</Text>}
           <Pressable accessibilityRole="button" style={styles.replacementButton} onPress={requestReplacements}>
@@ -416,6 +419,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FBFFF8',
+  },
+  containerDark: {
+    backgroundColor: '#07130D',
   },
   content: {
     paddingHorizontal: 20,
@@ -507,6 +513,15 @@ const styles = StyleSheet.create({
   },
   surfaceContent: {
     backgroundColor: 'transparent',
+  },
+  panelDark: {
+    borderColor: '#2F7A4F',
+    backgroundColor: '#102619',
+    shadowColor: '#000000',
+  },
+  cardDark: {
+    borderColor: '#2F7A4F',
+    backgroundColor: '#173321',
   },
 
   // Resumen
@@ -643,6 +658,10 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
     borderColor: '#74D997',
+  },
+  priceBoxDark: {
+    borderColor: '#2F7A4F',
+    backgroundColor: '#102619',
   },
   priceText: {
     color: '#00B86B',
