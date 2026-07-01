@@ -26,7 +26,17 @@ async def register(user_data: UserCreate):
                 return {"error": mensaje}
 
             user_data_AUTH = response.json()
-            new_user_id = user_data_AUTH["user"]["id"]
+            auth_user = user_data_AUTH.get("user") or user_data_AUTH.get("data", {}).get("user")
+            if not isinstance(auth_user, dict) or not auth_user.get("id"):
+                mensaje = (
+                    user_data_AUTH.get("error_description")
+                    or user_data_AUTH.get("msg")
+                    or user_data_AUTH.get("message")
+                    or "Supabase no devolvio el usuario creado"
+                )
+                return {"error": mensaje}
+
+            new_user_id = auth_user["id"]
 
             # Inserta el perfil extendido
             profile = {
@@ -49,7 +59,7 @@ async def register(user_data: UserCreate):
 
             return {
                 "id": new_user_id,
-                "email": user_data_AUTH["user"]["email"],
+                "email": auth_user.get("email", user_data.email),
                 "nombre": user_data.nombre,
                 "edad": user_data.edad,
                 "peso_kg": user_data.peso,
