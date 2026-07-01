@@ -246,7 +246,7 @@ export default function WeeklyPlannerScreen() {
                     <Text style={styles.mealTitle}>{meal.titulo}</Text>
                     {!!meal.por_que && <Text style={styles.mealReason}>{meal.por_que}</Text>}
                     <View style={styles.mealMacroRow}>
-                    <Text style={[styles.mealMacroText, isDark && styles.darkPill]}> {Math.round(Number(meal.macros_totales?.calorias || 0))} kcal</Text>
+                    <Text style={[styles.mealMacroText, isDark && styles.darkPill]}>{Math.round(Number(meal.macros_totales?.calorias || 0))} kcal</Text>
                     <Text style={[styles.mealMacroText, isDark && styles.darkPill]}>P {Math.round(Number(meal.macros_totales?.proteinas || 0))}g</Text>
                     <Text style={[styles.mealMacroText, isDark && styles.darkPill]}>C {Math.round(Number(meal.macros_totales?.carbohidratos || 0))}g</Text>
                     <Text style={[styles.mealMacroText, isDark && styles.darkPill]}>G {Math.round(Number(meal.macros_totales?.grasas || 0))}g</Text>
